@@ -135,7 +135,7 @@ function normalDay(round: number): DemoStep[] {
     type: "start",
     agent: "Rivet",
     task: task("scan"),
-    kind: "git",
+    kind: "scan",
     title: "Checkpoint: scanning the crate for leaked secrets",
     command: 'infisical scan --log-opts="origin/main..HEAD" --redact',
   });
@@ -205,7 +205,7 @@ function leakCaughtDay(round: number): DemoStep[] {
     type: "start",
     agent: "Rivet",
     task: task("scan"),
-    kind: "git",
+    kind: "scan",
     title: "Checkpoint: scanning the crate for leaked secrets",
     command: 'infisical scan --log-opts="origin/main..HEAD" --redact',
   });
@@ -241,7 +241,7 @@ function leakCaughtDay(round: number): DemoStep[] {
     type: "start",
     agent: "Rivet",
     task: task("rescan"),
-    kind: "git",
+    kind: "scan",
     title: "Checkpoint: scanning the new crate",
     command: 'infisical scan --log-opts="origin/main..HEAD" --redact',
   });

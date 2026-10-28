@@ -11,7 +11,7 @@ export const BUILDINGS = ["townhall", "vault", "library", "workshop", "lab", "ha
 export type Building = (typeof BUILDINGS)[number];
 
 /** Kinds of work an agent can start. */
-export const TASK_KINDS = ["coordinate", "secrets", "research", "code", "test", "git"] as const;
+export const TASK_KINDS = ["coordinate", "secrets", "research", "code", "test", "git", "scan"] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
 
 /** Where each kind of work happens. */
@@ -22,6 +22,7 @@ export const KIND_TO_BUILDING: Record<TaskKind, Building> = {
   code: "workshop",
   test: "lab",
   git: "harbor",
+  scan: "harbor", // the secret-scan checkpoint gate before the dock
 };
 
 export const BUILDING_NAMES: Record<Building, string> = {
@@ -32,6 +33,17 @@ export const BUILDING_NAMES: Record<Building, string> = {
   lab: "LAB",
   harbor: "GITHUB HARBOR",
   home: "HOME",
+};
+
+/** Plain-English meaning of each building, for the ? help overlay and the 3D village. */
+export const BUILDING_HELP: Record<Building, string> = {
+  vault: "Secrets from Infisical. Only key names and counts are shown, never values.",
+  library: "Research gathered from the internet.",
+  workshop: "Writing and editing code.",
+  lab: "Running your tests.",
+  townhall: "The coordinator that hands out tasks.",
+  home: "Where idle robots rest.",
+  harbor: "Commits become crates. A gate scans them for leaked secrets, then the boat ships them to GitHub.",
 };
 
 export const EVENT_TYPES = ["start", "move", "progress", "done", "fail", "commit", "push"] as const;
