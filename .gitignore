@@ -147,3 +147,10 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# --- CLI Village ---
+# Never commit secret files (any .env variant). The example file is safe.
+.env*
+!.env.example
+# Art reference stills: inspiration only, not ours to share
+docs/reference/
