@@ -1,0 +1,483 @@
+/* CLI Village page styles. System fonts only: the page loads nothing from the internet. */
+
+:root {
+  --ink: #1f1d17;
+  --ink-soft: rgba(30, 30, 26, 0.8);
+  --cream: #ede6d6;
+  --cream-dim: rgba(237, 230, 214, 0.62);
+  --gold: #c9a25a;
+  --cyan: #6fe3ff;
+  --red: #f05a5a;
+  --green: #7cf06a;
+  --yellow: #f2e16b;
+  --orange: #f5a25a;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #e6dfcc;
+  font-family: var(--sans);
+  color: var(--cream);
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+.scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0 0.35em;
+  border: 1px solid rgba(237, 230, 214, 0.35);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: 600 0.85em var(--mono);
+  text-align: center;
+  color: var(--cream);
+}
+
+/* --- Status bar (top zone) ------------------------------------------------------ */
+
+.status {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--ink-soft);
+  border-bottom: 1px solid rgba(201, 162, 90, 0.45);
+  font-size: 13px;
+  color: var(--cream-dim);
+  backdrop-filter: blur(3px);
+  z-index: 5;
+}
+
+.status .brand {
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--cream);
+}
+
+.status .mode {
+  padding: 1px 8px;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.status .sep {
+  opacity: 0.4;
+}
+
+.status .problems.bad {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.status .bar {
+  font-family: var(--mono);
+  letter-spacing: 1px;
+}
+.status .bar.good {
+  color: var(--green);
+}
+.status .bar.fair {
+  color: var(--yellow);
+}
+.status .bar.poor {
+  color: var(--red);
+}
+
+.help-button {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  font: 700 14px var(--sans);
+  cursor: pointer;
+}
+.help-button:hover {
+  background: rgba(201, 162, 90, 0.18);
+}
+
+/* --- The one key message ------------------------------------------------------------ */
+
+.caption {
+  position: fixed;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 360px;
+  max-width: min(680px, calc(100vw - 32px));
+  padding: 14px 22px 14px 18px;
+  background: var(--ink);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(31, 29, 23, 0.35);
+  z-index: 4;
+}
+
+.caption-icon {
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--gold);
+}
+.caption.active .caption-icon {
+  color: var(--cyan);
+}
+.caption.attention {
+  border-color: var(--red);
+}
+.caption.attention .caption-icon {
+  color: var(--red);
+}
+.caption.calm .caption-title {
+  font-weight: 700;
+}
+
+.caption-title {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--cream);
+}
+.caption-subtitle {
+  margin-top: 3px;
+  font-size: 14px;
+  color: var(--cream-dim);
+}
+.caption-subtitle:empty {
+  display: none;
+}
+.caption-command {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--cream-dim);
+}
+.caption-command[hidden] {
+  display: none;
+}
+.caption-command code {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(237, 230, 214, 0.1);
+  font-family: var(--mono);
+  color: var(--cyan);
+  user-select: all;
+}
+
+.caption.pop {
+  animation: pop 0.35s ease-out;
+}
+@keyframes pop {
+  from {
+    transform: translate(-50%, -5px);
+  }
+}
+
+.connection {
+  position: fixed;
+  top: 54px;
+  right: 16px;
+  padding: 8px 12px;
+  background: var(--ink);
+  border: 1px solid var(--orange);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--cream);
+  z-index: 6;
+}
+.connection[hidden] {
+  display: none;
+}
+
+/* --- Building labels ------------------------------------------------------------- */
+
+.label {
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: var(--ink-soft);
+  color: var(--cream);
+  font: 700 11px var(--sans);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    opacity 0.3s,
+    border-color 0.3s;
+}
+/* Tertiary: idle buildings are dimmer. */
+.label.idle {
+  opacity: 0.7;
+}
+.label.active {
+  border-color: rgba(111, 227, 255, 0.7);
+}
+.label.active .label-icon {
+  color: var(--cyan);
+}
+.label.problem {
+  border-color: var(--red);
+  background: rgba(70, 20, 20, 0.88);
+}
+.label.problem .label-icon {
+  color: var(--red);
+}
+.label:hover,
+.label:focus-visible {
+  opacity: 1;
+  border-color: var(--gold);
+  outline: none;
+}
+
+/* --- Speech bubbles --------------------------------------------------------------- */
+
+.bubble {
+  position: relative;
+  max-width: 230px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(31, 29, 23, 0.9);
+  color: var(--cream);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  transition: opacity 0.35s;
+  pointer-events: none;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-bottom: 0;
+  border-top-color: rgba(31, 29, 23, 0.9);
+}
+.bubble-name {
+  margin-right: 6px;
+  font-weight: 800;
+  color: var(--cyan);
+}
+.bubble.primary {
+  font-size: 13px;
+  box-shadow: 0 0 0 1px var(--gold);
+  z-index: 2;
+}
+.bubble.secondary {
+  opacity: 0.78;
+}
+.bubble.hidden {
+  opacity: 0;
+}
+.bubble.failed .bubble-name {
+  color: var(--red);
+}
+.bubble.failed {
+  box-shadow: 0 0 0 1px var(--red);
+}
+
+/* --- Building log panel (side zone) ------------------------------------------------- */
+
+.panel {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  bottom: 48px;
+  width: min(380px, calc(100vw - 32px));
+  overflow: auto;
+  padding: 18px 20px;
+  background: rgba(31, 29, 23, 0.94);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  z-index: 5;
+}
+.panel[hidden] {
+  display: none;
+}
+.panel h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  color: var(--gold);
+}
+.panel-help {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--cream-dim);
+}
+.panel-status {
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--cyan);
+  background: rgba(237, 230, 214, 0.06);
+  font-size: 14px;
+  font-weight: 600;
+}
+.panel-status.bad {
+  border-left-color: var(--red);
+  color: #ffd6d6;
+}
+.panel-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.panel-log li {
+  display: grid;
+  grid-template-columns: 62px 16px 1fr;
+  gap: 6px;
+  padding: 5px 0;
+  border-top: 1px solid rgba(237, 230, 214, 0.08);
+}
+.panel-log time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--cream-dim);
+  padding-top: 1px;
+}
+.panel-log .primary {
+  font-weight: 700;
+}
+.panel-log .tertiary {
+  color: var(--cream-dim);
+}
+.panel-log .empty {
+  display: block;
+  color: var(--cream-dim);
+}
+
+.close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  border: 0;
+  background: none;
+  color: var(--cream-dim);
+  font-size: 22px;
+  cursor: pointer;
+}
+.close:hover {
+  color: var(--cream);
+}
+
+/* --- Help ----------------------------------------------------------------------------- */
+
+.help {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(31, 29, 23, 0.45);
+  z-index: 10;
+}
+.help[hidden] {
+  display: none;
+}
+.help-card {
+  position: relative;
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  padding: 24px 28px;
+  background: var(--ink);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.help-card h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.help-buildings {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+}
+.help-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 10px;
+}
+.help-row b {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+}
+.help-keys,
+.help-safe {
+  color: var(--cream-dim);
+}
+
+/* --- Key hints (bottom zone) --------------------------------------------------------- */
+
+.hints {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 16px;
+  background: var(--ink-soft);
+  border-top: 1px solid rgba(201, 162, 90, 0.45);
+  font-size: 12px;
+  color: var(--cream-dim);
+  text-align: center;
+  z-index: 5;
+}
+
+/* --- Stopped and reduced motion -------------------------------------------------------- */
+
+body.stopped .caption {
+  border-color: rgba(201, 162, 90, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
