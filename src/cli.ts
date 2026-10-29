@@ -10,6 +10,11 @@ import { runOpenCommand } from "./commands/open.js";
 import { runWithSecrets } from "./commands/run.js";
 import { runSecretsDiff, runSecretsExport, runSecretsFetch } from "./commands/secrets.js";
 import { runTests } from "./commands/test.js";
+import { runWatch } from "./commands/watch.js";
+import { runEmit } from "./commands/emit.js";
+import { hubAddress } from "./hub/address.js";
+import { canUseTerminalView } from "./views/terminal/index.js";
+import { flushForwarders } from "./hub/client.js";
 import { makeUi, type Ui, type UiFlags } from "./lib/ui.js";
 
 // If whatever reads our output stops early (e.g. `cli-village --demo --json | head`),
@@ -85,6 +90,7 @@ withOutputFlags(program)
     "after",
     `
 Examples:
+  cli-village                        the live village: your commands and agents
   cli-village --demo                 watch pretend robots act out a workday
   cli-village --demo --once          play the demo once, then stop
   cli-village open --demo            the demo in the 3D village, in your browser
@@ -108,8 +114,9 @@ For experts:
       process.exitCode = await runDemoCommand(options, uiOf(cmd));
       return;
     }
-    // The live terminal view arrives in a later step. Until then, show help.
-    program.outputHelp();
+    // In a terminal, plain `cli-village` opens the live village. In a pipe or script, it shows this help.
+    if (canUseTerminalView()) process.exitCode = await runWatch(uiOf(cmd));
+    else program.outputHelp();
   });
 
 withOutputFlags(program.command("doctor").description("check that Node.js, git and the Infisical CLI are installed and ready")).action(
@@ -268,4 +275,47 @@ Examples:
   process.exitCode = await runTests(command, uiOf(cmd));
 });
 
+// --- Watching, and events from AI agents -----------------------------------------------
+
+withOutputFlags(
+  program
+    .command("watch")
+    .description("the live village for real work (what plain cli-village does in a terminal)")
+    .addHelpText(
+      "after",
+      `
+Your commands (status, test, commit, push, secrets, run) and your AI agents
+(cli-village emit) show up here. If a village is already open, this one
+follows it. With --json, each event is a JSON line.`,
+    ),
+).action(async (_options: object, cmd: Command) => {
+  process.exitCode = await runWatch(uiOf(cmd));
+});
+
+withOutputFlags(
+  program
+    .command("emit")
+    .description("send an event to the open village (for AI agents and scripts)")
+    .argument("[event]", "one event as JSON, or - to read one event per line from stdin")
+    .addHelpText(
+      "after",
+      () => `
+Events: start, progress, done, fail (with a task id), move, commit, push.
+Full format and examples: docs/EVENTS.md
+
+Examples:
+  cli-village emit '{"type":"start","agent":"claude-code","task":"r1","kind":"research","title":"Reading the Stripe docs"}'
+  cli-village emit '{"type":"done","agent":"claude-code","task":"r1","sources":["https://docs.stripe.com/api"]}'
+  my-agent | cli-village emit -
+
+Each event is checked first, so mistakes are explained even when no village
+is open. Programs can also write the same JSON lines to the local socket:
+  ${hubAddress().path}`,
+    ),
+).action(async (event: string | undefined, _options: object, cmd: Command) => {
+  process.exitCode = await runEmit(event, uiOf(cmd));
+});
+
 await program.parseAsync();
+// Let any events still on their way to an open village arrive.
+await flushForwarders();
