@@ -172,7 +172,7 @@ export function parseStatus(out: string): GitStatus {
 export function explainGitFailure(res: RunResult, doing: string, remote = "GitHub"): GitProblem {
   const text = secretGuard.clean(`${res.stderr}\n${res.stdout}`);
   if (res.timedOut) return { ok: false, error: `git took too long to ${doing}. Try again in a moment.` };
-  if (/please tell me who you are|user\.email|user\.name|author identity unknown/i.test(text)) {
+  if (/please tell me who you are|user\.email|user\.name|author identity unknown|empty ident/i.test(text)) {
     return {
       ok: false,
       error: "git needs to know your name and email before it can save snapshots (they're written into each commit).",

@@ -59,7 +59,7 @@ const PROBLEMS: Record<TaskKind, string> = {
   research: "The research didn't work out. The robot can try again.",
   code: "The code change didn't work. Fix what the message says, then try again.",
   test: "A test found a problem. Fix the code, then run the tests again.",
-  git: "git couldn't finish. Often it's a login or two changes to the same lines.",
+  git: "git couldn't finish. Usually it's a login, or changes that clash.",
   scan: "Move that secret into Infisical, then save a new snapshot.",
 };
 

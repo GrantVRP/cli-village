@@ -2,17 +2,19 @@
 
 > Watch your agents work in a tiny low-poly village.
 
+[![CI](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml/badge.svg)](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml)
+
 CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https://infisical.com/docs/cli/overview). It keeps everything Infisical does, including its privacy guarantees, and lets you *see* the work happening. Each agent is a little robot, each building is a type of task, and commits get carried down to the GitHub Harbor.
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days, step 8 of 9. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`) or a 3D village (`cli-village open`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`).
+**Status:** early days. All 9 build steps are done, but it hasn't been tried with a real Infisical account yet. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`) or a 3D village (`cli-village open`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
 ## What you need
 
-- Node.js 22 or newer
+- Node.js 22.12 or newer
 - git
 - The Infisical CLI, for secrets and the secret scan (`cli-village doctor` tells you how to install it)
 
@@ -212,6 +214,14 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - The secret scan runs on your computer. CLI Village asks Infisical for a redacted report in a private temporary folder, reads only where each possible secret is (file, line, rule, fingerprint), and deletes the report straight away.
 - `commit` and `push` use your own git login. CLI Village never sees or stores it, and never shows your remote's address (it can contain a token).
 
+## Running the tests
+
+```bash
+npm test         # builds, then runs every test in test/
+```
+
+The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you don't need an Infisical account. They cover the privacy guard, every command, the secret-scan gate, the local socket and the 3D server's security, and they check every output for leaked secret values. GitHub Actions runs them on Linux, macOS and Windows with Node.js 22 and 24 for every pull request.
+
 ## Roadmap
 
 - [x] 1. Scaffold + `doctor`
@@ -222,7 +232,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - [x] 6. Beginner explainer + expert flags
 - [x] 7. GitHub Harbor with the secret-scan checkpoint
 - [x] 8. Library + external-agent event API
-- [ ] 9. Tests + CI
+- [x] 9. Tests + CI
 
 ## License
 
