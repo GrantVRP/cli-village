@@ -10,6 +10,7 @@ import {
   isWalking,
   openProblems,
   type AgentState,
+  type AgentStatus,
   type HarborSummary,
   type Headline,
   type LogEntry,
@@ -42,6 +43,8 @@ export type { WaitingHint };
 
 /** Rows the key message takes: title, subtitle, command, explanation, plus a blank line above and below. */
 const keyMessageRows = (compact: boolean) => (compact ? 2 : 6);
+/** The stacked log always keeps this many lines, even with lots of robots. */
+const MIN_LOG_LINES = 3;
 
 const HELP_ORDER: Building[] = ["vault", "library", "workshop", "lab", "townhall", "home", "harbor"];
 
@@ -224,8 +227,41 @@ function agentRow(agent: AgentState, now: number) {
   return { icon: icons.idle, color: undefined, dim: true, place, activity };
 }
 
-function Robots({ state, now, width, spaced }: { state: VillageState; now: number; width: number; spaced: boolean }) {
-  const agents = Object.values(state.agents);
+/** What the robots column shows, so the screen never scrolls: some or all robots, the harbor line, and a blank line. */
+interface RobotsFit {
+  /** How many robots are listed. Any more get one "+N more" row. */
+  shown: number;
+  harbor: boolean;
+  /** A blank line: above the harbor line when side by side, under the robots when stacked. */
+  gap: boolean;
+}
+
+/** Rows the robots column takes: its title, the robots (or "No robots yet."), "+N more", the harbor line and the gap. */
+const robotRows = (fit: RobotsFit, agents: number) =>
+  1 + Math.max(1, fit.shown) + (fit.shown < agents ? 1 : 0) + (fit.harbor ? 1 : 0) + (fit.gap ? 1 : 0);
+
+/** Fit the robots column into `room` rows. The gap goes first, then robots, then the harbor line. */
+function fitRobots(state: VillageState, room: number, wide: boolean): RobotsFit {
+  const agents = Object.keys(state.agents).length;
+  const harbor = describeHarbor(state) !== null;
+  const tries: RobotsFit[] = [
+    // Side by side, the gap only sits above the harbor line.
+    { shown: agents, harbor, gap: wide ? harbor : true },
+    { shown: agents, harbor, gap: false },
+    // Title, the robots, "+N more" and the harbor line.
+    { shown: room - 2 - (harbor ? 1 : 0), harbor, gap: false },
+    { shown: room - 2, harbor: false, gap: false },
+  ];
+  const fits = tries.find((fit) => (fit.shown >= 1 || agents === 0) && robotRows(fit, agents) <= room) ?? tries[3]!;
+  return { ...fits, shown: Math.min(agents, Math.max(1, fits.shown)) };
+}
+
+/** When not every robot fits: the ones with a problem first, then the busy ones. */
+const ROBOT_ORDER: Record<AgentStatus, number> = { failed: 0, working: 1, walking: 2, idle: 3 };
+
+function Robots({ state, now, width, fit, wide }: { state: VillageState; now: number; width: number; fit: RobotsFit; wide: boolean }) {
+  const all = Object.values(state.agents);
+  const agents = fit.shown < all.length ? all.toSorted((a, b) => ROBOT_ORDER[a.status] - ROBOT_ORDER[b.status]).slice(0, fit.shown) : all;
   const nameWidth = Math.min(12, Math.max(5, ...agents.map((a) => a.name.length)));
   return (
     <Box flexDirection="column" width={width}>
@@ -240,14 +276,11 @@ function Robots({ state, now, width, spaced }: { state: VillageState; now: numbe
           </Text>
         );
       })}
-      <HarborLine state={state} spaced={spaced} />
+      {agents.length < all.length ? <Text dimColor>+{all.length - agents.length} more</Text> : null}
+      {fit.harbor ? <HarborLine state={state} spaced={wide && fit.gap} /> : null}
     </Box>
   );
 }
-
-/** Rows the robots column takes: its title, one per robot (or "No robots yet."), and the harbor line. */
-const robotRows = (state: VillageState, spaced: boolean) =>
-  1 + Math.max(1, Object.keys(state.agents).length) + (describeHarbor(state) ? (spaced ? 2 : 1) : 0);
 
 /** The crates on their way to GitHub: at the gate, waiting at the dock, or the last boat. */
 function HarborLine({ state, spaced }: { state: VillageState; spaced: boolean }) {
@@ -448,7 +481,7 @@ function KeyHints({
       <Text dimColor>{compact ? " details · " : details ? " less detail · " : " more detail · "}</Text>
       <Text bold>tab</Text>
       <Text dimColor>{focus ? " next building" : compact ? " building" : " one building"}</Text>
-      {focus ? (
+      {focus && !help ? (
         <>
           <Text dimColor> · </Text>
           <Text bold>esc</Text>
@@ -509,8 +542,11 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting, 
   const chrome = 1 + (url ? 1 : 0) + 1 + 1 + 1 + 1;
   const fixed = chrome + keyMessageRows(compact) + 1;
   const bodyRows = Math.max(4, rows - fixed);
-  // Side by side, the log gets the full height. Stacked, it gets what the robots (and a blank line) leave.
-  const activityLines = wide ? bodyRows - 1 : Math.max(3, bodyRows - robotRows(state, wide) - 1 - 1);
+  // Side by side, each column gets the full height. Stacked, the robots share it with the
+  // log, which keeps its title and at least MIN_LOG_LINES lines.
+  const agents = Object.keys(state.agents).length;
+  const fit = fitRobots(state, wide ? bodyRows : bodyRows - 1 - MIN_LOG_LINES, wide);
+  const activityLines = wide ? bodyRows - 1 : Math.max(1, bodyRows - robotRows(fit, agents) - 1);
   const leftWidth = wide ? Math.floor(width * 0.45) : width;
   const log = focus ? (
     <BuildingLog state={state} id={focus} lines={activityLines} details={details} width={wide ? width - leftWidth - 2 : width} />
@@ -530,7 +566,7 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting, 
           <Rule width={width} />
           {wide ? (
             <Box flexDirection="row" width={width} height={bodyRows}>
-              <Robots state={state} now={now} width={leftWidth} spaced />
+              <Robots state={state} now={now} width={leftWidth} fit={fit} wide />
               <Box
                 borderStyle={icons.vrule === "│" ? "single" : "classic"}
                 borderTop={false}
@@ -545,8 +581,8 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting, 
             </Box>
           ) : (
             <Box flexDirection="column" width={width} height={bodyRows}>
-              <Robots state={state} now={now} width={width} spaced={false} />
-              <Text> </Text>
+              <Robots state={state} now={now} width={width} fit={fit} wide={false} />
+              {fit.gap ? <Text> </Text> : null}
               {log}
             </Box>
           )}
