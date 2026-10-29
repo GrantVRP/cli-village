@@ -6,7 +6,7 @@ CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https:
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days, step 7 of 9. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch a demo in the terminal (`--demo`) or in a 3D village (`open --demo`).
+**Status:** early days, step 8 of 9. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`) or a 3D village (`cli-village open`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
@@ -34,6 +34,7 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 
 | Command | What it does |
 |---|---|
+| `cli-village` | The live village in your terminal. Your commands (in another terminal) and your AI agents show up here. Same as `cli-village watch`, which also works in scripts (`--json` gives one event per line). |
 | `cli-village doctor` | Checks Node.js, git, the Infisical CLI, your Infisical login and your project link. Add `--json` for scripts. |
 | `cli-village --demo` | Pretend robots act out a workday (nothing real runs) in the live terminal view. Add `--once` to play one round, `--speed 2` to go faster, or `--json` for one JSON event per line. |
 | `cli-village secrets fetch` | Loads your secrets and lists their **names** (values stay in memory, hidden). Pick with `--env prod`, `--path /payments`, `--project-id <id>`. Add `--json` for scripts. |
@@ -44,6 +45,8 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | `cli-village commit -m "Fix login"` | Saves a snapshot (a commit) after a secret scan. Only what you staged (`git add`), or else every change. Add `--push` to send it too. |
 | `cli-village push` | Sends your snapshots to GitHub after a secret scan. The first push of a branch links it (`--set-upstream`). |
 | `cli-village test` | Finds and runs your tests: the `test` script in package.json (npm, pnpm, yarn or bun), `cargo test`, `go test ./...` or pytest. Or give your own: `cli-village test -- node --test`. |
+| `cli-village open` | Opens the 3D village in your browser, showing real work (like `cli-village`, but in 3D). The terminal keeps its own view. Add `--no-open` to just print the address, or `--port 4317` to pick the port. |
+| `cli-village emit '<json>'` | For AI agents and scripts: tells the open village what you're doing. `emit -` reads one event per line from stdin. See [docs/EVENTS.md](docs/EVENTS.md). |
 | `cli-village open --demo` | Opens the 3D village in your browser and plays the demo there (the terminal keeps its own view). Add `--no-open` to just print the address, `--port 4317` to pick the port, or `--speed 2`. |
 
 ## Learning as you go (or not)
@@ -68,6 +71,23 @@ Already know all this? These flags work with every command, before or after its 
 | `--no-animation` | Nothing moves: plain lines instead of the live screen, and a still 3D village (no orbiting camera, no walking, no drifting effects). |
 
 If you combine them, `--json` beats `--quiet`, which beats `--compact`. To make one your default in bash or zsh: `alias cv='cli-village --compact'`.
+
+## Your AI agents in the village
+
+Any program on your computer can show its work in the village, like an AI coding agent or a script. It sends small JSON events:
+
+```bash
+cli-village emit '{"type":"start","agent":"claude-code","task":"r1","kind":"research","title":"Reading the Stripe docs"}'
+cli-village emit '{"type":"done","agent":"claude-code","task":"r1","message":"Found the retry rules","sources":["https://docs.stripe.com/api/idempotent_requests"]}'
+```
+
+The agent becomes a robot that walks to the LIBRARY, and the log says `claude-code done: Found the retry rules (from docs.stripe.com)`.
+
+- Each event is checked first, and mistakes come with a plain explanation. If no village is open, `emit` says so and still exits with 0, so your agent isn't stopped by it.
+- Programs can also keep a connection open to the village's local socket and write one JSON event per line. It only works on your computer: on macOS and Linux it's a socket in a folder only you can open, and on Windows it's a named pipe only your account can write to.
+- Research sources are cut down to the site and path (`docs.stripe.com/api/…`). Query strings, `#fragments` and logins are dropped, because they can hold tokens.
+- If a village is already open, a second one (say, `cli-village open` next to `cli-village`) follows the first, so both show the same thing.
+- The full format, with examples in bash, Node.js and Python, is in **[docs/EVENTS.md](docs/EVENTS.md)**.
 
 ## The terminal view
 
@@ -159,7 +179,7 @@ $ cli-village commit -m "Add payments"
 
 ## The 3D village
 
-`cli-village open --demo` starts a small web server on your own computer and opens the village in your browser. Your terminal shows the address. It looks like `http://127.0.0.1:53021/?token=…`, and only works on this computer.
+`cli-village open` (or `open --demo`) starts a small web server on your own computer and opens the village in your browser. Your terminal shows the address. It looks like `http://127.0.0.1:53021/?token=…`, and only works on this computer.
 
 - Each robot is an agent. When it starts a task it walks to that kind of building: secrets → VAULT, research → LIBRARY, code → WORKSHOP, tests → LAB, planning → TOWN HALL, commits and pushes → GITHUB HARBOR. Idle robots rest at HOME.
 - Busy buildings send up cyan rings. Problems glow red and get a ✖ on their label.
@@ -177,7 +197,7 @@ Everything is built from simple shapes in code (no image textures) with [three.j
 
 ## How it works
 
-Everything that happens is an **event**: `start`, `move`, `progress`, `done`, `fail`, `commit` or `push`. Workers, the demo and (later) outside AI agents send events into one stream, and every view listens to that same stream.
+Everything that happens is an **event**: `start`, `move`, `progress`, `done`, `fail`, `commit` or `push`. CLI Village's own commands, the demo and outside AI agents send events into one stream, and every view listens to that same stream. While a village is open, it listens on a local socket. That's how `emit` and your commands in other terminals reach it.
 
 Before any view sees an event, a privacy guard checks it. The guard keeps only known fields, strips terminal control codes, and hides anything that looks like a secret: values Infisical gave us, `KEY=value` text, passwords and tokens. Secret lists may only contain key **names**.
 
@@ -185,6 +205,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 
 - Secret **values** never appear in any view, event or log. Only key names and counts.
 - Logging in is handled by Infisical itself (`infisical login` or `INFISICAL_TOKEN`). CLI Village never stores tokens.
+- The village's local socket only works on your computer and only for your user account. Events from it go through the same privacy guard.
 - The village server only listens on your own computer (`127.0.0.1`). Each session gets a new random key, which must be in the page address and on the live connection. Requests from other websites are refused, and the page makes no outside calls.
 - Secrets are never written to disk unless you ask for it (`secrets export --out .env`), and never to a file git could commit.
 - `cli-village run` lets Infisical hand the secrets straight to your program. They never pass through CLI Village, and your program's output isn't recorded.
@@ -200,7 +221,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - [x] 5. Vault (real Infisical commands)
 - [x] 6. Beginner explainer + expert flags
 - [x] 7. GitHub Harbor with the secret-scan checkpoint
-- [ ] 8. Library + external-agent event API
+- [x] 8. Library + external-agent event API
 - [ ] 9. Tests + CI
 
 ## License

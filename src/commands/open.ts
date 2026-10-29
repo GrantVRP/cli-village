@@ -2,6 +2,9 @@
 // The terminal keeps showing the live view (or plain lines), and both views
 // follow the same events.
 //
+// Without --demo it shows real work: it opens the village's local socket (or
+// follows a village that's already open), so your commands and AI agents show up.
+//
 // --json prints {"ok":true,"url":...} and then each event as a JSON line.
 // --quiet prints only the address. --no-animation also makes the 3D village still.
 
@@ -15,6 +18,7 @@ import { openBrowser } from "../server/open-browser.js";
 import { startVillageServer } from "../server/server.js";
 import { attachLogView } from "../views/log.js";
 import { runTerminalView, wantsLiveView } from "../views/terminal/index.js";
+import { joinVillage, WAITING, type Joined } from "./watch.js";
 
 export interface OpenCommandOptions {
   demo?: boolean;
@@ -32,6 +36,18 @@ export async function runOpenCommand(options: OpenCommandOptions, ui: Ui): Promi
   const quiet = !ui.json && ui.detail === "quiet";
   const full = !ui.json && ui.detail === "full";
 
+  // Real work arrives over the local socket.
+  let joined: Joined | null = null;
+  if (!options.demo) {
+    joined = await joinVillage(bus);
+    if (!joined.ok) {
+      if (ui.json) console.log(JSON.stringify({ ok: false, error: joined.error }));
+      else console.error(joined.error);
+      return 1;
+    }
+  }
+  const hub = joined?.ok ? joined : null;
+
   let server;
   try {
     server = await startVillageServer({
@@ -45,6 +61,7 @@ export async function runOpenCommand(options: OpenCommandOptions, ui: Ui): Promi
     const message = `Couldn't start the village: ${(err as Error).message}`;
     if (ui.json) console.log(JSON.stringify({ ok: false, error: message }));
     else console.error(message);
+    await hub?.close();
     return 1;
   }
 
@@ -52,8 +69,11 @@ export async function runOpenCommand(options: OpenCommandOptions, ui: Ui): Promi
   const stop = () => controller.abort();
   const work = options.demo
     ? runDemo(bus, { speed: options.speed, signal: controller.signal })
-    : // Live mode: real workers and outside agents will send events here (later steps).
-      new Promise<void>((resolve) => controller.signal.addEventListener("abort", () => resolve(), { once: true }));
+    : // Live mode: runs until you stop it (or the village it follows closes).
+      new Promise<void>((resolve) => {
+        controller.signal.addEventListener("abort", () => resolve(), { once: true });
+        void hub?.ended?.then(() => resolve());
+      });
   const finished = work.finally(() => bus.close());
 
   const opened = options.open !== false && openBrowser(server.url);
@@ -67,6 +87,7 @@ export async function runOpenCommand(options: OpenCommandOptions, ui: Ui): Promi
     console.log(`  3D village: ${cyan(server.url)}`);
     console.log(dim(opened ? "  Opening it in your browser…" : "  Open that address in your browser."));
     console.log(dim("  Only this computer can open it. Press Ctrl+C to stop."));
+    if (hub) console.log(dim(`  ${WAITING.subtitle} ${cyan("cli-village test")} (or status, commit, push…)`));
     console.log("");
   } else if (!live) {
     console.log(`${bold("CLI Village")} ${dim(`· ${mode} ·`)} ${cyan(server.url)}`);
@@ -75,7 +96,7 @@ export async function runOpenCommand(options: OpenCommandOptions, ui: Ui): Promi
   process.on("SIGINT", stop);
   try {
     if (live) {
-      await runTerminalView({ bus, mode, url: server.url, onStop: stop, compact: ui.detail === "compact" });
+      await runTerminalView({ bus, mode, url: server.url, onStop: stop, compact: ui.detail === "compact", waiting: hub ? WAITING : undefined });
     } else {
       const stopPrinting = attachLogView(bus, {
         json: ui.json,
@@ -90,6 +111,7 @@ export async function runOpenCommand(options: OpenCommandOptions, ui: Ui): Promi
     stop();
     await finished;
     await server.close();
+    await hub?.close();
   }
 
   if (!ui.json && !quiet) console.log(`${bold("CLI Village closed")} ${dim(`· ${summarize(store.getState())}`)}`);
