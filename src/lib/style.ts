@@ -37,5 +37,5 @@ function unicodeSupported(): boolean {
 }
 
 export const symbols = unicodeSupported()
-  ? { ok: "✔", warn: "!", fail: "✖", skip: "–", arrow: "→" }
-  : { ok: "√", warn: "!", fail: "×", skip: "-", arrow: "->" };
+  ? { ok: "✔", warn: "!", fail: "✖", skip: "–", arrow: "→", start: "▶", move: "·", progress: "…", commit: "■", push: "▲" }
+  : { ok: "√", warn: "!", fail: "×", skip: "-", arrow: "->", start: ">", move: ".", progress: "...", commit: "#", push: "^" };

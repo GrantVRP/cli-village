@@ -6,7 +6,7 @@ CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https:
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days, step 1 of 9. Right now there's one command: `doctor`.
+**Status:** early days, step 2 of 9. You can check your setup with `doctor` and watch a demo with `--demo`.
 
 ## What you need
 
@@ -22,6 +22,7 @@ cd cli-village
 npm install      # download the packages CLI Village uses
 npm run build    # turn the TypeScript in src/ into JavaScript in dist/
 npm run doctor   # check your setup
+npm run demo     # watch pretend robots work (Ctrl+C to stop)
 ```
 
 Want to type `cli-village` from any folder? Run `npm link` once inside the project folder.
@@ -31,6 +32,13 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | Command | What it does |
 |---|---|
 | `cli-village doctor` | Checks Node.js, git, the Infisical CLI, your Infisical login and your project link. Add `--json` for scripts. |
+| `cli-village --demo` | Pretend robots act out a workday (nothing real runs). Add `--once` to play one round, `--speed 2` to go faster, or `--json` for one JSON event per line. |
+
+## How it works
+
+Everything that happens is an **event**: `start`, `move`, `progress`, `done`, `fail`, `commit` or `push`. Workers, the demo and (later) outside AI agents send events into one stream, and every view listens to that same stream.
+
+Before any view sees an event, a privacy guard checks it. The guard keeps only known fields, strips terminal control codes, and hides anything that looks like a secret: values Infisical gave us, `KEY=value` text, passwords and tokens. Secret lists may only contain key **names**.
 
 ## Privacy promises
 
@@ -42,7 +50,7 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 ## Roadmap
 
 - [x] 1. Scaffold + `doctor`
-- [ ] 2. Event bus + `--demo` mode
+- [x] 2. Event bus + `--demo` mode
 - [ ] 3. Terminal view
 - [ ] 4. 3D village
 - [ ] 5. Vault (real Infisical commands)

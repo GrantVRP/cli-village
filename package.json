@@ -21,7 +21,8 @@
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/cli.js",
-    "doctor": "node dist/cli.js doctor"
+    "doctor": "node dist/cli.js doctor",
+    "demo": "node dist/cli.js --demo"
   },
   "repository": {
     "type": "git",
