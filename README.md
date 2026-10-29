@@ -6,7 +6,7 @@ CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https:
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days, step 2 of 9. You can check your setup with `doctor` and watch a demo with `--demo`.
+**Status:** early days, step 3 of 9. You can check your setup with `doctor` and watch a demo in the live terminal view with `--demo`.
 
 ## What you need
 
@@ -32,7 +32,28 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | Command | What it does |
 |---|---|
 | `cli-village doctor` | Checks Node.js, git, the Infisical CLI, your Infisical login and your project link. Add `--json` for scripts. |
-| `cli-village --demo` | Pretend robots act out a workday (nothing real runs). Add `--once` to play one round, `--speed 2` to go faster, or `--json` for one JSON event per line. |
+| `cli-village --demo` | Pretend robots act out a workday (nothing real runs) in the live terminal view. Add `--once` to play one round, `--speed 2` to go faster, or `--json` for one JSON event per line. |
+
+## The terminal view
+
+```
+CLI VILLAGE · demo                       5 robots · 1 working · no problems · health ■■■■■ 100% good
+──────────────────────────────────────────────────────────────────────────────────────────────
+  ▶ Fetching dev secrets
+    Bolt at the VAULT · Reading secret names (values stay hidden) (60%)
+    → infisical export --env=dev --format=json (the real command)
+──────────────────────────────────────────────────────────────────────────────────────────────
+Robots                                  │ What's happening (summary)
+▶ Bolt   VAULT      Fetching dev secrets │ 17:11:50 ▶ Bolt started: Fetching dev secrets
+○ Mayor  HOME       resting              │ 17:11:50 ✔ Mayor done: Jobs handed out
+──────────────────────────────────────────────────────────────────────────────────────────────
+q quit · ? what do the buildings mean? · d more detail
+```
+
+- The one thing that matters most right now is at the top, with the real command under it.
+- Problems turn the message red (with a ✖, so it doesn't rely on color) until they're fixed.
+- Keys: `q` quit (robots walk home first), `?` explains each building, `d` shows every detail.
+- No interactive terminal (a pipe, CI)? You get a plain log instead. `NO_COLOR` is respected.
 
 ## How it works
 
@@ -51,7 +72,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 
 - [x] 1. Scaffold + `doctor`
 - [x] 2. Event bus + `--demo` mode
-- [ ] 3. Terminal view
+- [x] 3. Terminal view
 - [ ] 4. 3D village
 - [ ] 5. Vault (real Infisical commands)
 - [ ] 6. Beginner explainer + expert flags
