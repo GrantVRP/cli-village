@@ -31,8 +31,8 @@ export interface BuildingModel {
   chimneys: THREE.Vector3[];
   /** Spots for effects such as bubbling flasks, in the building's own space. */
   extras: Record<string, THREE.Vector3[]>;
-  /** Called every frame. */
-  update(dt: number, t: number, active: boolean): void;
+  /** Called every frame. `still` = nothing should move (--no-animation or reduced motion). */
+  update(dt: number, t: number, active: boolean, still: boolean): void;
 }
 
 const shadeOf = (hex: number, amount: number) => new THREE.Color(hex).offsetHSL(0, 0, amount).getHex();
@@ -473,8 +473,8 @@ function library(): BuildingModel {
     group,
     chimneys: [],
     extras: {},
-    update: (dt, t, active) => {
-      if (active) dome.rotation.y += dt * 0.35;
+    update: (dt, t, active, still) => {
+      if (active && !still) dome.rotation.y += dt * 0.35;
       telescope.rotation.x = 0.95 + Math.sin(t * 0.6) * (active ? 0.15 : 0.03);
     },
   };
@@ -564,8 +564,8 @@ function vault(): BuildingModel {
     group,
     chimneys: [],
     extras: {},
-    update: (dt, t, active) => {
-      open += ((active ? 1 : 0) - open) * Math.min(1, dt * 2.2);
+    update: (dt, t, active, still) => {
+      open += ((active ? 1 : 0) - open) * (still ? 1 : Math.min(1, dt * 2.2));
       hinge.rotation.y = -open * 1.55;
       glow.material.emissiveIntensity = open * (2.2 + Math.sin(t * 5) * 0.4);
     },

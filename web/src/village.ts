@@ -48,6 +48,8 @@ export class Village {
   private lastFocusAt = 0;
   /** After you click a building, the camera stays there for a while. */
   private pinnedUntil = 0;
+  /** Still mode (--no-animation or reduced motion): robots appear where they're going, and the camera only moves when you ask. */
+  still = false;
   private readonly tmp = new THREE.Vector3();
 
   constructor(
@@ -113,7 +115,10 @@ export class Village {
       }
       const { robot } = info;
       const slotKey = `${agent.location}:${slot}:${group.length}`;
-      if (robot.building !== agent.location) {
+      if (this.still && (robot.building !== agent.location || info.slotKey !== slotKey)) {
+        robot.place(dest, lookAt);
+        robot.building = agent.location;
+      } else if (robot.building !== agent.location) {
         // Walk out along the path, around the column, and up to the new building.
         robot.walk(route(robot.group.position, robot.walking ? null : robot.building, agent.location, dest), lookAt);
         robot.building = agent.location;
@@ -152,7 +157,7 @@ export class Village {
     if (h.seq !== this.lastHeadline) {
       this.lastHeadline = h.seq;
       if (state.stopped) this.rig.reset();
-      else if (h.building && now >= this.pinnedUntil) {
+      else if (h.building && now >= this.pinnedUntil && !this.still) {
         const since = now - this.lastFocusAt;
         const point = h.building === "harbor" ? HARBOR.gate : SPOTS[h.building].pos;
         if (h.level === "attention") {
@@ -223,7 +228,7 @@ export class Village {
       const center = id === "harbor" ? HARBOR.gate : spot.pos;
       if (id !== "harbor") {
         const model = this.models[id];
-        model.update(dt, t, active);
+        model.update(dt, t, active, this.still);
         // Chimney smoke: always a little, more when busy.
         model.chimneys.forEach((c, i) => {
           if (this.every(`smoke-${id}-${i}`, active ? (id === "workshop" ? 0.18 : 0.3) : 0.8, dt)) {
@@ -272,7 +277,8 @@ export class Village {
       this.overlay.setBubble(bubble.name, bubble.text, mode, bubble.failed);
     }
 
-    this.column.update(dt, t);
-    this.harbor.update(dt, t);
+    // Still mode: one big time step, so the column fills at once and the cart and boat go straight to where they end up.
+    this.column.update(this.still ? 60 : dt, t);
+    this.harbor.update(this.still ? 60 : dt, t);
   }
 }

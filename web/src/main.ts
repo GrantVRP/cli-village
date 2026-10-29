@@ -21,7 +21,12 @@ import { createWorld, railGlow } from "./world.js";
 import "./style.css";
 
 const token = new URLSearchParams(location.search).get("token") ?? "";
-const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Still mode: nothing moves on its own. On when your system asks for reduced
+// motion, or when the terminal was started with --no-animation.
+const prefersStill = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let still = prefersStill;
+/** The moment time stands still at in still mode (one where blinking warning lights are on). */
+const STILL_TIME = Math.PI / 18;
 const root = document.getElementById("app")!;
 
 // --- Renderer ---------------------------------------------------------------------
@@ -41,10 +46,10 @@ const NIGHT_SKY = new THREE.Color(0x272a45);
 scene.background = DAY_SKY.clone();
 scene.fog = new THREE.Fog(DAY_SKY.clone(), 75, 150);
 
-const rig = new CameraRig(renderer.domElement, reducedMotion);
+const rig = new CameraRig(renderer.domElement, still);
 const overlay = new Overlay(root);
 const effects = new Effects(rig.camera);
-effects.reducedMotion = reducedMotion;
+effects.still = still;
 
 // --- Light: a warm low sun from the front-right, plus a soft sky fill -------------------
 
@@ -72,6 +77,16 @@ const world = createWorld();
 const village = new Village(overlay, effects, rig);
 shadows(world.group, true, true);
 shadows(village.group, true, true);
+village.still = still;
+document.body.classList.toggle("still", still);
+
+function setStill(value: boolean): void {
+  still = value;
+  rig.still = value;
+  effects.still = value;
+  village.still = value;
+  document.body.classList.toggle("still", value);
+}
 scene.add(world.group, village.group, effects.group);
 
 // --- Post-processing: gentle glow, then blur at the top and bottom (tabletop look) -------
@@ -162,8 +177,11 @@ renderer.domElement.addEventListener("pointermove", (e) => {
 // --- Events from the terminal ----------------------------------------------------------
 
 const source = connect(token, {
-  onHello: (mode) => {
+  onHello: (mode, _version, view) => {
     document.body.dataset.mode = mode;
+    // --compact hides the beginner explanations and key hints.
+    document.body.classList.toggle("compact", view.compact);
+    setStill(prefersStill || !view.animation);
   },
   onStatus: (message) => overlay.setConnection(message),
 });
@@ -177,12 +195,13 @@ let exposure = renderer.toneMappingExposure;
 renderer.setAnimationLoop((time) => {
   timer.update(time);
   const dt = Math.min(timer.getDelta(), 0.1);
-  const t = timer.getElapsed();
-  night += (nightTarget - night) * Math.min(1, dt * (reducedMotion ? 10 : 1.6));
+  // In still mode the clock stops, so nothing bobs, sways or pulses, and changes happen at once.
+  const t = still ? STILL_TIME : timer.getElapsed();
+  night += (nightTarget - night) * (still ? 1 : Math.min(1, dt * 1.6));
   applyNight(night);
   // When the run has stopped, the village dims a little.
   const wanted = source.getState().stopped ? 0.62 : 1.05;
-  exposure += (wanted - exposure) * Math.min(1, dt * 1.5);
+  exposure += (wanted - exposure) * (still ? 1 : Math.min(1, dt * 1.5));
   renderer.toneMappingExposure = exposure;
 
   world.update(dt, t);

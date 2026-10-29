@@ -20,6 +20,7 @@ import {
 } from "../infisical/client.js";
 import { findExecutable, run } from "../lib/exec.js";
 import { bold, cyan, dim, green, red, symbols, yellow } from "../lib/style.js";
+import type { Detail, Ui } from "../lib/ui.js";
 import { attachTaskView } from "../views/task.js";
 
 /** The robot that does work you start yourself. */
@@ -31,27 +32,59 @@ export interface ScopeOptions {
   env?: string;
   path?: string;
   projectId?: string;
-  json?: boolean;
 }
 
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Prints lines for people, or one JSON object for scripts. */
+const stdout = (text: string) => process.stdout.write(`${text}\n`);
+const stderr = (text: string) => process.stderr.write(`${text}\n`);
+
+/**
+ * Prints for people, or one JSON object for scripts (--json).
+ * With --quiet, only results go to stdout and problems go to stderr,
+ * so `names=$(cli-village secrets fetch --quiet)` captures just the names.
+ */
 class Output {
-  constructor(readonly json: boolean) {}
+  readonly json: boolean;
+  readonly detail: Detail;
+  constructor(ui: Ui) {
+    this.json = ui.json;
+    this.detail = ui.detail;
+  }
+  get quiet(): boolean {
+    return !this.json && this.detail === "quiet";
+  }
+  get full(): boolean {
+    return !this.json && this.detail === "full";
+  }
+  /** A line for people. Not shown with --json or --quiet. */
   line = (text = "") => {
-    if (!this.json) process.stdout.write(`${text}\n`);
+    if (!this.json && !this.quiet) stdout(text);
   };
+  /** A blank line for breathing room (full detail only). */
+  gap(): void {
+    if (this.full) stdout("");
+  }
+  /** A line of the result itself, which --quiet still prints. */
+  data(text: string): void {
+    if (!this.json) stdout(text);
+  }
+  /** Follow a job's events: what's happening and how it ended. */
+  watch(bus: EventBus): () => void {
+    if (this.json) return () => {};
+    return attachTaskView(bus, this.quiet ? stderr : stdout, this.detail);
+  }
   result(data: object): void {
-    if (this.json) process.stdout.write(`${JSON.stringify({ ok: true, ...data })}\n`);
+    if (this.json) stdout(JSON.stringify({ ok: true, ...data }));
   }
   /** Show a problem (and what might fix it). Returns the exit code. */
   problem(err: Omit<InfisicalError, "ok">, alreadyShown = false): number {
     if (this.json) {
-      process.stdout.write(`${JSON.stringify({ ok: false, error: err.error, hint: err.hint })}\n`);
+      stdout(JSON.stringify({ ok: false, error: err.error, hint: err.hint }));
     } else {
-      if (!alreadyShown) this.line(`${red(symbols.fail)} ${err.error}`);
-      if (err.hint) this.line(`  ${dim("Try:")} ${cyan(err.hint)}`);
+      const write = this.quiet ? stderr : stdout;
+      if (!alreadyShown) write(`${red(symbols.fail)} ${err.error}`);
+      if (err.hint) write(`  ${dim("Try:")} ${cyan(err.hint)}`);
     }
     return 1;
   }
@@ -85,10 +118,13 @@ export class VaultJob {
   }
 }
 
+/** A key name with any terminal control characters removed. */
+const safeName = (name: string) => name.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+
 /** Print key names in neat columns that fit the terminal. Names only, never values. */
 export function formatNames(names: readonly string[], width = process.stdout.columns || 80, indent = 2): string[] {
   if (names.length === 0) return [];
-  const safe = names.map((n) => n.replace(/[\u0000-\u001F\u007F-\u009F]/g, ""));
+  const safe = names.map(safeName);
   const col = Math.min(40, Math.max(...safe.map((n) => n.length)) + 2);
   const perRow = Math.max(1, Math.floor((width - indent) / col));
   const lines: string[] = [];
@@ -104,14 +140,14 @@ function scopeFrom(options: ScopeOptions, env = options.env): SecretScope {
 
 // --- secrets fetch ------------------------------------------------------------------
 
-export async function runSecretsFetch(options: ScopeOptions): Promise<number> {
-  const out = new Output(options.json === true);
+export async function runSecretsFetch(options: ScopeOptions, ui: Ui): Promise<number> {
+  const out = new Output(ui);
   const scope = scopeFrom(options);
   const bad = checkScope(scope);
   if (bad) return out.problem({ error: bad });
 
   const bus = new EventBus();
-  const stop = out.json ? () => {} : attachTaskView(bus, out.line);
+  const stop = out.watch(bus);
   const what = describeScope(scope);
   const job = new VaultJob(bus, `Fetching ${what}`, showCommand(["export", ...scopeArgs(scope), "--format=json"]));
 
@@ -127,19 +163,24 @@ export async function runSecretsFetch(options: ScopeOptions): Promise<number> {
   stop();
 
   out.result({ env: scope.env ?? null, path: scope.path ?? "/", count: names.length, keys: names, unreadable: [...res.unreadable].sort() });
-  if (!out.json) {
-    if (names.length) {
-      out.line("");
-      out.line(dim("  Key names (values stay hidden):"));
-      for (const l of formatNames(names)) out.line(l);
-    } else {
-      out.line(dim("  There are no secrets here yet. Add some in Infisical, then try again."));
-    }
-    if (res.unreadable.size) {
-      out.line("");
-      out.line(yellow(`  ${symbols.warn} You can see ${count(res.unreadable.size, "name")} but not the value (Infisical permissions).`));
-    }
-    out.line("");
+  if (out.quiet) {
+    // Just the names, one per line, for scripts and pipes.
+    for (const name of names) out.data(safeName(name));
+    return 0;
+  }
+  if (names.length) {
+    out.gap();
+    if (out.full) out.line(dim("  Key names (values stay hidden):"));
+    for (const l of formatNames(names)) out.line(l);
+  } else {
+    out.line(dim("  There are no secrets here yet. Add some in Infisical, then try again."));
+  }
+  if (res.unreadable.size) {
+    out.gap();
+    out.line(yellow(`  ${symbols.warn} You can see ${count(res.unreadable.size, "name")} but not the value (Infisical permissions).`));
+  }
+  if (out.full) {
+    out.gap();
     out.line(dim(`  To use them, run your app with: ${cyan("cli-village run -- <your command>")}`));
   }
   return 0;
@@ -147,8 +188,8 @@ export async function runSecretsFetch(options: ScopeOptions): Promise<number> {
 
 // --- secrets diff ---------------------------------------------------------------------
 
-export async function runSecretsDiff(envA: string, envB: string, options: ScopeOptions): Promise<number> {
-  const out = new Output(options.json === true);
+export async function runSecretsDiff(envA: string, envB: string, options: ScopeOptions, ui: Ui): Promise<number> {
+  const out = new Output(ui);
   const a = scopeFrom(options, envA);
   const b = scopeFrom(options, envB);
   const bad = checkScope(a) ?? checkScope(b);
@@ -156,7 +197,7 @@ export async function runSecretsDiff(envA: string, envB: string, options: ScopeO
   if (envA === envB) return out.problem({ error: "Pick two different environments to compare, e.g. dev prod." });
 
   const bus = new EventBus();
-  const stop = out.json ? () => {} : attachTaskView(bus, out.line);
+  const stop = out.watch(bus);
   const command = `${showCommand(["export", ...scopeArgs(a), "--format=json"])}  (and --env=${envB})`;
   const job = new VaultJob(bus, `Comparing ${envA} and ${envB} secrets (names only)`, command);
 
@@ -198,20 +239,25 @@ export async function runSecretsDiff(envA: string, envB: string, options: ScopeO
   stop();
 
   out.result({ a: envA, b: envB, onlyInA: onlyA, onlyInB: onlyB, differentValues: different, cannotCompare: unknown, same });
-  if (!out.json) {
-    const section = (label: string, names: string[], note?: string) => {
-      if (!names.length) return;
-      out.line("");
-      out.line(`  ${bold(label)} ${dim(`(${names.length})`)}${note ? dim(` ${note}`) : ""}`);
-      for (const l of formatNames(names, undefined, 4)) out.line(l);
-    };
-    section(`Only in ${envA}`, onlyA);
-    section(`Only in ${envB}`, onlyB);
-    section("Different values", different, "· names only, the values stay hidden");
-    section("Can't compare", unknown, "· you can see the name but not the value");
-    out.line("");
-    out.line(dim(`  Same in both: ${same}`));
+  if (out.quiet) {
+    // Like `diff`: - only in the first, + only in the second, ~ different, ? can't compare.
+    for (const [mark, names] of [["-", onlyA], ["+", onlyB], ["~", different], ["?", unknown]] as const) {
+      for (const name of names) out.data(`${mark} ${safeName(name)}`);
+    }
+    return 0;
   }
+  const section = (label: string, names: string[], note?: string) => {
+    if (!names.length) return;
+    out.gap();
+    out.line(`  ${bold(label)} ${dim(`(${names.length})`)}${note && out.full ? dim(` ${note}`) : ""}`);
+    for (const l of formatNames(names, undefined, 4)) out.line(l);
+  };
+  section(`Only in ${envA}`, onlyA);
+  section(`Only in ${envB}`, onlyB);
+  section("Different values", different, "· names only, the values stay hidden");
+  section("Can't compare", unknown, "· you can see the name but not the value");
+  out.gap();
+  out.line(dim(`  Same in both: ${same}`));
   return 0;
 }
 
@@ -243,8 +289,8 @@ async function gitStatusOf(file: string): Promise<GitStatus> {
   return { inRepo: true, ignored: ignored.code === 0, tracked: tracked.code === 0 };
 }
 
-export async function runSecretsExport(options: ExportOptions): Promise<number> {
-  const out = new Output(options.json === true);
+export async function runSecretsExport(options: ExportOptions, ui: Ui): Promise<number> {
+  const out = new Output(ui);
   if (!options.out) {
     return out.problem({
       error: "Tell me where to write the secrets, e.g. --out .env. (CLI Village only writes secrets to disk when you ask.)",
@@ -289,7 +335,7 @@ export async function runSecretsExport(options: ExportOptions): Promise<number> 
   }
 
   const bus = new EventBus();
-  const stop = out.json ? () => {} : attachTaskView(bus, out.line);
+  const stop = out.watch(bus);
   const what = describeScope(scope);
   const job = new VaultJob(
     bus,
@@ -324,8 +370,8 @@ export async function runSecretsExport(options: ExportOptions): Promise<number> 
   stop();
 
   out.result({ file: shown, format, env: scope.env ?? null, count: keys.length, keys, gitignored: git.ignored });
-  if (!out.json) {
-    out.line("");
+  if (out.full) {
+    out.gap();
     out.line(yellow(`  ${symbols.warn} ${shown} holds real secret values.`));
     out.line(
       dim(
@@ -334,6 +380,8 @@ export async function runSecretsExport(options: ExportOptions): Promise<number> 
           : "  This folder isn't a git repository. Keep the file private and delete it when you're done.",
       ),
     );
+  } else {
+    out.line(yellow(`  ${symbols.warn} ${shown} holds real secret values. Delete it when you're done.`));
   }
   return 0;
 }

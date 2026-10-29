@@ -202,6 +202,20 @@ kbd {
   user-select: all;
 }
 
+/* The beginner explainer: what the command means. Quieter than the command itself. */
+.caption-explain {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--cream-dim);
+  font-style: italic;
+}
+.caption-explain:empty,
+body.compact .caption-explain,
+body.compact .hints {
+  display: none;
+}
+
 .caption.pop {
   animation: pop 0.35s ease-out;
 }
@@ -446,8 +460,23 @@ kbd {
   letter-spacing: 0.16em;
   color: var(--gold);
 }
+.help-card h3 {
+  margin: 18px 0 6px;
+  font-size: 14px;
+}
+.help-words {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.help-words .help-row b {
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--cream);
+}
 .help-keys,
-.help-safe {
+.help-safe,
+.help-experts {
   color: var(--cream-dim);
 }
 
@@ -473,6 +502,13 @@ body.stopped .caption {
   border-color: rgba(201, 162, 90, 0.6);
 }
 
+/* Still mode: --no-animation, or "reduce motion" in your system settings. */
+body.still *,
+body.still *::before,
+body.still *::after {
+  animation: none !important;
+  transition: none !important;
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
