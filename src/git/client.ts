@@ -2,13 +2,17 @@
 // GitHub (push). Uses your own git and your own login; CLI Village never sees
 // or stores your GitHub credentials.
 
+import path from "node:path";
 import { secretGuard } from "../events/guard.js";
 import { findExecutable, run, type RunResult } from "../lib/exec.js";
 
 export interface GitProblem {
   ok: false;
+  /** Our own plain explanation. Safe to put in an event. */
   error: string;
   hint?: string;
+  /** What git (or a hook) said, cleaned. Printed in your terminal only, never put in an event. */
+  details?: string;
 }
 
 export type FileState = "added" | "modified" | "deleted" | "renamed" | "copied" | "type changed";
@@ -27,6 +31,8 @@ export interface GitStatus {
   initial: boolean;
   /** e.g. "origin/main", if the branch is linked to one on GitHub. */
   upstream: string | null;
+  /** The linked branch was deleted on GitHub (git still remembers its name). Then ahead and behind mean nothing. */
+  upstreamGone: boolean;
   /** Snapshots here that the upstream doesn't have yet. */
   ahead: number;
   /** Snapshots on the upstream that you don't have yet. */
@@ -60,13 +66,15 @@ export class Git {
     readonly bin: string,
     /** The top folder of the repository. */
     readonly root: string,
+    /** Where you are inside it, like "app/" (empty at the top). */
+    readonly prefix: string = "",
   ) {}
 
   /** Find git and the repository this folder is in. */
   static async open(cwd = process.cwd()): Promise<Git | GitProblem> {
     const bin = findExecutable("git");
     if (!bin) return { ok: false, error: "git isn't installed (or isn't on your PATH).", hint: "cli-village doctor" };
-    const res = await run(bin, ["rev-parse", "--show-toplevel"], { cwd, timeoutMs: GIT_TIMEOUT_MS });
+    const res = await run(bin, ["rev-parse", "--show-toplevel", "--show-prefix"], { cwd, timeoutMs: GIT_TIMEOUT_MS });
     if (res.code !== 0) {
       return {
         ok: false,
@@ -74,7 +82,13 @@ export class Git {
         hint: "git init",
       };
     }
-    return new Git(bin, res.stdout.trim());
+    const [root = "", prefix = ""] = res.stdout.split(/\r?\n/);
+    return new Git(bin, root.trim(), prefix.trim());
+  }
+
+  /** A path from the top of the repository, as you'd type it from the folder you're in. */
+  fromHere(file: string): string {
+    return path.posix.relative(`/${this.prefix}`, `/${file}`) || ".";
   }
 
   /** Run git in the repository and collect its output. */
@@ -88,16 +102,53 @@ export class Git {
     return parseStatus(res.stdout);
   }
 
-  /** How many snapshots aren't on GitHub (or any remote) yet. */
-  async unpushedCount(): Promise<number> {
-    const res = await this.run(["rev-list", "--count", "HEAD", "--not", "--remotes"]);
+  /**
+   * How many snapshots `remote` doesn't have yet (or, without one, that no
+   * remote has). Null if git couldn't count them: then don't assume there are none.
+   */
+  async unpushedCount(remote?: string): Promise<number | null> {
+    const res = await this.run(["rev-list", "--count", "HEAD", "--not", remote ? `--remotes=${remote}` : "--remotes"]);
     const n = Number(res.stdout.trim());
-    return res.code === 0 && Number.isInteger(n) ? n : 0;
+    return res.code === 0 && res.stdout.trim() !== "" && Number.isInteger(n) ? n : null;
   }
 
   async remotes(): Promise<string[]> {
     const res = await this.run(["remote"]);
     return res.code === 0 ? res.stdout.split(/\r?\n/).map((r) => r.trim()).filter(Boolean) : [];
+  }
+
+  /** A git setting, or "" if it isn't set. */
+  async config(key: string): Promise<string> {
+    const res = await this.run(["config", "--get", key]);
+    return res.code === 0 ? res.stdout.trim() : "";
+  }
+
+  /**
+   * Which remote a branch is sent to, picked the way git does: the branch's
+   * pushRemote, then remote.pushDefault, then the branch's own remote, then
+   * "origin", then the first one there is. `separate`: you set a remote just
+   * for pushing (say, your fork), different from where you pull from.
+   */
+  async pushRemote(branch: string, remotes: string[]): Promise<{ name: string; separate: boolean } | undefined> {
+    for (const key of [`branch.${branch}.pushRemote`, "remote.pushDefault"]) {
+      const name = await this.config(key);
+      if (remotes.includes(name)) return { name, separate: true };
+    }
+    const own = await this.config(`branch.${branch}.remote`);
+    if (remotes.includes(own)) return { name: own, separate: false };
+    const name = remotes.includes("origin") ? "origin" : remotes[0];
+    return name ? { name, separate: false } : undefined;
+  }
+
+  /**
+   * How HEAD compares with a branch: snapshots only HEAD has (ahead) and only
+   * the other has (behind). Null if that branch doesn't exist here.
+   */
+  async compare(ref: string): Promise<{ ahead: number; behind: number } | null> {
+    if ((await this.run(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).code !== 0) return null;
+    const res = await this.run(["rev-list", "--left-right", "--count", `${ref}...HEAD`]);
+    const m = /^(\d+)\s+(\d+)/.exec(res.stdout.trim());
+    return res.code === 0 && m ? { behind: Number(m[1]), ahead: Number(m[2]) } : null;
   }
 
   /** The newest commit: short id and how many files it touched. */
@@ -115,6 +166,7 @@ export function parseStatus(out: string): GitStatus {
     branch: null,
     initial: false,
     upstream: null,
+    upstreamGone: false,
     ahead: 0,
     behind: 0,
     staged: [],
@@ -123,6 +175,7 @@ export function parseStatus(out: string): GitStatus {
     conflicted: [],
   };
   const fields = out.split("\u0000");
+  let sawAheadBehind = false;
   for (let i = 0; i < fields.length; i++) {
     const entry = fields[i]!;
     if (!entry) continue;
@@ -133,6 +186,7 @@ export function parseStatus(out: string): GitStatus {
       else if (key === "branch.head") status.branch = value === "(detached)" ? null : value;
       else if (key === "branch.upstream") status.upstream = value;
       else if (key === "branch.ab") {
+        sawAheadBehind = true;
         const m = /^\+(\d+) -(\d+)$/.exec(value);
         if (m) {
           status.ahead = Number(m[1]);
@@ -165,6 +219,8 @@ export function parseStatus(out: string): GitStatus {
       if (unstaged) status.unstaged.push({ path: file, state: unstaged });
     }
   }
+  // git names the upstream but gives no ahead/behind line when that branch is gone (e.g. deleted after a merge).
+  if (status.upstream && !sawAheadBehind) status.upstreamGone = true;
   return status;
 }
 
@@ -172,7 +228,7 @@ export function parseStatus(out: string): GitStatus {
 export function explainGitFailure(res: RunResult, doing: string, remote = "GitHub"): GitProblem {
   const text = secretGuard.clean(`${res.stderr}\n${res.stdout}`);
   if (res.timedOut) return { ok: false, error: `git took too long to ${doing}. Try again in a moment.` };
-  if (/please tell me who you are|user\.email|user\.name|author identity unknown/i.test(text)) {
+  if (/please tell me who you are|user\.email|user\.name|author identity unknown|empty ident/i.test(text)) {
     return {
       ok: false,
       error: "git needs to know your name and email before it can save snapshots (they're written into each commit).",
@@ -186,7 +242,7 @@ export function explainGitFailure(res: RunResult, doing: string, remote = "GitHu
       hint: "git pull",
     };
   }
-  if (/authentication failed|permission denied|could not read username|403|401|access denied|denied to/i.test(text)) {
+  if (/authentication failed|permission denied|could not read username|\b(?:401|403)\b|access denied|denied to/i.test(text)) {
     return {
       ok: false,
       error: `${remote} didn't accept your login for this project. Check you're signed in and allowed to push here.`,
@@ -196,10 +252,12 @@ export function explainGitFailure(res: RunResult, doing: string, remote = "GitHu
   if (/could not resolve host|unable to access|connection timed out|network is unreachable|could not read from remote/i.test(text)) {
     return { ok: false, error: `Couldn't reach ${remote}. Check your internet connection (and the remote address) and try again.` };
   }
+  // A hook's or git's own words can be anything (even a printed secret the guard can't spot),
+  // so they stay in your terminal (details) and out of the village's events.
   if (/hook/i.test(text)) {
-    return { ok: false, error: `A git hook stopped it: ${lastLines(text)}` };
+    return { ok: false, error: "A git hook (a check that runs before saving or sending) stopped it.", details: lastLines(text) || undefined };
   }
-  return { ok: false, error: `git couldn't ${doing}: ${lastLines(text) || "no details"}` };
+  return { ok: false, error: `git couldn't ${doing}.`, details: lastLines(text) || undefined };
 }
 
 function lastLines(text: string): string {
@@ -209,6 +267,7 @@ function lastLines(text: string): string {
 /** Files that look like they hold secrets (.env, .env.local, ...), but not templates like .env.example. */
 export function looksLikeSecretsFile(file: string): boolean {
   const base = file.split("/").pop() ?? file;
-  if (!/^\.env(\.|$)/i.test(base)) return false;
+  // .env, .env.local, ... and direnv's .envrc (usually full of exports).
+  if (!/^\.env(\.|$|rc$)/i.test(base)) return false;
   return !/\.(example|sample|template|dist|defaults?)$/i.test(base);
 }

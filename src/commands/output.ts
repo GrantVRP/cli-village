@@ -20,6 +20,8 @@ export const count = (n: number, one: string, many = `${one}s`) => `${n} ${n ===
 export interface Problem {
   error: string;
   hint?: string;
+  /** What the other program said (already cleaned). Shown here only, never in an event. */
+  details?: string;
 }
 
 export class Output {
@@ -27,6 +29,8 @@ export class Output {
   readonly detail: Detail;
   /** Where lines for people go. Problems in --quiet mode always go to stderr. */
   private readonly human: (text: string) => void;
+  /** Fields every later JSON result or problem includes (see keep). */
+  private kept: object = {};
 
   constructor(ui: Ui, options: { humanTo?: "stdout" | "stderr" } = {}) {
     this.json = ui.json;
@@ -69,9 +73,17 @@ export class Output {
     return attachTaskView(bus, this.quiet ? stderr : this.human, this.detail);
   }
 
+  /**
+   * Remember fields for the final JSON line, whatever happens next. E.g. a
+   * snapshot that was saved before sending it failed: scripts still need its id.
+   */
+  keep(data: object): void {
+    this.kept = { ...this.kept, ...data };
+  }
+
   /** The JSON result (only with --json). */
   result(data: object): void {
-    if (this.json) stdout(JSON.stringify({ ok: true, ...data }));
+    if (this.json) stdout(JSON.stringify({ ok: true, ...this.kept, ...data }));
   }
 
   /**
@@ -80,10 +92,11 @@ export class Output {
    */
   problem(err: Problem, alreadyShown = false, extra: object = {}): number {
     if (this.json) {
-      stdout(JSON.stringify({ ok: false, error: err.error, hint: err.hint, ...extra }));
+      stdout(JSON.stringify({ ok: false, error: err.error, hint: err.hint, details: err.details, ...this.kept, ...extra }));
     } else {
       const write = this.quiet ? stderr : this.human;
       if (!alreadyShown) write(`${red(symbols.fail)} ${err.error}`);
+      if (err.details) write(`  ${dim(`It said: ${err.details}`)}`);
       if (err.hint) write(`  ${dim("Try:")} ${cyan(err.hint)}`);
     }
     return 1;

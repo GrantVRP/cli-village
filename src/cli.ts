@@ -28,6 +28,13 @@ const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url),
   version: string;
 };
 
+/** Where the local socket is, for emit --help. (On Windows its name changes each time a village opens.) */
+function socketHelp(): string {
+  const address = hubAddress();
+  if (address.path) return address.path;
+  return address.registry ? `a pipe named in ${address.registry} (while a village is open)` : "(none)";
+}
+
 function parsePort(value: string): number {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) {
@@ -310,7 +317,7 @@ Examples:
 
 Each event is checked first, so mistakes are explained even when no village
 is open. Programs can also write the same JSON lines to the local socket:
-  ${hubAddress().path}`,
+  ${socketHelp()}`,
     ),
 ).action(async (event: string | undefined, _options: object, cmd: Command) => {
   process.exitCode = await runEmit(event, uiOf(cmd));
