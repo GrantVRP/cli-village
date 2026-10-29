@@ -24,7 +24,7 @@ cli-village emit '{"type":"done","agent":"claude-code","task":"r1","message":"Fo
 
 - **macOS and Linux:** `$XDG_RUNTIME_DIR/cli-village/village.sock`, or `~/.cli-village/village.sock`. The folder is only open to you (0700), and so is the socket (0600).
 - **Windows:** the named pipe `\\.\pipe\cli-village-<your user name>` (characters other than letters, numbers, `_` and `-` become `_`). Only your account can write to it.
-- `cli-village emit --help` prints the exact path on your computer. Set `CLI_VILLAGE_SOCKET` to use another one (on Windows, a pipe name).
+- `cli-village emit --help` prints the exact path on your computer. Set `CLI_VILLAGE_SOCKET` to use another one (on Windows, a pipe name). On macOS and Linux its folder must be one only you can open (`chmod 700`): the village won't change a folder you picked, it just refuses an open one.
 
 For every line you send, you get one line back: `{"ok":true,"seq":12}` or `{"ok":false,"error":"…"}`. The error says what to fix.
 

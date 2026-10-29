@@ -183,6 +183,6 @@ describe("socket address", () => {
     assert.equal(hubAddress({ CLI_VILLAGE_SOCKET: "//./pipe/other" }, "win32").path, "\\\\.\\pipe\\other");
     assert.equal(hubAddress({ XDG_RUNTIME_DIR: "/run/user/1000" }, "linux").path, "/run/user/1000/cli-village/village.sock");
     assert.match(hubAddress({}, "darwin").path, /\.cli-village[\\/]village\.sock$/);
-    assert.deepEqual(hubAddress({ CLI_VILLAGE_SOCKET: "/tmp/x/v.sock" }, "linux"), { path: "/tmp/x/v.sock", dir: "/tmp/x" });
+    assert.deepEqual(hubAddress({ CLI_VILLAGE_SOCKET: "/tmp/x/v.sock" }, "linux"), { path: "/tmp/x/v.sock", dir: "/tmp/x", chosen: true });
   });
 });
