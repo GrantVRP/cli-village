@@ -8,11 +8,12 @@
 // The hub only answers on this computer (see address.ts). It never sends
 // anything anywhere else, and events never carry secret values.
 
-import { chmod, lstat, unlink } from "node:fs/promises";
+import { chmod, lstat, mkdir, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
+import path from "node:path";
 import type { EventBus } from "../events/bus.js";
 import { EVENT_VERSION } from "../events/types.js";
-import { hubAddress, preparePrivateDir, type HubAddress } from "./address.js";
+import { hubAddress, newPipe, pipePath, preparePrivateDir, readPipeName, type HubAddress } from "./address.js";
 
 /** Longest line we read (an event is far smaller). */
 export const MAX_LINE = 64 * 1024;
@@ -66,9 +67,12 @@ function listen(server: net.Server, address: string): Promise<NodeJS.ErrnoExcept
 }
 
 /** Start the hub, unless another village already runs one (then `busy`). */
-export async function startHub(bus: EventBus, address: HubAddress = hubAddress()): Promise<HubStart> {
+export async function startHub(bus: EventBus, requested: HubAddress = hubAddress()): Promise<HubStart> {
+  // Windows, the usual pipe: a village already open? Then follow it. Otherwise open on a new random name.
+  if (requested.registry && requested.path && (await probe(requested.path))) return { ok: false, busy: true, address: requested };
+  const address: HubAddress = requested.registry ? { ...requested, path: newPipe().path } : requested;
   if (address.dir && !isWindows) {
-    const problem = await preparePrivateDir(address.dir);
+    const problem = await preparePrivateDir(address.dir, { mayChange: !address.chosen });
     if (problem) return { ok: false, busy: false, error: problem };
   }
 
@@ -171,6 +175,16 @@ export async function startHub(bus: EventBus, address: HubAddress = hubAddress()
   }
   if (!isWindows) await chmod(address.path, 0o600).catch(() => {});
 
+  // Windows: now that it's listening, tell commands and agents the pipe's name.
+  const name = address.path.split("\\").pop()!;
+  if (address.registry) {
+    const claimed = await claimRegistry(address.registry, name);
+    if (claimed !== true) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      return claimed;
+    }
+  }
+
   let closed = false;
   return {
     ok: true,
@@ -182,11 +196,39 @@ export async function startHub(bus: EventBus, address: HubAddress = hubAddress()
         closed = true;
         for (const socket of connections) socket.destroy();
         await new Promise<void>((resolve) => server.close(() => resolve()));
-        if (!isWindows) {
+        if (address.registry) {
+          // The name is never used again (unless another village has taken over the file).
+          if (readPipeName(address.registry) === name) await unlink(address.registry).catch(() => {});
+        } else if (!isWindows) {
           const info = await lstat(address.path).catch(() => null);
           if (info?.isSocket()) await unlink(address.path).catch(() => {});
         }
       },
     },
   };
+}
+
+/**
+ * Write the pipe's name to the registry file. If another village wrote it at
+ * the same moment and is answering, that one wins and this one follows it.
+ * A name left over from a village that didn't close cleanly is replaced.
+ */
+async function claimRegistry(registry: string, name: string): Promise<true | HubStart> {
+  try {
+    await mkdir(path.dirname(registry), { recursive: true });
+    try {
+      await writeFile(registry, `${name}\n`, { flag: "wx" });
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+    const other = readPipeName(registry);
+    if (other && other !== name && (await probe(pipePath(other)))) {
+      return { ok: false, busy: true, address: { path: pipePath(other), registry } };
+    }
+    await writeFile(registry, `${name}\n`);
+    return true;
+  } catch (err) {
+    return { ok: false, busy: false, error: `Couldn't save the village's pipe name in ${registry}: ${(err as Error).message}` };
+  }
 }

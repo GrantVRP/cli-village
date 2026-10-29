@@ -51,6 +51,12 @@ export async function runEmit(input: string | undefined, ui: Ui): Promise<number
   }
   const ack = await sender.send(checked.body);
   await sender.close();
+  if (!ack.ok && ack.lost) {
+    // Like no village at all: not your agent's problem, so it isn't stopped.
+    out.result({ delivered: false });
+    out.line(dim(`${symbols.warn} ${ack.error} Nobody saw it.`));
+    return 0;
+  }
   if (!ack.ok) return out.problem({ error: `The village refused it: ${ack.error}` });
   out.result({ delivered: true, seq: ack.seq });
   out.line(`${green(symbols.ok)} Sent to the village: ${describe(checked.body)}`);
@@ -64,6 +70,7 @@ async function emitStream(out: Output): Promise<number> {
   const refused: { line: number; error: string }[] = [];
   const answers: Promise<void>[] = [];
   let sent = 0;
+  let lost = 0; // sent, but the village closed (or stopped answering) first
   let n = 0;
   const refuse = (line: number, error: string) => {
     refused.push({ line, error });
@@ -83,7 +90,9 @@ async function emitStream(out: Output): Promise<number> {
     answers.push(
       sender.send(checked.body).then((ack: Ack) => {
         if (ack.ok) sent++;
-        else refuse(line, `the village refused it: ${ack.error}`);
+        else if (ack.lost) {
+          if (!lost++) out.warn(dim(`${symbols.warn} ${ack.error} Later events aren't seen. (Still checking each line.)`));
+        } else refuse(line, `the village refused it: ${ack.error}`);
       }),
     );
   }
@@ -91,8 +100,11 @@ async function emitStream(out: Output): Promise<number> {
   await sender?.close();
 
   refused.sort((a, b) => a.line - b.line);
-  if (out.json) process.stdout.write(`${JSON.stringify({ ok: refused.length === 0, delivered: Boolean(sender), sent, refused })}\n`);
-  if (sender) out.line(`${green(symbols.ok)} Sent ${count(sent, "event")} to the village${refused.length ? `, ${refused.length} refused (see above)` : ""}.`);
+  if (out.json) process.stdout.write(`${JSON.stringify({ ok: refused.length === 0, delivered: Boolean(sender), sent, lost, refused })}\n`);
+  if (sender) {
+    const notes = [refused.length ? `${refused.length} refused (see above)` : "", lost ? `${lost} not seen (the village closed)` : ""].filter(Boolean);
+    out.line(`${green(symbols.ok)} Sent ${count(sent, "event")} to the village${notes.length ? `, ${notes.join(", ")}` : ""}.`);
+  }
   else out.line(dim(`  Checked ${count(n, "line")}: ${refused.length ? `${refused.length} had problems (see above)` : "all fine"}.`));
   return refused.length ? 1 : 0;
 }

@@ -2,6 +2,7 @@
 // and cleans every piece of text through the privacy guard.
 // Error messages are written for humans: external agents will see them.
 
+import { HIDDEN, looksLikePathKey } from "../lib/redact.js";
 import { secretGuard, type SecretGuard } from "./guard.js";
 import {
   BUILDINGS,
@@ -24,6 +25,8 @@ const AGENT_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$/;
 const TASK_ID = /^[A-Za-z0-9][\w.:#-]{0,63}$/;
 const KEY_NAME = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/;
 const GIT_REF = /^[\w./-]{1,100}$/;
+/** True for a remote or branch name an event can carry (others are left out of the event). */
+export const isGitRef = (value: string) => GIT_REF.test(value);
 const SHA = /^[0-9a-f]{4,64}$/i;
 const MAX_SOURCES = 10;
 const MAX_SOURCE = 120;
@@ -144,9 +147,10 @@ class Fields {
       }
       if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) this.fail(usage);
       // A site name that looks like a token is left out. In the path, each part is checked on its own,
-      // so a token becomes [hidden] and the rest of the address stays readable.
+      // so a token becomes [hidden] and the rest of the address stays readable. (A link can carry a
+      // token in its path, so a shorter key-like part is hidden too.)
       if (this.guard.clean(url.host) !== url.host) continue;
-      const parts = url.pathname === "/" ? [] : url.pathname.split("/").map((part) => this.guard.clean(part));
+      const parts = url.pathname === "/" ? [] : url.pathname.split("/").map((part) => (looksLikePathKey(part) ? HIDDEN : this.guard.clean(part)));
       seen.add(`${url.host}${parts.join("/")}`.slice(0, MAX_SOURCE));
     }
     return [...seen];

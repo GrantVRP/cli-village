@@ -250,18 +250,23 @@ export async function runSecretsExport(options: ExportOptions, ui: Ui): Promise<
   }
 
   // Never write secrets somewhere git could commit them.
+  // (Copy-paste commands are only offered for plain names, so they're safe to run as shown.)
+  const plain = (name: string) => /^[\w./-]+$/.test(name) && !name.startsWith("-");
+  const slashed = shown.split(path.sep).join("/");
   const git = await gitStatusOf(file);
   if (git.tracked) {
     return out.problem({
       error: `git is already tracking ${shown}, so secrets written there could end up in a commit. Stop tracking it first (this keeps the file, it just leaves git).`,
-      hint: `git rm --cached -- ${base}`,
+      hint: plain(slashed) ? `git rm --cached -- ${slashed}` : undefined,
     });
   }
   if (git.inRepo && !git.ignored) {
+    const here = path.dirname(file) === process.cwd();
     return out.problem({
       error: `${shown} isn't listed in .gitignore, so git could commit your secrets. Add a line with ${base} to your .gitignore file first, then run this again.`,
-      // (On Windows, `echo >>` in PowerShell writes a format git can't read, so no one-liner there.)
-      hint: process.platform === "win32" ? undefined : `echo ${base} >> .gitignore`,
+      // The leading \n keeps it off the end of a last line that has no line break.
+      // (On Windows, `>>` in PowerShell writes a format git can't read, so no one-liner there.)
+      hint: process.platform !== "win32" && here && plain(base) ? `printf '\\n${base}\\n' >> .gitignore` : undefined,
     });
   }
 

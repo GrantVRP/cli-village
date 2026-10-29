@@ -1,7 +1,7 @@
 // Helpers for finding and running other programs (git, infisical, ...).
 // Uses only Node's built-in child_process, so there's no extra dependency.
 
-import { spawn, type SpawnOptions } from "node:child_process";
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import path from "node:path";
 
@@ -86,6 +86,20 @@ export interface RunOptions {
   stdin?: "inherit";
 }
 
+/**
+ * Stop a program that took too long, and what it started. On Windows a .cmd
+ * runs inside cmd.exe, and child.kill() would stop only cmd.exe, so taskkill
+ * (part of Windows) stops the whole tree.
+ */
+function stopTree(child: ChildProcess): void {
+  if (isWindows && child.pid) {
+    const taskkill = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
+    spawn(taskkill, ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }).on("error", () => child.kill());
+  } else {
+    child.kill();
+  }
+}
+
 /** Run a program and collect its output. Never throws: failures come back in the result. */
 export function run(file: string, args: string[], options: RunOptions = {}): Promise<RunResult> {
   const maxOutput = options.maxOutput ?? 1024 * 1024;
@@ -117,7 +131,13 @@ export function run(file: string, args: string[], options: RunOptions = {}): Pro
     const timer = options.timeoutMs
       ? setTimeout(() => {
           timedOut = true;
-          child.kill();
+          stopTree(child);
+          // A program it started can keep the output open after it stops: don't wait for that.
+          setTimeout(() => {
+            child.stdout?.destroy();
+            child.stderr?.destroy();
+            finish(null);
+          }, 2000).unref();
         }, options.timeoutMs)
       : undefined;
 

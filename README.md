@@ -2,17 +2,19 @@
 
 > Watch your agents work in a tiny low-poly village.
 
+[![CI](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml/badge.svg)](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml)
+
 CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https://infisical.com/docs/cli/overview). It keeps everything Infisical does, including its privacy guarantees, and lets you *see* the work happening. Each agent is a little robot, each building is a type of task, and commits get carried down to the GitHub Harbor.
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days, step 8 of 9. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`) or a 3D village (`cli-village open`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`).
+**Status:** early days. All 9 build steps are done, but it hasn't been tried with a real Infisical account yet. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`) or a 3D village (`cli-village open`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
 ## What you need
 
-- Node.js 22 or newer
+- Node.js 22.12 or newer
 - git
 - The Infisical CLI, for secrets and the secret scan (`cli-village doctor` tells you how to install it)
 
@@ -43,7 +45,7 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | `cli-village run -- npm start` | Runs your command with your secrets as environment variables (through `infisical run`). Your program's output goes straight to your terminal. |
 | `cli-village status` | What changed since your last snapshot, in plain English, and what to do next. |
 | `cli-village commit -m "Fix login"` | Saves a snapshot (a commit) after a secret scan. Only what you staged (`git add`), or else every change. Add `--push` to send it too. |
-| `cli-village push` | Sends your snapshots to GitHub after a secret scan. The first push of a branch links it (`--set-upstream`). |
+| `cli-village push` | Sends your snapshots to GitHub after a secret scan: just this branch, under its own name. The first push of a branch links it (`--set-upstream`). |
 | `cli-village test` | Finds and runs your tests: the `test` script in package.json (npm, pnpm, yarn or bun), `cargo test`, `go test ./...` or pytest. Or give your own: `cli-village test -- node --test`. |
 | `cli-village open` | Opens the 3D village in your browser, showing real work (like `cli-village`, but in 3D). The terminal keeps its own view. Add `--no-open` to just print the address, or `--port 4317` to pick the port. |
 | `cli-village emit '<json>'` | For AI agents and scripts: tells the open village what you're doing. `emit -` reads one event per line from stdin. See [docs/EVENTS.md](docs/EVENTS.md). |
@@ -84,7 +86,7 @@ cli-village emit '{"type":"done","agent":"my-agent","task":"r1","message":"Found
 The agent becomes a robot that walks to the LIBRARY, and the log says `my-agent done: Found the retry rules (from docs.stripe.com)`.
 
 - Each event is checked first, and mistakes come with a plain explanation. If no village is open, `emit` says so and still exits with 0, so your agent isn't stopped by it.
-- Programs can also keep a connection open to the village's local socket and write one JSON event per line. It only works on your computer: on macOS and Linux it's a socket in a folder only you can open, and on Windows it's a named pipe only your account can write to.
+- Programs can also keep a connection open to the village's local socket and write one JSON event per line. It only works on your computer: on macOS and Linux it's a socket in a folder only you can open, and on Windows it's a named pipe only your account can write to, with a new random name each time a village opens.
 - Research sources are cut down to the site and path (`docs.stripe.com/api/…`). Query strings, `#fragments` and logins are dropped, because they can hold tokens.
 - If a village is already open, a second one (say, `cli-village open` next to `cli-village`) follows the first, so both show the same thing.
 - The full format, with examples in bash, Node.js and Python, is in **[docs/EVENTS.md](docs/EVENTS.md)**.
@@ -172,7 +174,8 @@ $ cli-village commit -m "Add payments"
 - You see the file, line and kind of secret, never the secret itself.
 - If the scan picked your changes for you (`git add --all`) and then stops, it puts them back the way they were.
 - `push` scans every snapshot that isn't on GitHub yet, so a secret saved earlier (or with `--skip-scan`) is still caught before it leaves your computer.
-- Files like `.env` are never saved, whatever the scanner says. (`.env.example` and other templates are fine.)
+- `push` sends only the branch you're on, under its own name, whatever your git push settings say. (So nothing the scan didn't check can go with it.) If GitHub deleted that branch, say after a pull request was merged, it's made again.
+- Files like `.env` and `.envrc` are never saved, whatever the scanner says. (`.env.example` and other templates are fine.)
 - Common problems come with a plain explanation and a fix: no name and email set up in git, GitHub has newer snapshots (`git pull`), not on a branch, no GitHub repository linked yet.
 - Without the Infisical CLI, `commit` and `push` refuse to go ahead unless you add `--skip-scan` (which prints a warning).
 - For scripts: `commit -q` prints just the new snapshot id, and `--json` gives the result (with the findings' file, line, rule and fingerprint if the gate stops it).
@@ -212,6 +215,14 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - The secret scan runs on your computer. CLI Village asks Infisical for a redacted report in a private temporary folder, reads only where each possible secret is (file, line, rule, fingerprint), and deletes the report straight away.
 - `commit` and `push` use your own git login. CLI Village never sees or stores it, and never shows your remote's address (it can contain a token).
 
+## Running the tests
+
+```bash
+npm test         # builds, then runs every test in test/
+```
+
+The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you don't need an Infisical account. They cover the privacy guard, every command, the secret-scan gate, the local socket and the 3D server's security, and they check every output for leaked secret values. GitHub Actions runs them on Linux, macOS and Windows with Node.js 22 and 24 for every pull request.
+
 ## Roadmap
 
 - [x] 1. Scaffold + `doctor`
@@ -222,7 +233,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - [x] 6. Beginner explainer + expert flags
 - [x] 7. GitHub Harbor with the secret-scan checkpoint
 - [x] 8. Library + external-agent event API
-- [ ] 9. Tests + CI
+- [x] 9. Tests + CI
 
 ## License
 

@@ -18,24 +18,25 @@ cli-village emit '{"type":"done","agent":"my-agent","task":"r1","message":"Found
 | `my-agent \| cli-village emit -` | Many events: one JSON object per line on stdin. Each line is sent as soon as it arrives. |
 | The local socket | Programs that keep a connection open: write one JSON object per line, read one answer per line. |
 
-`cli-village emit` checks every event first, so mistakes are explained even when no village is open. If no village is open, it says so and exits with 0, so your agent isn't stopped by it. Add `--json` for a machine-readable answer (`{"ok":true,"delivered":true}`), or `-q` to say nothing unless something is wrong. Bad events exit with 1.
+`cli-village emit` checks every event first, so mistakes are explained even when no village is open. If no village is open, or it closes (or stops answering for 5 seconds) while you send, it says so and exits with 0, so your agent isn't stopped by it. Add `--json` for a machine-readable answer (`{"ok":true,"delivered":true}`; with `-`, also how many were `sent`, `lost` because the village closed, and `refused`), or `-q` to say nothing unless something is wrong. Bad events exit with 1.
 
 ### The local socket
 
 - **macOS and Linux:** `$XDG_RUNTIME_DIR/cli-village/village.sock`, or `~/.cli-village/village.sock`. The folder is only open to you (0700), and so is the socket (0600).
-- **Windows:** the named pipe `\\.\pipe\cli-village-<your user name>` (characters other than letters, numbers, `_` and `-` become `_`). Only your account can write to it.
-- `cli-village emit --help` prints the exact path on your computer. Set `CLI_VILLAGE_SOCKET` to use another one (on Windows, a pipe name).
+- **Windows:** a named pipe, `\\.\pipe\cli-village-<32 random letters and digits>`, with a new random name each time a village opens. While it's open, the name is in `%LOCALAPPDATA%\cli-village\pipe-name`, a file only you can read; when it closes, the file goes. (No file: no village is open.) Only your account can write to the pipe, and a name that's never used twice can't be taken by someone who saw it before.
+- `cli-village emit --help` prints the exact path on your computer. Set `CLI_VILLAGE_SOCKET` to use another one (on Windows, a pipe name). On macOS and Linux its folder must be one only you can open (`chmod 700`): the village won't change a folder you picked, it just refuses an open one.
 
 For every line you send, you get one line back: `{"ok":true,"seq":12}` or `{"ok":false,"error":"…"}`. The error says what to fix.
 
 ```js
 // Node.js
+import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
-const user = os.userInfo().username.replace(/[^A-Za-z0-9_-]/g, "_");
-const { XDG_RUNTIME_DIR } = process.env;
+const { LOCALAPPDATA, XDG_RUNTIME_DIR } = process.env;
 const path =
-  process.platform === "win32" ? `\\\\.\\pipe\\cli-village-${user}`
+  // (On Windows, if the file isn't there, no village is open.)
+  process.platform === "win32" ? `\\\\.\\pipe\\${fs.readFileSync(`${LOCALAPPDATA}\\cli-village\\pipe-name`, "utf8").trim()}`
   : XDG_RUNTIME_DIR ? `${XDG_RUNTIME_DIR}/cli-village/village.sock`
   : `${os.homedir()}/.cli-village/village.sock`;
 const socket = net.createConnection(path);
