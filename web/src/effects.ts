@@ -69,7 +69,8 @@ export class Effects {
   private windTimer = 2;
   /** 0 = day, 1 = night. */
   night = 0;
-  reducedMotion = false;
+  /** Still mode (--no-animation or reduced motion): nothing drifts, rises or puffs. */
+  still = false;
 
   constructor(private readonly camera: THREE.Camera) {
     this.group.name = "effects";
@@ -130,6 +131,7 @@ export class Effects {
 
   /** A ring rising from a building (cyan when busy, red when there's a problem). */
   ring(at: THREE.Vector3, radius: number, color: number = P.glow): void {
+    if (this.still) return;
     const p = this.rings.spawn();
     if (!p) return;
     p.mesh.position.copy(at).setY(0.15);
@@ -139,6 +141,7 @@ export class Effects {
   }
 
   puff(at: THREE.Vector3, strong: boolean): void {
+    if (this.still) return;
     const p = this.smoke.spawn();
     if (!p) return;
     p.mesh.position.copy(at);
@@ -149,6 +152,7 @@ export class Effects {
   }
 
   bubble(at: THREE.Vector3): void {
+    if (this.still) return;
     const p = this.bubbles.spawn();
     if (!p) return;
     p.mesh.position.copy(at);
@@ -157,6 +161,7 @@ export class Effects {
   }
 
   sparkBurst(at: THREE.Vector3): void {
+    if (this.still) return;
     for (let i = 0; i < 8; i++) {
       const p = this.sparks.spawn();
       if (!p) return;
@@ -168,6 +173,7 @@ export class Effects {
 
   readonly trailSink = {
     spawn: (position: THREE.Vector3) => {
+      if (this.still) return;
       const i = this.trailNext;
       this.trailNext = (this.trailNext + 1) % this.trailAges.length;
       this.trailAges[i] = 0;
@@ -210,7 +216,7 @@ export class Effects {
     if (this.trails.instanceColor) this.trails.instanceColor.needsUpdate = true;
 
     // Wind: every few seconds, a gust of white streaks drifts across.
-    if (!this.reducedMotion) {
+    if (!this.still) {
       this.windTimer -= dt;
       if (this.windTimer <= 0) {
         this.windTimer = 4 + Math.random() * 5;
