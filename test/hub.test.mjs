@@ -134,6 +134,34 @@ describe("the local socket", () => {
     await hub.close();
   });
 
+  it("on Windows, opens on a new pipe name each time, and forgets it on close", { skip: !isWindows && "Windows pipes only" }, async () => {
+    const env = { LOCALAPPDATA: tempDir() };
+    const first = await startHub(new EventBus(), hubAddress(env));
+    assert.equal(first.ok, true, first.error);
+    cleanup.push(() => first.hub.close());
+    const { registry } = hubAddress(env);
+    const name = readFileSync(registry, "utf8").trim();
+    assert.equal(first.hub.address.path, `\\\\.\\pipe\\${name}`);
+    // A second village finds it and follows; commands reach it.
+    const second = await startHub(new EventBus(), hubAddress(env));
+    assert.deepEqual({ busy: second.busy, path: second.address?.path }, { busy: true, path: first.hub.address.path });
+    const sender = await HubSender.open(hubAddress(env));
+    assert.ok(sender, "a command can reach it");
+    await sender.close();
+
+    await first.hub.close();
+    assert.equal(existsSync(registry), false, "the name is forgotten");
+    assert.equal(await HubSender.open(hubAddress(env)), null, "nothing to connect to");
+    // A name left over (say, from a crash) is replaced by a new one.
+    writeFileSync(registry, `${name}\n`);
+    const again = await startHub(new EventBus(), hubAddress(env));
+    assert.equal(again.ok, true, again.error);
+    cleanup.push(() => again.hub.close());
+    assert.notEqual(again.hub.address.path, first.hub.address.path);
+    assert.equal(readFileSync(registry, "utf8").trim(), again.hub.address.path.split("\\").pop());
+    await again.hub.close();
+  });
+
   it("keeps the socket private, tidies a stale one, and never deletes an ordinary file", { skip: isWindows && "Unix sockets only" }, async () => {
     const dir = tempDir();
     const mode = (p) => statSync(p).mode & 0o777;

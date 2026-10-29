@@ -6,9 +6,11 @@ import { HIDDEN, maskTokens } from "../lib/redact.js";
 // Values shorter than this are too common ("true", "dev") to hide everywhere.
 const MIN_SECRET_LENGTH = 4;
 
-// KEY=value or password: value written in plain text.
-const ASSIGNMENT = /\b([A-Z][A-Z0-9_]{2,})=("[^"]*"|'[^']*'|\S+)/g;
-const NAMED_SECRET = /\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+// KEY=value or password: value written in plain text. (An already hidden value stays just
+// that, so cleaning twice doesn't swallow the text after it.)
+const VALUE = String.raw`("[^"]*"|'[^']*'|\[hidden\]|\S+)`;
+const ASSIGNMENT = new RegExp(String.raw`\b([A-Z][A-Z0-9_]{2,})=${VALUE}`, "g");
+const NAMED_SECRET = new RegExp(String.raw`\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)(\s*[:=]\s*)${VALUE}`, "gi");
 // Terminal codes (colors, "clear screen", window titles), then any other control characters.
 const ANSI_CODES = /\u001B(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001B]*(?:\u0007|\u001B\\)?|[@-Z\\-_])/g;
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
@@ -40,8 +42,22 @@ export class SecretGuard {
     return this.longestFirst.some((value) => text.includes(value));
   }
 
-  /** Make text safe to show: strip control characters and hide anything secret. */
+  /**
+   * Make text safe to show: strip control characters and hide anything secret.
+   * Cleaning already cleaned text changes nothing (events are checked again when relayed):
+   * it runs again until nothing more changes, which can only ever hide more.
+   */
   clean(text: string): string {
+    let out = this.cleanOnce(text);
+    for (let i = 0; i < 3; i++) {
+      const again = this.cleanOnce(out);
+      if (again === out) break;
+      out = again;
+    }
+    return out;
+  }
+
+  private cleanOnce(text: string): string {
     let out = text.replace(ANSI_CODES, "").replace(CONTROL, " ");
     for (const value of this.longestFirst) out = out.split(value).join(HIDDEN);
     // Tokens first, so "Authorization: Bearer xyz" hides xyz, not just the word Bearer.

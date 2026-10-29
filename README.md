@@ -86,7 +86,7 @@ cli-village emit '{"type":"done","agent":"my-agent","task":"r1","message":"Found
 The agent becomes a robot that walks to the LIBRARY, and the log says `my-agent done: Found the retry rules (from docs.stripe.com)`.
 
 - Each event is checked first, and mistakes come with a plain explanation. If no village is open, `emit` says so and still exits with 0, so your agent isn't stopped by it.
-- Programs can also keep a connection open to the village's local socket and write one JSON event per line. It only works on your computer: on macOS and Linux it's a socket in a folder only you can open, and on Windows it's a named pipe only your account can write to.
+- Programs can also keep a connection open to the village's local socket and write one JSON event per line. It only works on your computer: on macOS and Linux it's a socket in a folder only you can open, and on Windows it's a named pipe only your account can write to, with a new random name each time a village opens.
 - Research sources are cut down to the site and path (`docs.stripe.com/api/…`). Query strings, `#fragments` and logins are dropped, because they can hold tokens.
 - If a village is already open, a second one (say, `cli-village open` next to `cli-village`) follows the first, so both show the same thing.
 - The full format, with examples in bash, Node.js and Python, is in **[docs/EVENTS.md](docs/EVENTS.md)**.

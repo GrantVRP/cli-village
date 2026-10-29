@@ -47,11 +47,48 @@ describe("privacy guard", () => {
       assert.equal(cleaned, expected);
       assert.equal(guard.clean(cleaned), cleaned, "cleaning twice changes nothing");
     }
-    // A key shaped like a UUID is still hidden.
-    assert.equal(guard.clean("key 123e4567-e89b-12d3-a456-426614174000 ok"), "key [hidden] ok");
+    // Keys inside longer names and paths, and other shapes, are still hidden.
+    const HEX = "9f8e7d6c5b4a39281706f5e4d3c2b1a0";
+    const SERVICE_TOKEN = ["st", "63e03c4a97cb4a747186c71e", HEX, HEX].join(".");
+    for (const [text, expected] of [
+      ["key 123e4567-e89b-12d3-a456-426614174000 ok", "key [hidden] ok"],
+      [`GET /reset/password/confirm/${HEX}`, "GET /reset/password/confirm/[hidden]"],
+      [`user-session-token-${HEX}`, "user-session-token-[hidden]"],
+      ['{password:"hunter2",user:"bob"}', '{password:[hidden],user:"bob"}'],
+      ["Bearer Authorization: abc123def456", "Bearer Authorization: [hidden]"],
+      ["Authorization: Basic dXNlcjpwYXNz", "Authorization: Basic [hidden]"],
+      [`using ${SERVICE_TOKEN}`, "using [hidden]"],
+    ]) {
+      assert.equal(guard.clean(text), expected, text);
+      assert.equal(guard.clean(guard.clean(text)), expected, `${text} (twice)`);
+    }
     // Ordinary words stay readable.
-    for (const text of ["Bearer tokens expire", "Fix Authorization: add role checks", "token rotation", "see ssh://git@github.com", "docs/getting-started-with-webhooks-v2"]) {
-      assert.equal(guard.clean(text), text.replace("git@", "[hidden]@"));
+    for (const text of [
+      "Bearer tokens expire",
+      "Fix Authorization: add role checks",
+      "token rotation",
+      "Invalid token v2.0.1-beta",
+      "Basic configuration",
+      "see ssh://git@github.com and s3://bucket@region",
+      "docs/getting-started-with-webhooks-v2",
+      "flights to st.louis-cardinals-2024-season-tickets",
+      "edit src/v2/components/UserProfileSettingsPanel",
+    ]) {
+      assert.equal(guard.clean(text), text);
+    }
+  });
+
+  it("gives the same result when cleaning text that's already clean", () => {
+    // A small seeded fuzz: bits of secrets, words and punctuation thrown together.
+    let seed = 42;
+    const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const bits = ["password", ":", "=", '"', "'", " ", "Bearer ", "token ", "Authorization: ", "API_KEY", "https://", "u:p@", "@", "/", "-", "_", "abc123", "9f8e7d6c5b4a3928", "[hidden]", "v2.0.1", "sk_live_", "xyz", ",", "{", "}"];
+    const guard = new SecretGuard();
+    for (let i = 0; i < 3000; i++) {
+      let text = "";
+      for (let n = 3 + Math.floor(random() * 12); n > 0; n--) text += bits[Math.floor(random() * bits.length)];
+      const once = guard.clean(text);
+      assert.equal(guard.clean(once), once, JSON.stringify(text));
     }
   });
 
@@ -113,6 +150,8 @@ describe("validator", () => {
         "docs.stripe.com/api",
         "https://files.example.com/share/a8Kd93LmQ2xZ7pR4tY1w/report",
         "https://blog.example.com/2024/getting-started-with-webhooks-v2",
+        "https://docs.python.org/3/getting-started-2024",
+        "https://example.com/python3-documentation",
       ],
     });
     assert.deepEqual(res.body.sources, [
@@ -122,6 +161,8 @@ describe("validator", () => {
       "docs.stripe.com/api",
       "files.example.com/share/[hidden]/report",
       "blog.example.com/2024/getting-started-with-webhooks-v2",
+      "docs.python.org/3/getting-started-2024",
+      "example.com/python3-documentation",
     ]);
     for (const bad of [["ftp://x.com/a"], ["javascript:alert(1)"], ["not a url"], [42], "https://x.com"]) {
       assert.equal(parseEvent({ type: "done", agent: "a", task: "t", sources: bad }).ok, false, JSON.stringify(bad));

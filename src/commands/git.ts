@@ -9,7 +9,7 @@ import { secretGuard } from "../events/guard.js";
 import { isGitRef } from "../events/validate.js";
 import { explainGitFailure, Git, looksLikeSecretsFile, safePath, type ChangedFile, type GitProblem } from "../git/client.js";
 import { findInfisical, type InfisicalError } from "../infisical/client.js";
-import { scanStaged, scanUnpushed, showScan, STAGED_SCAN, UNPUSHED_SCAN, type ScanResult } from "../infisical/scan.js";
+import { scanStaged, scanUnpushed, showScan, STAGED_SCAN, unpushedScan, type ScanResult } from "../infisical/scan.js";
 import { bold, cyan, dim, green, red, symbols, yellow } from "../lib/style.js";
 import type { Ui } from "../lib/ui.js";
 import { count, Output, type Problem } from "./output.js";
@@ -76,7 +76,10 @@ export async function runStatus(ui: Ui): Promise<number> {
   }
   // Linked to a branch on GitHub that still exists? Then git's own ahead count is right.
   const tracked = Boolean(status.upstream) && !status.upstreamGone;
-  const unpushed = tracked ? status.ahead : status.initial ? 0 : await git.unpushedCount();
+  // Otherwise count what the remote you push to doesn't have (the same thing push checks).
+  const remotes = status.branch && !tracked && !status.initial ? await git.remotes() : [];
+  const pushTo = status.branch && remotes.length ? (await git.pushRemote(status.branch, remotes))?.name : undefined;
+  const unpushed = tracked ? status.ahead : status.initial ? 0 : ((await git.unpushedCount(pushTo)) ?? 0);
   const changed = new Set([...status.staged, ...status.unstaged].map((f) => f.path)).size + status.untracked.length + status.conflicted.length;
   const sync = status.initial
     ? "no snapshots yet"
@@ -412,7 +415,8 @@ async function pushFlow({ git, out, worker }: Harbor, skipScan: boolean): Promis
     });
   }
   const branch = status.branch;
-  const remote = (await git.pushRemote(branch, remotes))!;
+  const picked = (await git.pushRemote(branch, remotes))!;
+  const remote = picked.name;
   if (remote.startsWith("-")) return problem({ error: `The remote name "${safePath(remote)}" can't be used safely. Rename it with git remote rename.` });
   // Only checked, never shown: a remote address can contain a login token.
   const url = (await git.run(["remote", "get-url", remote])).stdout;
@@ -441,17 +445,23 @@ async function pushFlow({ git, out, worker }: Harbor, skipScan: boolean): Promis
   if (status.upstreamGone && !there && out.full) {
     out.line(dim(`  ${safePath(branch)} was deleted on ${target} (often after a pull request is merged), so it'll be made again.`));
   }
-  const toSend = there ? there.ahead : await git.unpushedCount();
+  // Null: git couldn't count them. Then scan anyway: never assume there's nothing to check.
+  const toSend = there ? there.ahead : await git.unpushedCount(remote);
+  const snapshots = toSend === null ? "your snapshots" : count(toSend, "snapshot");
 
   if (skipScan) warnSkipped(out);
-  else if (toSend > 0) {
-    const job = worker.job("scan", `Checkpoint: scanning ${count(toSend, "snapshot")} for secrets`, showScan(UNPUSHED_SCAN));
-    const shut = checkGate(out, job, await scanUnpushed(git.root), "Nothing was sent.", true);
+  else if (toSend !== 0) {
+    const job = worker.job("scan", `Checkpoint: scanning ${snapshots} for secrets`, showScan(unpushedScan(remote)));
+    const shut = checkGate(out, job, await scanUnpushed(git.root, remote), "Nothing was sent.", true);
     if (shut !== null) return { code: shut, after: none };
   }
 
-  const args = ["push", ...(linked ? [] : ["--set-upstream"]), remote, `HEAD:refs/heads/${branch}`];
-  const job = worker.job("git", toSend ? `Sending ${count(toSend, "snapshot")} to ${target}` : `Publishing ${branch} on ${target}`, `git ${args.join(" ")}`);
+  // Link the branch (--set-upstream) only if it isn't linked to anything yet: never
+  // change a link you set up yourself, or one to where you pull from when you push to a fork.
+  const link = (!status.upstream || status.upstreamGone) && !picked.separate;
+  // --recurse-submodules=check: never send a submodule's snapshots along (the scan doesn't see inside them).
+  const args = ["push", "--recurse-submodules=check", ...(link ? ["--set-upstream"] : []), remote, `HEAD:refs/heads/${branch}`];
+  const job = worker.job("git", toSend !== 0 ? `Sending ${snapshots} to ${target}` : `Publishing ${branch} on ${target}`, `git ${args.join(" ")}`);
   // The keyboard stays connected, so a login prompt still works.
   const res = await git.run(args, { timeoutMs: PUSH_TIMEOUT_MS, stdin: "inherit" });
   if (res.code !== 0) {
@@ -461,8 +471,8 @@ async function pushFlow({ git, out, worker }: Harbor, skipScan: boolean): Promis
   }
   // (An unusual branch name is left out rather than losing the whole event.)
   const ref = (name: string) => (isGitRef(name) ? name : undefined);
-  worker.bus.emit({ type: "push", agent: YOU, remote: ref(remote), branch: ref(branch), commits: toSend });
-  job.done(`Your work is safe on ${target}: ${toSend ? count(toSend, "snapshot") : "the branch"} on ${remote}/${branch}`);
+  worker.bus.emit({ type: "push", agent: YOU, remote: ref(remote), branch: ref(branch), commits: toSend ?? undefined });
+  job.done(`Your work is safe on ${target}: ${toSend !== 0 ? snapshots : "the branch"} on ${remote}/${branch}`);
 
   const after = () => {
     // A new branch on GitHub? The usual next step is a pull request.
@@ -471,5 +481,5 @@ async function pushFlow({ git, out, worker }: Harbor, skipScan: boolean): Promis
       out.line(`  ${dim("Next, to ask for this branch to be added to main (a pull request):")} ${cyan("gh pr create")}`);
     }
   };
-  return { code: 0, result: { remote, branch, commits: toSend }, after };
+  return { code: 0, result: { remote, branch, commits: toSend ?? 0 }, after };
 }

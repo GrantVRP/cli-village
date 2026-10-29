@@ -3,15 +3,15 @@
 //
 // macOS and Linux: a Unix socket in a folder only you can open (0700), and the
 // socket itself is only readable and writable by you (0600).
-// Windows: a named pipe with a random name, kept in a file only you can read
-// (%LOCALAPPDATA%\cli-village\pipe-name). Windows only lets the account that
-// created a pipe (and administrators) write to it, and a name nobody else
-// knows can't be taken by someone else first.
+// Windows: a named pipe with a new random name each time a village opens, kept
+// while it's open in a file only you can read (%LOCALAPPDATA%\cli-village\pipe-name).
+// Windows only lets the account that created a pipe (and administrators) write
+// to it, and a name nobody else knows in advance can't be taken first.
 //
 // CLI_VILLAGE_SOCKET picks another path (handy for tests, or two villages at once).
 
 import { randomBytes } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { chmod, lstat, mkdir } from "node:fs/promises";
 import { homedir, tmpdir, userInfo } from "node:os";
 import path from "node:path";
@@ -23,6 +23,12 @@ export interface HubAddress {
   dir?: string;
   /** You picked this path (CLI_VILLAGE_SOCKET): its folder is checked, but never changed. */
   chosen?: boolean;
+  /**
+   * Windows: the file that names the open village's pipe. The village writes it
+   * when it opens (a new random name each time) and removes it when it closes.
+   * No file: no village is open, and `path` is "".
+   */
+  registry?: string;
 }
 
 // Unix socket paths can't be longer than this (macOS allows 104 bytes).
@@ -46,7 +52,11 @@ export function hubAddress(env: NodeJS.ProcessEnv = process.env, platform = proc
   }
   const p = path.posix;
   if (custom) return { path: custom, dir: p.dirname(custom), chosen: true };
-  if (platform === "win32") return { path: `\\\\.\\pipe\\${windowsPipeName(env)}` };
+  if (platform === "win32") {
+    const registry = pipeRegistry(env);
+    const name = readPipeName(registry);
+    return { path: name ? pipePath(name) : "", registry };
+  }
 
   const runtime = env.XDG_RUNTIME_DIR?.trim();
   const dir = runtime ? p.join(runtime, "cli-village") : p.join(homedir(), ".cli-village");
@@ -58,43 +68,44 @@ export function hubAddress(env: NodeJS.ProcessEnv = process.env, platform = proc
   return { path: p.join(short, "village.sock"), dir: short };
 }
 
-const PIPE_NAME = /^cli-village-[0-9a-f]{32}$/;
+// --- Windows: a new random pipe name each time a village opens ---------------------------
+//
+// Anyone on the computer can list pipe names, but a name that's only used while
+// the village is open, and never again, is no use to someone who saw it earlier.
 
-/**
- * The village's pipe name on Windows: made up once at random, then kept in a
- * file in your own AppData folder, so every command and agent finds it.
- */
-function windowsPipeName(env: NodeJS.ProcessEnv): string {
+const PIPE_NAME = /^cli-village-[0-9a-f]{32}$/;
+export const pipePath = (name: string) => `\\\\.\\pipe\\${name}`;
+
+/** %LOCALAPPDATA%\cli-village\pipe-name: in your own AppData folder, which only you can read. */
+export function pipeRegistry(env: NodeJS.ProcessEnv = process.env): string {
   const base = env.LOCALAPPDATA?.trim() || path.join(homedir(), "AppData", "Local");
-  const file = path.join(base, "cli-village", "pipe-name");
-  const saved = () => {
-    try {
-      const name = readFileSync(file, "utf8").trim();
-      return PIPE_NAME.test(name) ? name : null;
-    } catch {
-      return null;
-    }
-  };
-  const known = saved();
-  if (known) return known;
-  const name = `cli-village-${randomBytes(16).toString("hex")}`;
+  return path.join(base, "cli-village", "pipe-name");
+}
+
+/** The open village's pipe name, or null (no file, or not one of ours). */
+export function readPipeName(registry: string): string | null {
   try {
-    mkdirSync(path.dirname(file), { recursive: true });
-    // "wx": if another command makes the file at the same moment, its name wins (read below).
-    writeFileSync(file, `${name}\n`, { flag: existsSync(file) ? "w" : "wx" });
-    return name;
+    const name = readFileSync(registry, "utf8").trim();
+    return PIPE_NAME.test(name) ? name : null;
   } catch {
-    // Couldn't save it: fall back to a name from your user name (others could guess it).
-    return saved() ?? `cli-village-${userName()}`;
+    return null;
   }
 }
 
+/** A fresh pipe for a village that's opening. */
+export const newPipe = () => {
+  const name = `cli-village-${randomBytes(16).toString("hex")}`;
+  return { name, path: pipePath(name) };
+};
+
 /**
- * Before connecting (macOS and Linux): is the socket's folder still a real
- * folder, owned by you, that nobody else can open? If someone else made it,
- * whatever listens there isn't your village, so nothing is sent to it.
+ * Before connecting: is there a village to talk to, and is it safely yours?
+ * On macOS and Linux the socket's folder must still be a real folder, owned by
+ * you, that nobody else can open. If someone else made it, whatever listens
+ * there isn't your village, so nothing is sent to it.
  */
 export function isSafeToConnect(address: HubAddress, platform = process.platform): boolean {
+  if (!address.path) return false; // Windows, and no village is open
   if (platform === "win32" || !address.dir) return true;
   try {
     const info = lstatSync(address.dir); // lstat: a link to a folder doesn't count

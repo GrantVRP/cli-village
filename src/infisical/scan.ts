@@ -43,11 +43,15 @@ export interface ScanResult {
 
 /** The command that scans staged changes (what `git commit` would save). */
 export const STAGED_SCAN = ["scan", "git-changes", "--staged"];
-/** The command that scans snapshots not on GitHub (or any remote) yet. */
-export const UNPUSHED_SCAN = ["scan", "--log-opts=HEAD --not --remotes"];
+/**
+ * The command that scans every snapshot `remote` doesn't have yet: what a push
+ * there would send. (Not just "on no remote at all": a snapshot that's only on
+ * another remote still goes to this one, so it's scanned too.)
+ */
+export const unpushedScan = (remote: string) => ["scan", `--log-opts=HEAD --not --remotes=${remote}`];
 
 export const scanStaged = (root: string) => scan(root, STAGED_SCAN);
-export const scanUnpushed = (root: string) => scan(root, UNPUSHED_SCAN);
+export const scanUnpushed = (root: string, remote: string) => scan(root, unpushedScan(remote));
 
 /** How the scan is shown to people (the report flags are left out). */
 export const showScan = (args: string[]) => showCommand([...args, "--redact"]);
@@ -81,8 +85,8 @@ async function scan(root: string, args: string[]): Promise<ScanResult | Infisica
         hint: "cli-village doctor",
       };
     }
-    const detail = text.split(/\r?\n/).filter(Boolean).pop()?.slice(0, 200) ?? "no details";
-    return { ok: false, error: `The secret scan couldn't run: ${detail}` };
+    const details = text.split(/\r?\n/).filter(Boolean).pop()?.slice(0, 200);
+    return { ok: false, error: "The secret scan couldn't run.", details };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -26,6 +26,8 @@ export interface InfisicalError {
   error: string;
   /** A command that might fix it. */
   hint?: string;
+  /** What Infisical said, cleaned. Printed in your terminal only, never put in an event. */
+  details?: string;
 }
 
 export interface SecretSet {
@@ -89,7 +91,7 @@ export function findInfisical(): string | InfisicalError {
 /** Turn whatever Infisical printed on failure into something a beginner can act on. */
 export function explainFailure(stderr: string, scope: SecretScope): InfisicalError {
   const text = secretGuard.clean(stderr);
-  if (/not logged in|login|log in|unauthori[sz]ed|unauthenticated|401|expired/i.test(text)) {
+  if (/not logged in|login|log in|unauthori[sz]ed|unauthenticated|\b401\b|expired/i.test(text)) {
     return { ok: false, error: "Infisical says you're not logged in, or your login has expired.", hint: "infisical login" };
   }
   if (/\.infisical\.(json|yaml)|workspace|not connected|infisical init|project.*not found/i.test(text)) {
@@ -111,8 +113,9 @@ export function explainFailure(stderr: string, scope: SecretScope): InfisicalErr
   if (/dial tcp|no such host|timeout|timed out|connection refused|network/i.test(text)) {
     return { ok: false, error: "Couldn't reach Infisical. Check your internet connection and try again." };
   }
-  const firstLine = text.split(/(?<=[.!])\s/)[0]?.slice(0, 200) || "no details";
-  return { ok: false, error: `Infisical reported a problem: ${firstLine}` };
+  // Its own words stay in your terminal (details), out of the village's events.
+  const firstLine = text.split(/(?<=[.!])\s/)[0]?.slice(0, 200);
+  return { ok: false, error: "Infisical reported a problem.", details: firstLine || undefined };
 }
 
 /** Parse `infisical export --format=json`: a list of { key, value, ... }. */
