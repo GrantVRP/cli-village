@@ -8,7 +8,7 @@ const MIN_SECRET_LENGTH = 4;
 
 // KEY=value or password: value written in plain text.
 const ASSIGNMENT = /\b([A-Z][A-Z0-9_]{2,})=("[^"]*"|'[^']*'|\S+)/g;
-const NAMED_SECRET = /\b(password|passwd|pwd|secret|token|api[_-]?key)(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+const NAMED_SECRET = /\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 // Terminal codes (colors, "clear screen", window titles), then any other control characters.
 const ANSI_CODES = /\u001B(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001B]*(?:\u0007|\u001B\\)?|[@-Z\\-_])/g;
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
@@ -44,9 +44,10 @@ export class SecretGuard {
   clean(text: string): string {
     let out = text.replace(ANSI_CODES, "").replace(CONTROL, " ");
     for (const value of this.longestFirst) out = out.split(value).join(HIDDEN);
+    // Tokens first, so "Authorization: Bearer xyz" hides xyz, not just the word Bearer.
+    out = maskTokens(out);
     out = out.replace(ASSIGNMENT, `$1=${HIDDEN}`);
     out = out.replace(NAMED_SECRET, `$1$2${HIDDEN}`);
-    out = maskTokens(out);
     return out.replace(/\s+/g, " ").trim();
   }
 }

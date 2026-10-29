@@ -29,6 +29,32 @@ describe("privacy guard", () => {
     assert.equal(guard.containsSecret("x"), false);
   });
 
+  it("hides logins in addresses, HTTP logins, AWS key ids and short well-known tokens", () => {
+    const guard = new SecretGuard();
+    const AWS_ID = ["AKIA", "IOSFODNN7", "EXAMPLE"].join("");
+    const SHORT_GH = ["ghp_", "abc123def456ghi789"].join("");
+    const cases = [
+      ["postgres://admin:Tr0ub4dor-pass@db.example.com/app", /Tr0ub4dor|admin/, "postgres://[hidden]@db.example.com/app"],
+      ["git clone https://grant:hunter2pass@gitlab.com/x.git", /hunter2/, "git clone https://[hidden]@gitlab.com/x.git"],
+      ["curl -H 'Authorization: Bearer abc123def456ghi789'", /abc123/, "curl -H 'Authorization: Bearer [hidden]'"],
+      ["Authorization: token123secret", /token123/, "Authorization: [hidden]"],
+      [`aws id ${AWS_ID} here`, /AKIA/, "aws id [hidden] here"],
+      [`push with ${SHORT_GH}`, /ghp_/, "push with [hidden]"],
+    ];
+    for (const [text, secret, expected] of cases) {
+      const cleaned = guard.clean(text);
+      assert.doesNotMatch(cleaned, secret, text);
+      assert.equal(cleaned, expected);
+      assert.equal(guard.clean(cleaned), cleaned, "cleaning twice changes nothing");
+    }
+    // A key shaped like a UUID is still hidden.
+    assert.equal(guard.clean("key 123e4567-e89b-12d3-a456-426614174000 ok"), "key [hidden] ok");
+    // Ordinary words stay readable.
+    for (const text of ["Bearer tokens expire", "Fix Authorization: add role checks", "token rotation", "see ssh://git@github.com", "docs/getting-started-with-webhooks-v2"]) {
+      assert.equal(guard.clean(text), text.replace("git@", "[hidden]@"));
+    }
+  });
+
   it("removes terminal control codes", () => {
     assert.equal(new SecretGuard().clean("red\u001b[31m text\u0007\nnext"), "red text next");
   });
@@ -85,9 +111,18 @@ describe("validator", () => {
         "https://user:pass@github.com/stripe/stripe-node",
         `https://a.com/tokens/${GITHUB_TOKEN}`,
         "docs.stripe.com/api",
+        "https://files.example.com/share/a8Kd93LmQ2xZ7pR4tY1w/report",
+        "https://blog.example.com/2024/getting-started-with-webhooks-v2",
       ],
     });
-    assert.deepEqual(res.body.sources, ["docs.stripe.com/api/errors", "github.com/stripe/stripe-node", "a.com/tokens/[hidden]", "docs.stripe.com/api"]);
+    assert.deepEqual(res.body.sources, [
+      "docs.stripe.com/api/errors",
+      "github.com/stripe/stripe-node",
+      "a.com/tokens/[hidden]",
+      "docs.stripe.com/api",
+      "files.example.com/share/[hidden]/report",
+      "blog.example.com/2024/getting-started-with-webhooks-v2",
+    ]);
     for (const bad of [["ftp://x.com/a"], ["javascript:alert(1)"], ["not a url"], [42], "https://x.com"]) {
       assert.equal(parseEvent({ type: "done", agent: "a", task: "t", sources: bad }).ok, false, JSON.stringify(bad));
     }

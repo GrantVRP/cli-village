@@ -45,7 +45,7 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | `cli-village run -- npm start` | Runs your command with your secrets as environment variables (through `infisical run`). Your program's output goes straight to your terminal. |
 | `cli-village status` | What changed since your last snapshot, in plain English, and what to do next. |
 | `cli-village commit -m "Fix login"` | Saves a snapshot (a commit) after a secret scan. Only what you staged (`git add`), or else every change. Add `--push` to send it too. |
-| `cli-village push` | Sends your snapshots to GitHub after a secret scan. The first push of a branch links it (`--set-upstream`). |
+| `cli-village push` | Sends your snapshots to GitHub after a secret scan: just this branch, under its own name. The first push of a branch links it (`--set-upstream`). |
 | `cli-village test` | Finds and runs your tests: the `test` script in package.json (npm, pnpm, yarn or bun), `cargo test`, `go test ./...` or pytest. Or give your own: `cli-village test -- node --test`. |
 | `cli-village open` | Opens the 3D village in your browser, showing real work (like `cli-village`, but in 3D). The terminal keeps its own view. Add `--no-open` to just print the address, or `--port 4317` to pick the port. |
 | `cli-village emit '<json>'` | For AI agents and scripts: tells the open village what you're doing. `emit -` reads one event per line from stdin. See [docs/EVENTS.md](docs/EVENTS.md). |
@@ -174,7 +174,8 @@ $ cli-village commit -m "Add payments"
 - You see the file, line and kind of secret, never the secret itself.
 - If the scan picked your changes for you (`git add --all`) and then stops, it puts them back the way they were.
 - `push` scans every snapshot that isn't on GitHub yet, so a secret saved earlier (or with `--skip-scan`) is still caught before it leaves your computer.
-- Files like `.env` are never saved, whatever the scanner says. (`.env.example` and other templates are fine.)
+- `push` sends only the branch you're on, under its own name, whatever your git push settings say. (So nothing the scan didn't check can go with it.) If GitHub deleted that branch, say after a pull request was merged, it's made again.
+- Files like `.env` and `.envrc` are never saved, whatever the scanner says. (`.env.example` and other templates are fine.)
 - Common problems come with a plain explanation and a fix: no name and email set up in git, GitHub has newer snapshots (`git pull`), not on a branch, no GitHub repository linked yet.
 - Without the Infisical CLI, `commit` and `push` refuse to go ahead unless you add `--skip-scan` (which prints a warning).
 - For scripts: `commit -q` prints just the new snapshot id, and `--json` gives the result (with the findings' file, line, rule and fingerprint if the gate stops it).

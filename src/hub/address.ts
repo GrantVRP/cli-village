@@ -3,11 +3,15 @@
 //
 // macOS and Linux: a Unix socket in a folder only you can open (0700), and the
 // socket itself is only readable and writable by you (0600).
-// Windows: a named pipe for your user name. Windows only lets the account that
-// created a pipe (and administrators) write to it.
+// Windows: a named pipe with a random name, kept in a file only you can read
+// (%LOCALAPPDATA%\cli-village\pipe-name). Windows only lets the account that
+// created a pipe (and administrators) write to it, and a name nobody else
+// knows can't be taken by someone else first.
 //
 // CLI_VILLAGE_SOCKET picks another path (handy for tests, or two villages at once).
 
+import { randomBytes } from "node:crypto";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { chmod, lstat, mkdir } from "node:fs/promises";
 import { homedir, tmpdir, userInfo } from "node:os";
 import path from "node:path";
@@ -42,7 +46,7 @@ export function hubAddress(env: NodeJS.ProcessEnv = process.env, platform = proc
   }
   const p = path.posix;
   if (custom) return { path: custom, dir: p.dirname(custom), chosen: true };
-  if (platform === "win32") return { path: `\\\\.\\pipe\\cli-village-${userName()}` };
+  if (platform === "win32") return { path: `\\\\.\\pipe\\${windowsPipeName(env)}` };
 
   const runtime = env.XDG_RUNTIME_DIR?.trim();
   const dir = runtime ? p.join(runtime, "cli-village") : p.join(homedir(), ".cli-village");
@@ -52,6 +56,54 @@ export function hubAddress(env: NodeJS.ProcessEnv = process.env, platform = proc
   const uid = typeof process.getuid === "function" ? process.getuid() : userName();
   const short = p.join(tmpdir(), `cli-village-${uid}`);
   return { path: p.join(short, "village.sock"), dir: short };
+}
+
+const PIPE_NAME = /^cli-village-[0-9a-f]{32}$/;
+
+/**
+ * The village's pipe name on Windows: made up once at random, then kept in a
+ * file in your own AppData folder, so every command and agent finds it.
+ */
+function windowsPipeName(env: NodeJS.ProcessEnv): string {
+  const base = env.LOCALAPPDATA?.trim() || path.join(homedir(), "AppData", "Local");
+  const file = path.join(base, "cli-village", "pipe-name");
+  const saved = () => {
+    try {
+      const name = readFileSync(file, "utf8").trim();
+      return PIPE_NAME.test(name) ? name : null;
+    } catch {
+      return null;
+    }
+  };
+  const known = saved();
+  if (known) return known;
+  const name = `cli-village-${randomBytes(16).toString("hex")}`;
+  try {
+    mkdirSync(path.dirname(file), { recursive: true });
+    // "wx": if another command makes the file at the same moment, its name wins (read below).
+    writeFileSync(file, `${name}\n`, { flag: existsSync(file) ? "w" : "wx" });
+    return name;
+  } catch {
+    // Couldn't save it: fall back to a name from your user name (others could guess it).
+    return saved() ?? `cli-village-${userName()}`;
+  }
+}
+
+/**
+ * Before connecting (macOS and Linux): is the socket's folder still a real
+ * folder, owned by you, that nobody else can open? If someone else made it,
+ * whatever listens there isn't your village, so nothing is sent to it.
+ */
+export function isSafeToConnect(address: HubAddress, platform = process.platform): boolean {
+  if (platform === "win32" || !address.dir) return true;
+  try {
+    const info = lstatSync(address.dir); // lstat: a link to a folder doesn't count
+    if (!info.isDirectory()) return false;
+    if (typeof process.getuid === "function" && info.uid !== process.getuid()) return false;
+    return (info.mode & 0o077) === 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
