@@ -5,9 +5,11 @@ import { readFileSync } from "node:fs";
 import { Command, InvalidArgumentError, Option } from "commander";
 import { runDemoCommand } from "./commands/demo.js";
 import { runDoctor } from "./commands/doctor.js";
+import { runCommit, runPush, runStatus } from "./commands/git.js";
 import { runOpenCommand } from "./commands/open.js";
 import { runWithSecrets } from "./commands/run.js";
 import { runSecretsDiff, runSecretsExport, runSecretsFetch } from "./commands/secrets.js";
+import { runTests } from "./commands/test.js";
 import { makeUi, type Ui, type UiFlags } from "./lib/ui.js";
 
 // If whatever reads our output stops early (e.g. `cli-village --demo --json | head`),
@@ -85,17 +87,21 @@ withOutputFlags(program)
 Examples:
   cli-village --demo                 watch pretend robots act out a workday
   cli-village --demo --once          play the demo once, then stop
-  cli-village open --demo            watch the demo in the 3D village (in your browser)
+  cli-village open --demo            the demo in the 3D village, in your browser
   cli-village doctor                 check that your tools are ready
-  cli-village secrets fetch          list your secrets' names (values stay hidden)
-  cli-village secrets diff dev prod  what's missing or different between two environments
+  cli-village secrets fetch          your secrets' names (values stay hidden)
+  cli-village secrets diff dev prod  compare two environments by key name
   cli-village run -- npm start       run your app with its secrets
+  cli-village status                 what changed since your last snapshot
+  cli-village commit -m "Fix login"  save a snapshot (after a secret scan)
+  cli-village push                   send your work to GitHub (after a scan)
+  cli-village test                   run your project's tests
 
 For experts:
   cli-village --demo --compact       the same, in fewer lines
   cli-village secrets fetch -q       just the key names, one per line
   cli-village doctor --json          a report for scripts
-  cli-village open --no-animation    a still village (no camera orbit, no walking)`,
+  cli-village open --no-animation    a still 3D village (nothing moves)`,
   )
   .action(async (options: { demo?: boolean; once?: boolean; speed?: number }, cmd: Command) => {
     if (options.demo) {
@@ -192,6 +198,74 @@ Examples:
   ),
 ).action(async (command: string[], options: ScopeFlags, cmd: Command) => {
   process.exitCode = await runWithSecrets(command, options, uiOf(cmd));
+});
+
+// --- The GITHUB HARBOR and the LAB --------------------------------------------------------
+
+withOutputFlags(program.command("status").description("what changed since your last snapshot, and what to do next")).action(
+  async (_options: object, cmd: Command) => {
+    process.exitCode = await runStatus(uiOf(cmd));
+  },
+);
+
+const SCAN_NOTE = `
+Before anything is saved or sent, a checkpoint scans it for passwords and keys
+(infisical scan, which runs on your computer). If it finds one, nothing is
+saved or sent, and you see the file and line, never the secret itself.`;
+
+withOutputFlags(
+  program
+    .command("commit")
+    .description("save a snapshot of your work (a commit), after a secret scan")
+    .option("-m, --message <text>", "a short note about what changed")
+    .option("--push", "then send it to GitHub too (after another scan)")
+    .option("--skip-scan", "don't scan for secrets (not recommended)")
+    .addHelpText(
+      "after",
+      `
+If you staged files (git add), only those are saved. Otherwise every change is.
+Files like .env are never saved: keep secrets in Infisical.
+${SCAN_NOTE}
+
+Examples:
+  cli-village commit -m "Fix the login button"
+  cli-village commit -m "Add tests" --push
+  cli-village commit -q -m "Tidy up"     (prints just the snapshot id)`,
+    ),
+).action(async (options: { message?: string; push?: boolean; skipScan?: boolean }, cmd: Command) => {
+  process.exitCode = await runCommit(options, uiOf(cmd));
+});
+
+withOutputFlags(
+  program
+    .command("push")
+    .description("send your snapshots to GitHub, after a secret scan")
+    .option("--skip-scan", "don't scan for secrets (not recommended)")
+    .addHelpText("after", `\nThe first push of a branch links it to GitHub (git push --set-upstream).\n${SCAN_NOTE}`),
+).action(async (options: { skipScan?: boolean }, cmd: Command) => {
+  process.exitCode = await runPush(options, uiOf(cmd));
+});
+
+withOutputFlags(
+  program
+    .command("test")
+    .description("run your project's tests (npm/pnpm/yarn/bun test, cargo test, go test or pytest)")
+    .argument("[command...]", "or your own test command, after --, like: -- npm run test:unit")
+    .passThroughOptions()
+    .addHelpText(
+      "after",
+      `
+Your tests' output is never changed. CLI Village's own messages go to stderr.
+With --json, the result is one JSON line on stdout, and the test output
+moves to stderr.
+
+Examples:
+  cli-village test
+  cli-village test -- node --test test/
+  cli-village test --compact`,
+    ),
+).action(async (command: string[], _options: object, cmd: Command) => {
+  process.exitCode = await runTests(command, uiOf(cmd));
 });
 
 await program.parseAsync();
