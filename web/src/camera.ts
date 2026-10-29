@@ -2,6 +2,8 @@
 // It orbits slowly on its own, glides toward the building where the most
 // important thing is happening, then eases back out. Drag to orbit and
 // scroll to zoom at any time; it waits a few seconds before taking over again.
+// In still mode (--no-animation, or "reduce motion" in your system settings)
+// it never moves on its own: clicking a building or pressing h cuts straight there.
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -25,14 +27,12 @@ export class CameraRig {
   private userUntil = 0;
   private dragging = false;
   private orbitClock = 0;
+  private stillMode = false;
 
-  constructor(
-    dom: HTMLElement,
-    private readonly reducedMotion: boolean,
-  ) {
+  constructor(dom: HTMLElement, still: boolean) {
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.5, 400);
     this.controls = new OrbitControls(this.camera, dom);
-    this.controls.enableDamping = true;
+    this.still = still;
     this.controls.dampingFactor = 0.08;
     this.controls.minDistance = 14;
     this.controls.maxDistance = 110;
@@ -52,19 +52,39 @@ export class CameraRig {
     this.apply(this.current);
   }
 
-  /** Glide toward a spot for a while, then come back out. */
+  /** Still mode (--no-animation or reduced motion): no orbit, no gliding. The camera cuts instead. */
+  get still(): boolean {
+    return this.stillMode;
+  }
+  set still(value: boolean) {
+    this.stillMode = value;
+    this.controls.enableDamping = !value;
+  }
+
+  /** Glide toward a spot for a while, then come back out. (In still mode: cut to it and stay.) */
   focus(point: THREE.Vector3, holdMs: number, radius = 30): void {
     const dir = point.clone().setY(0);
     // Look at the spot from the plaza side, so the building's front is visible.
     const azimuth = dir.lengthSq() > 1 ? Math.atan2(dir.x, dir.z) * 0.35 : this.current.azimuth;
     this.focusView = { target: point.clone().setY(1.2), radius, polar: 0.82, azimuth };
     this.focusUntil = performance.now() + holdMs;
+    if (this.stillMode) this.cut(this.focusView);
   }
 
-  /** Jump to the default view right away. */
+  /** Back to the default view. */
   reset(): void {
     this.focusView = null;
     this.userUntil = 0;
+    if (this.stillMode) this.cut(HOME);
+  }
+
+  /** Jump straight to a view, with no movement in between. */
+  private cut(view: View): void {
+    this.current.target.copy(view.target);
+    this.current.radius = view.radius;
+    this.current.polar = view.polar;
+    this.current.azimuth = view.azimuth;
+    this.apply(this.current);
   }
 
   resize(width: number, height: number): void {
@@ -82,8 +102,10 @@ export class CameraRig {
       this.readBack();
       return;
     }
+    // Still mode: the camera never moves by itself. It stays where you left it.
+    if (this.stillMode) return;
 
-    if (!this.reducedMotion) this.orbitClock += dt;
+    if (!this.stillMode) this.orbitClock += dt;
     const wanted: View =
       this.focusView && now < this.focusUntil
         ? this.focusView
@@ -94,7 +116,7 @@ export class CameraRig {
             // A slow back-and-forth orbit keeps the river at the back.
             azimuth: Math.sin(this.orbitClock * 0.045) * 0.5,
           };
-    const k = 1 - Math.exp(-dt * (this.reducedMotion ? 6 : 1.4));
+    const k = this.stillMode ? 1 : 1 - Math.exp(-dt * 1.4);
     this.current.target.lerp(wanted.target, k);
     this.current.radius += (wanted.radius - this.current.radius) * k;
     this.current.polar += (wanted.polar - this.current.polar) * k;

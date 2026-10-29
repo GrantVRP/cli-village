@@ -4,6 +4,7 @@
 
 import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import type * as THREE from "three";
+import { EXPERT_FLAGS, GLOSSARY } from "../../src/events/explain.js";
 import type { Headline, LogEntry, VillageState } from "../../src/events/state.js";
 import { BUILDING_HELP, BUILDING_NAMES, type Building } from "../../src/events/types.js";
 
@@ -110,7 +111,8 @@ export class Overlay {
   setCaption(headline: Headline): void {
     const subtitle = headline.subtitle ?? "";
     const command = headline.command ?? "";
-    const key = [headline.level, headline.title, subtitle, command].join("|");
+    const explain = headline.explain ?? "";
+    const key = [headline.level, headline.title, subtitle, command, explain].join("|");
     if (key === this.captionKey) return;
     // Only a new message gets the little entrance animation, not small updates to the same one.
     const isNew = headline.title !== this.captionTitle;
@@ -123,6 +125,7 @@ export class Overlay {
     $("#caption-subtitle").textContent = subtitle;
     $("#caption-command").hidden = !command;
     $("#caption-command-text").textContent = command;
+    $("#caption-explain").textContent = explain;
     caption.className = `caption ${headline.level}`;
     if (isNew) {
       void caption.offsetWidth; // restart the animation
@@ -197,5 +200,12 @@ export class Overlay {
       row.append(el("b", undefined, BUILDING_NAMES[id]), el("span", undefined, BUILDING_HELP[id]));
       list.append(row);
     }
+    const words = $("#help-words");
+    for (const { word, meaning } of GLOSSARY) {
+      const row = el("div", "help-row");
+      row.append(el("b", undefined, word), el("span", undefined, meaning));
+      words.append(row);
+    }
+    $("#help-experts").textContent = `Fewer words? In the terminal, add ${EXPERT_FLAGS}.`;
   }
 }
