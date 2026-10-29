@@ -195,6 +195,39 @@ describe("terminal view", () => {
     }
   });
 
+  it("shows the harbor, and one building up close (Tab)", () => {
+    const bus = new EventBus();
+    const store = VillageStore.fromBus(bus);
+    // A real commit: the gate scans your changes first, and finds something.
+    bus.emit({ type: "start", agent: "you", task: "s1", kind: "scan", title: "Checkpoint: scanning your changes for secrets" });
+    bus.emit({ type: "fail", agent: "you", task: "s1", message: "Stopped at the gate: 1 possible secret in pay.js line 1 (value hidden)." });
+    const all = render(store, 80, 24);
+    assert.match(all, /[✖×] Harbor A crate is stopped at the gate/);
+    assert.match(all, /tab one building/);
+    const close = render(store, 80, 24, { focus: "harbor" });
+    assert.match(close, /GITHUB HARBOR · Commits become crates/);
+    assert.match(close, /[✖×] Needs attention: Stopped at the gate: 1 possible secret/);
+    assert.match(close, /tab next building · esc everything/);
+    const quiet = render(store, 80, 24, { focus: "vault" });
+    assert.match(quiet, /[○o] Quiet right now/);
+    assert.match(quiet, /Nothing has happened here yet\./);
+  });
+
+  it("fits 80x24 up close at every building, all through the demo", () => {
+    const bus = new EventBus();
+    const store = VillageStore.fromBus(bus);
+    const buildings = ["harbor", "lab", "vault", "library"];
+    let n = 0;
+    for (const step of [...demoRound(1), ...demoRound(2)]) {
+      if (!step.event) continue;
+      bus.emit(step.event, "demo");
+      if (!["fail", "commit", "push", "done"].includes(step.event.type)) continue;
+      const lines = render(store, 80, 24, { focus: buildings[n++ % buildings.length] }).split("\n");
+      assert.ok(lines.length <= 23, `${lines.length} lines`);
+      assert.ok(lines.every((l) => l.length <= 80), "too wide");
+    }
+  });
+
   it("suggests what to try while it waits", () => {
     const out = render(VillageStore.fromBus(new EventBus()), 80, 24, { mode: "live", waiting: WAITING });
     assert.match(out, /cli-village status · test/);

@@ -372,6 +372,18 @@ body.compact .hints {
   border-left-color: var(--red);
   color: #ffd6d6;
 }
+.panel-note {
+  margin: -6px 0 14px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--cream);
+}
+.panel-note[hidden] {
+  display: none;
+}
+.panel-note.attention {
+  color: #ffd6d6;
+}
 .panel-log {
   margin: 0;
   padding: 0;

@@ -101,16 +101,19 @@ CLI VILLAGE · demo                       5 robots · 1 working · no problems �
     → infisical export --env=dev --format=json (the real command)
       Asks Infisical for one environment's secrets. You only see the names.
 ──────────────────────────────────────────────────────────────────────────────────────────────
-Robots                                  │ What's happening (summary)
-▶ Bolt   VAULT      Fetching dev secrets │ 17:11:50 ▶ Bolt started: Fetching dev secrets
-○ Mayor  HOME       resting              │ 17:11:50 ✔ Mayor done: Jobs handed out
+Robots                                       │ What's happening (summary)
+▶ Bolt   VAULT      Fetching dev secrets     │ 17:11:50 ▶ Bolt started: Fetching dev secrets
+○ Mayor  HOME       resting                  │ 17:11:50 ✔ Mayor done: Jobs handed out
+                                             │ 17:11:52 ■ Rivet saved a snapshot a1b2c3d
+■ Harbor 1 crate at the dock, ready to push  │
 ──────────────────────────────────────────────────────────────────────────────────────────────
-q quit · ? what do the buildings mean? · d more detail
+q quit · ? what the buildings mean · d more detail · tab one building
 ```
 
 - The one thing that matters most right now is at the top, with the real command under it.
 - Problems turn the message red (with a ✖, so it doesn't rely on color) until they're fixed.
-- Keys: `q` quit (robots walk home first), `?` explains the buildings, words and symbols, `d` shows every detail.
+- The **Harbor** line says where your snapshots are: being scanned at the gate, stopped there, waiting at the dock for a push, or sent on the last boat.
+- Keys: `q` quit (robots walk home first), `?` explains the buildings, words and symbols, `d` shows every detail, `Tab` looks at one building up close (its log and how it's doing; `Shift+Tab` goes back one, `Esc` back to everything).
 - No interactive terminal (a pipe, CI), or `--quiet` / `--no-animation`? You get plain lines instead. `NO_COLOR` is respected.
 
 ## The Vault: your real secrets
@@ -187,6 +190,7 @@ $ cli-village commit -m "Add payments"
 - Each robot is an agent. When it starts a task it walks to that kind of building: secrets → VAULT, research → LIBRARY, code → WORKSHOP, tests → LAB, planning → TOWN HALL, commits and pushes → GITHUB HARBOR. Idle robots rest at HOME.
 - Busy buildings send up cyan rings. Problems glow red and get a ✖ on their label.
 - The glass column in the plaza shows the village's health: green → yellow → orange → red.
+- At the GITHUB HARBOR, each snapshot is a crate on a rail cart. The cart stops at the gate while it's scanned: a leak keeps it there under a red light, a clean scan lifts the barrier, and the cart waits at the dock (up to 3 crates drawn) until a push sails the boat away.
 - The camera drifts slowly and glides to wherever the most important thing is happening. The caption at the top says what that is (and the real command).
 - **Drag** to look around, **scroll** to zoom, **click** a building to see its log. Keys: `?` help, `n` night, `h` back to the whole village, `Esc` close.
 - If your system asks for less motion (*reduce motion*), or you start it with `--no-animation`, the village stands still: robots appear where they're going, and the camera only moves when you click a building or press `h`.
@@ -234,6 +238,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 7. GitHub Harbor with the secret-scan checkpoint
 - [x] 8. Library + external-agent event API
 - [x] 9. Tests + CI
+- [x] 10. Both views follow real work at the harbor (not just the demo), and `Tab` in the terminal view
 
 ## License
 

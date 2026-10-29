@@ -7,7 +7,7 @@ import { dist, STRIPE_LIVE, STRIPE_TEST } from "./helpers.mjs";
 const { EventBus } = await import(dist("events/bus.js"));
 const { SecretGuard } = await import(dist("events/guard.js"));
 const { parseEvent } = await import(dist("events/validate.js"));
-const { createVillageState, reduce, summarize, summarizeSources } = await import(dist("events/state.js"));
+const { createVillageState, describeHarbor, reduce, summarize, summarizeSources } = await import(dist("events/state.js"));
 const explain = await import(dist("events/explain.js"));
 const { TASK_KINDS } = await import(dist("events/types.js"));
 
@@ -248,6 +248,112 @@ describe("village state", () => {
     state = play([{ type: "commit", agent: "R", message: "Fix" }, scan("s1"), { type: "done", agent: "R", task: "s1" }, { type: "push", agent: "R", commits: 1 }]);
     assert.equal(state.crates[0].status, "shipped");
     assert.match(summarize(state), /1 snapshot · 1 push/);
+  });
+
+  describe("the harbor, in the order real commands work", () => {
+    // cli-village commit scans your changes first, then saves them (the demo does it the other way round).
+    const scan = (task) => ({ type: "start", agent: "you", task, kind: "scan", title: "Checkpoint" });
+    const job = (task, command) => ({ type: "start", agent: "you", task, kind: "git", title: "Git work", command });
+    const done = (task) => ({ type: "done", agent: "you", task });
+    const fail = (task) => ({ type: "fail", agent: "you", task, message: "Stopped at the gate" });
+    const commit = { type: "commit", agent: "you", message: "Add payments", sha: "abc1234", files: 2 };
+    const push = (commits = 1) => ({ type: "push", agent: "you", remote: "origin", branch: "main", commits });
+
+    it("packs your changes before the snapshot exists, then fills the crate in", () => {
+      let state = play([scan("s1")]);
+      assert.deepEqual(state.crates.map((c) => [c.status, c.draft]), [["scanning", true]]);
+      assert.match(describeHarbor(state).text, /scanning for secrets/);
+      state = play([scan("s1"), done("s1"), job("c1", 'git commit -m "Add payments"'), commit, done("c1")]);
+      assert.equal(state.crates.length, 1);
+      assert.deepEqual([state.crates[0].status, state.crates[0].draft, state.crates[0].sha], ["cleared", undefined, "abc1234"]);
+      assert.equal(describeHarbor(state).text, "1 crate at the dock, ready to push");
+    });
+
+    it("commit --push: the second check doesn't send the crate back, and the boat takes it", () => {
+      const state = play([scan("s1"), done("s1"), commit, scan("s2"), done("s2"), job("p1", "git push"), push(), done("p1")]);
+      assert.deepEqual(state.crates.map((c) => c.status), ["shipped"]);
+      assert.deepEqual([state.lastPush.crates, state.lastPush.commits], [1, 1]);
+      assert.equal(describeHarbor(state).text, "Last boat: 1 commit to origin/main");
+    });
+
+    it("a leak keeps the crate at the gate, and the harbor stays a problem until a scan passes", () => {
+      let state = play([job("a1", "git add --all"), done("a1"), scan("s1"), fail("s1")]);
+      assert.deepEqual(state.crates.map((c) => c.status), ["blocked"]);
+      assert.equal(describeHarbor(state).level, "attention");
+      assert.ok(state.buildings.harbor.problem);
+      // Checking the status (other work at the harbor) doesn't make the stopped crate OK.
+      state = play([scan("s1"), fail("s1"), job("st", "git status"), done("st")]);
+      assert.ok(state.buildings.harbor.problem, "still stopped at the gate");
+      assert.equal(state.stats.fixed, 0);
+      // Fixed and tried again: the same crate goes through the gate.
+      state = play([scan("s1"), fail("s1"), scan("s2"), done("s2"), commit]);
+      assert.deepEqual(state.crates.map((c) => c.status), ["cleared"]);
+      assert.equal(state.buildings.harbor.problem, undefined);
+      assert.equal(state.stats.fixed, 1);
+    });
+
+    it("a robot with a problem keeps saying what it was on its way home", () => {
+      const state = play([scan("s1"), fail("s1"), { type: "move", agent: "you", to: "home" }]);
+      assert.deepEqual([state.agents.you.status, state.agents.you.say], ["failed", "Stopped at the gate"]);
+    });
+
+    it("a snapshot that couldn't be saved leaves no crate behind", () => {
+      const state = play([scan("s1"), done("s1"), job("c1", 'git commit -m "x"'), fail("c1")]);
+      assert.deepEqual(state.crates, []);
+      assert.equal(describeHarbor(state), null);
+    });
+
+    it("push on its own: the gate packs the snapshots made outside CLI Village", () => {
+      let state = play([scan("s1"), done("s1"), push(2)]);
+      assert.deepEqual([state.crates[0].status, state.lastPush.crates], ["shipped", 1]);
+      assert.match(describeHarbor(state).text, /Last boat: 2 commits/);
+      // A push that only publishes the branch says so, and takes no crates.
+      state = play([push(0)]);
+      assert.equal(state.headline.title, "Sent to GitHub: the branch to origin/main");
+      assert.equal(state.lastPush.crates, 0);
+    });
+
+    it("a second snapshot joins the first at the dock, scanned", () => {
+      const second = { ...commit, message: "Retry failed payments", sha: "fed4321" };
+      let state = play([scan("s1"), done("s1"), commit, scan("s2"), done("s2"), second]);
+      assert.deepEqual(state.crates.map((c) => [c.sha, c.status, c.draft]), [
+        ["abc1234", "cleared", undefined],
+        ["fed4321", "cleared", undefined],
+      ]);
+      assert.equal(describeHarbor(state).text, "2 crates at the dock, ready to push");
+      state = play([scan("s1"), done("s1"), commit, scan("s2"), done("s2"), second, scan("s3"), done("s3"), push(2)]);
+      assert.deepEqual(state.crates.map((c) => c.status), ["shipped", "shipped"]);
+      assert.equal(state.lastPush.crates, 2, "the check before the push isn't an extra crate");
+    });
+
+    it("a leak found before a push stops it at the gate, and the saved crate waits", () => {
+      let state = play([scan("s1"), done("s1"), commit, scan("s2"), fail("s2")]);
+      assert.deepEqual(state.crates.map((c) => [c.status, c.draft]), [
+        ["cleared", undefined],
+        ["blocked", true],
+      ]);
+      assert.equal(describeHarbor(state).level, "attention");
+      // A push that failed after a clean check, then tried again: the check's crate is reused, not doubled.
+      state = play([scan("s1"), done("s1"), commit, scan("s2"), done("s2"), job("p1", "git push"), fail("p1"), scan("s3")]);
+      assert.equal(state.crates.length, 2);
+      assert.match(describeHarbor(state).text, /scanning/);
+    });
+
+    it("a snapshot saved without a scan waits until the next check", () => {
+      const state = play([scan("s1"), done("s1"), commit, { ...commit, sha: "0000aaa" }]);
+      assert.equal(describeHarbor(state).text, "2 crates waiting (1 not scanned yet)");
+      assert.equal(describeHarbor(play([commit])).text, "1 crate waiting, not scanned yet");
+    });
+
+    it("a push that skipped the scan leaves the stopped changes behind, and ships the rest", () => {
+      const skipped = { ...commit, sha: "def5678" };
+      const state = play([scan("s1"), fail("s1"), skipped, push()]);
+      // The new snapshot replaced the stopped crate, then sailed.
+      assert.deepEqual(state.crates.map((c) => [c.sha, c.status]), [["def5678", "shipped"]]);
+      const forced = play([scan("s1"), fail("s1"), push()]);
+      assert.deepEqual(forced.crates, [], "changes the gate stopped were never saved, so they don't sail");
+      assert.equal(forced.lastPush.crates, 0);
+    });
   });
 
   it("names research sources by site", () => {

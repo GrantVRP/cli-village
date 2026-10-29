@@ -77,6 +77,22 @@ export interface Crate {
   sha?: string;
   files?: number;
   status: CrateStatus;
+  /**
+   * Packed by the gate itself: a scan began before any snapshot arrived. That's
+   * your changes (cli-village commit scans them before saving), or snapshots
+   * made outside CLI Village (before a push). The next commit fills it in.
+   */
+  draft?: boolean;
+}
+
+/** The last time the boat sailed. */
+export interface LastPush {
+  remote: string;
+  branch: string;
+  commits: number;
+  /** How many crates it took (0 when the push only published the branch). */
+  crates: number;
+  ts: number;
 }
 
 export type HeadlineLevel = "attention" | "active" | "calm";
@@ -99,6 +115,7 @@ export interface VillageState {
   buildings: Record<Building, BuildingState>;
   tasks: Record<string, TaskState>;
   crates: Crate[];
+  lastPush?: LastPush;
   headline: Headline;
   log: LogEntry[];
   stats: { done: number; failed: number; fixed: number; commits: number; pushes: number };
@@ -221,7 +238,8 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         movedAt: event.ts,
         status: agent.status === "failed" ? "failed" : "walking",
         task: undefined,
-        say: undefined,
+        // A robot with a problem keeps saying what it was, even on its way home.
+        say: agent.status === "failed" ? agent.say : undefined,
       });
       // Leaving a building means no longer working there.
       if (agent.task) next.buildings = setBuilding(state.buildings, agent.task.building, (b) => ({ ...b, working: without(b.working, agent.name) }));
@@ -247,7 +265,7 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         ...b,
         working: [...without(b.working, agent.name), agent.name],
       }));
-      if (event.kind === "scan") next.crates = setCrates(state.crates, ["packed"], "scanning");
+      if (event.kind === "scan") next.crates = startScan(state.crates, event.seq, event.agent);
       next.headline = {
         title: event.title,
         subtitle: `${event.agent} at ${at(event.building)}`,
@@ -295,11 +313,14 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
       next.tasks = tasks;
       const logged = withLog(state, entry(`${event.agent} done: ${text}${keys}`, "secondary", building));
       next.log = logged.log;
-      const fixed = logged.buildings[building].problem !== undefined;
+      // A success here fixes the earlier problem. At the harbor, a crate stopped at
+      // the gate stays a problem until a scan passes (or it's replaced or sent).
+      const stillStopped = building === "harbor" && task?.kind !== "scan" && state.crates.some((c) => c.status === "blocked");
+      const fixed = logged.buildings[building].problem !== undefined && !stillStopped;
       next.buildings = setBuilding(logged.buildings, building, (b) => ({
         ...b,
         working: without(b.working, agent.name),
-        problem: undefined, // a success here fixes the earlier problem
+        problem: stillStopped ? b.problem : undefined,
       }));
       next.stats = { ...state.stats, done: state.stats.done + 1, fixed: state.stats.fixed + (fixed ? 1 : 0) };
       if (task?.kind === "scan") next.crates = setCrates(state.crates, ["scanning"], "cleared");
@@ -329,7 +350,11 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         problem: { agent: event.agent, message: event.message, seq: event.seq },
       }));
       next.stats = { ...state.stats, failed: state.stats.failed + 1 };
-      if (task?.kind === "scan") next.crates = setCrates(state.crates, ["scanning"], "blocked");
+      if (task?.kind === "scan") next.crates = stopAtGate(state.crates);
+      // The snapshot couldn't be saved, so the crate the gate packed for it is unpacked again.
+      else if (task?.kind === "git" && task.command?.startsWith("git commit")) {
+        next.crates = state.crates.filter((c) => !isPassedDraft(c));
+      }
       next.health = computeHealth(next.buildings);
       next.headline = {
         title: `Problem: ${event.message}`,
@@ -344,7 +369,6 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
     }
 
     case "commit": {
-      // A new snapshot replaces any crate that was stopped at the gate.
       const crate: Crate = {
         seq: event.seq,
         agent: event.agent,
@@ -353,7 +377,7 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         files: event.files,
         status: "packed",
       };
-      next.crates = [...state.crates.filter((c) => c.status !== "blocked"), crate].slice(-MAX_CRATES);
+      next.crates = packCommit(state.crates, crate);
       putAgent({ ...agent, say: `Packed "${event.message}"` });
       const logged = withLog(
         state,
@@ -378,14 +402,24 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
     case "push": {
       const n = event.commits ?? 1;
       const target = `${event.remote ?? "origin"}/${event.branch ?? "main"}`;
-      next.crates = setCrates(state.crates, ["cleared", "packed"], "shipped");
+      // With no new commits, the push only published the branch.
+      const what = n === 0 ? "the branch" : `${n} commit${n === 1 ? "" : "s"}`;
+      const shipped = shipCrates(state.crates);
+      next.crates = shipped.crates;
+      next.lastPush = {
+        remote: event.remote ?? "origin",
+        branch: event.branch ?? "main",
+        commits: n,
+        crates: shipped.count,
+        ts: event.ts,
+      };
       putAgent({ ...agent, say: "Bon voyage!" });
-      const logged = withLog(state, entry(`${event.agent} pushed ${n} commit${n === 1 ? "" : "s"} to ${target}`, "secondary", "harbor"));
+      const logged = withLog(state, entry(`${event.agent} pushed ${what} to ${target}`, "secondary", "harbor"));
       next.log = logged.log;
       next.buildings = logged.buildings;
       next.stats = { ...state.stats, pushes: state.stats.pushes + 1 };
       next.headline = {
-        title: `Sent to GitHub: ${n} commit${n === 1 ? "" : "s"} to ${target}`,
+        title: `Sent to GitHub: ${what} to ${target}`,
         subtitle: `${event.agent}'s boat sails from the GITHUB HARBOR`,
         command: `git push ${event.remote ?? "origin"} ${event.branch ?? "main"}`,
         explain: explainCommand("git push"),
@@ -399,8 +433,92 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
   }
 }
 
+// --- The harbor: crates on their way to GitHub ----------------------------------------
+//
+// Real commands and the demo send events in different orders, and both must look right:
+//   cli-village commit:  scan your changes → save the snapshot → (push: scan what's unsent → push)
+//   the demo, agents:    save the snapshot → scan → push
+
 function setCrates(crates: Crate[], from: CrateStatus[], to: CrateStatus): Crate[] {
   return crates.map((c) => (from.includes(c.status) ? { ...c, status: to } : c));
+}
+
+const onTheWay = (c: Crate) => c.status !== "shipped";
+const isPassedDraft = (c: Crate) => c.draft === true && c.status === "cleared";
+
+/**
+ * The crates on their way to GitHub, as every view shows them. A draft that passed the
+ * gate but got no snapshot stands for a check before a push: when saved snapshots are on
+ * the way too, it's them, so it isn't counted twice.
+ */
+export function cratesOnTheWay(crates: readonly Crate[]): Crate[] {
+  const list = crates.filter(onTheWay);
+  return list.some((c) => !c.draft) ? list.filter((c) => !isPassedDraft(c)) : list;
+}
+
+/** A scan begins. Crates waiting for the gate are checked; with none, the gate packs what it checks. */
+function startScan(crates: Crate[], seq: number, agent: string): Crate[] {
+  if (crates.some((c) => c.status === "packed" || c.status === "blocked")) return setCrates(crates, ["packed", "blocked"], "scanning");
+  // Your changes before a commit, or the snapshots before a push. Reuse a draft from an earlier check.
+  const earlier = crates.findLastIndex(isPassedDraft);
+  if (earlier >= 0) return crates.map((c, i) => (i === earlier ? { ...c, status: "scanning" } : c));
+  const draft: Crate = { seq, agent, message: "Your changes", status: "scanning", draft: true };
+  return [...crates, draft].slice(-MAX_CRATES);
+}
+
+/** The scan found something (or couldn't run): the gate stays shut. */
+function stopAtGate(crates: Crate[]): Crate[] {
+  return setCrates(crates, ["scanning"], "blocked");
+}
+
+/** A snapshot was saved: it fills the crate the gate packed for it, or gets a new crate. */
+function packCommit(crates: Crate[], crate: Crate): Crate[] {
+  const newest = crates.findLastIndex(onTheWay);
+  if (newest >= 0 && isPassedDraft(crates[newest]!)) return crates.map((c, i) => (i === newest ? { ...crate, status: "cleared" } : c));
+  // A new snapshot replaces any crate that was stopped at the gate.
+  return [...crates.filter((c) => c.status !== "blocked"), crate].slice(-MAX_CRATES);
+}
+
+/**
+ * The boat sails with the crates on the way. Left behind: changes the gate stopped (never
+ * saved), and drafts that only stood for crates already sailing.
+ */
+function shipCrates(crates: Crate[]): { crates: Crate[]; count: number } {
+  const sailing = new Set(cratesOnTheWay(crates).filter((c) => !(c.draft && (c.status === "blocked" || c.status === "scanning"))));
+  const kept = crates.filter((c) => !onTheWay(c) || sailing.has(c));
+  return { crates: kept.map((c) => (onTheWay(c) ? { ...c, status: "shipped" } : c)), count: sailing.size };
+}
+
+export interface HarborSummary {
+  level: HeadlineLevel;
+  /** What the icon stands for: a scan, a stop, crates waiting, or the boat that sailed. */
+  icon: "scan" | "stop" | "crate" | "boat";
+  text: string;
+}
+
+/** One line about the harbor for every view: what's at the gate, what's waiting, or the last boat. */
+export function describeHarbor(state: VillageState): HarborSummary | null {
+  const waiting = cratesOnTheWay(state.crates);
+  const crates = (n: number) => `${n} crate${n === 1 ? "" : "s"}`;
+  if (waiting.some((c) => c.status === "blocked")) {
+    return { level: "attention", icon: "stop", text: "A crate is stopped at the gate" };
+  }
+  if (waiting.some((c) => c.status === "scanning")) {
+    return { level: "active", icon: "scan", text: "At the gate: scanning for secrets…" };
+  }
+  // Packed: saved without a scan (--skip-scan, or an agent's commit). The next push scans it.
+  const unscanned = waiting.filter((c) => c.status === "packed").length;
+  if (unscanned && unscanned < waiting.length) {
+    return { level: "calm", icon: "crate", text: `${crates(waiting.length)} waiting (${unscanned} not scanned yet)` };
+  }
+  if (unscanned) return { level: "calm", icon: "crate", text: `${crates(unscanned)} waiting, not scanned yet` };
+  if (waiting.length) return { level: "calm", icon: "crate", text: `${crates(waiting.length)} at the dock, ready to push` };
+  const last = state.lastPush;
+  if (last) {
+    const what = last.commits ? `${last.commits} commit${last.commits === 1 ? "" : "s"}` : "the branch";
+    return { level: "calm", icon: "boat", text: `Last boat: ${what} to ${last.remote}/${last.branch}` };
+  }
+  return null;
 }
 
 function trimTasks(tasks: Record<string, TaskState>): Record<string, TaskState> {

@@ -4,7 +4,7 @@
 // warning light; a clean scan lifts the barrier. On push, the boat sails away.
 
 import * as THREE from "three";
-import type { Crate } from "../../src/events/state.js";
+import { cratesOnTheWay, type Crate, type CrateStatus, type LastPush } from "../../src/events/state.js";
 import { HARBOR, RIVER_Z } from "./layout.js";
 import { glowMesh, makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
@@ -21,10 +21,28 @@ function crateModel(): THREE.Group {
 
 type CartGoal = "start" | "gate" | "end";
 
+/** The most crates a cart (or the boat) carries at once. More snapshots still fit: they're just not all drawn. */
+const MAX_LOAD = 3;
+/** Where crates sit on the cart, for 1, 2 or 3 of them: two side by side, the third on top. */
+const CART_SPOTS: [number, number, number][][] = [
+  [[0, 0.83, 0]],
+  [
+    [0, 0.83, -0.29],
+    [0, 0.83, 0.29],
+  ],
+  [
+    [0, 0.83, -0.29],
+    [0, 0.83, 0.29],
+    [0.02, 1.3, 0],
+  ],
+];
+/** Which crate state the cart shows when there are several: anything stopped or being checked comes first. */
+const SHOWN_FIRST: CrateStatus[] = ["blocked", "scanning", "packed", "cleared"];
+
 export class Harbor {
   readonly group = new THREE.Group();
   private readonly cart = new THREE.Group();
-  private readonly cartCrate: THREE.Group;
+  private readonly cartCrates: THREE.Group[] = [];
   private readonly boat = new THREE.Group();
   private readonly boatCrates: THREE.Group[] = [];
   private readonly barrier = new THREE.Group();
@@ -37,9 +55,12 @@ export class Harbor {
   private readonly routeLengths: number[] = [];
   private readonly total: number;
   private cartAt = 0;
-  private status: Crate["status"] | "none" = "none";
+  private status: CrateStatus | "none" = "none";
   private pushes = 0;
   private shipPending = false;
+  /** Crates on the way (up to MAX_LOAD), and how many the waiting push will put on the boat. */
+  private waiting = 0;
+  private shipping = 0;
   private boatState: "docked" | "sailing" | "returning" = "docked";
   private boatTimer = 0;
   private boatCargo = 0;
@@ -88,10 +109,12 @@ export class Harbor {
       cb.add(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 8), P.iron, { at: [x, 0.17, z], rot: [0, 0, Math.PI / 2], material: materials.metal });
     }
     this.cart.add(cb.build("cart"));
-    this.cartCrate = crateModel();
-    this.cartCrate.position.y = 0.83;
-    this.cartCrate.visible = false;
-    this.cart.add(this.cartCrate);
+    for (let i = 0; i < MAX_LOAD; i++) {
+      const crate = crateModel();
+      crate.visible = false;
+      this.cart.add(crate);
+      this.cartCrates.push(crate);
+    }
     this.group.add(this.cart);
     this.placeCart(0);
 
@@ -166,7 +189,7 @@ export class Harbor {
     sail.position.set(0.35, 1.05, 0.02);
     sail.castShadow = true;
     this.boat.add(sail);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < MAX_LOAD; i++) {
       const crate = crateModel();
       crate.position.set(1.0 - i * 0.62, 0.77, 0);
       crate.visible = false;
@@ -187,33 +210,42 @@ export class Harbor {
     this.cart.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
   }
 
-  /** Follow the village state: the newest crate and how many pushes happened. */
-  sync(crates: readonly Crate[], pushes: number): void {
-    const latest = [...crates].reverse().find((c) => c.status !== "shipped");
-    this.status = latest?.status ?? "none";
-    if (latest) this.cartCrate.visible = true;
-    if (pushes > this.pushes) this.shipPending = true;
+  /** Follow the village state: the crates on their way, and how many pushes happened. */
+  sync(crates: readonly Crate[], pushes: number, lastPush?: LastPush): void {
+    const onTheWay = cratesOnTheWay(crates);
+    this.status = SHOWN_FIRST.find((s) => onTheWay.some((c) => c.status === s)) ?? "none";
+    this.waiting = Math.min(MAX_LOAD, onTheWay.length);
+    if (pushes > this.pushes) {
+      this.shipPending = true;
+      this.shipping = Math.min(MAX_LOAD, lastPush?.crates ?? 1);
+    }
     this.pushes = pushes;
   }
 
-  private goal(): CartGoal {
-    if (this.shipPending) return "end";
-    switch (this.status) {
-      case "packed":
-      case "scanning":
-      case "blocked":
-        return "gate";
-      case "cleared":
-        return "end";
-      default:
-        return "start";
-    }
+  /** Show `n` crates on the cart. */
+  private load(n: number): void {
+    this.cartCrates.forEach((crate, i) => {
+      crate.visible = i < n;
+      const spot = CART_SPOTS[Math.max(0, n - 1)]?.[i];
+      if (spot) crate.position.set(...spot);
+      crate.rotation.y = i === 2 ? 0.35 : 0;
+      crate.scale.setScalar(n > 1 ? 0.92 : 1);
+    });
+  }
+
+  private goal(gateDistance: number): CartGoal {
+    if (this.shipPending && this.shipping > 0) return "end";
+    if (this.status === "none") return "start";
+    // Once past the gate, the cart waits at the dock for the boat. New crates join it
+    // there, and the gate's own lights show what a later check finds.
+    if (this.cartAt > gateDistance + 0.01) return "end";
+    return this.status === "cleared" ? "end" : "gate";
   }
 
   update(dt: number, t: number): void {
     // Move the cart toward where it should be.
     const gateDistance = this.routeLengths[2]! - 0.9;
-    const goal = this.goal();
+    const goal = this.goal(gateDistance);
     const target = goal === "start" ? 0 : goal === "gate" ? gateDistance : this.total;
     const speed = 3.2;
     if (Math.abs(target - this.cartAt) > 0.01) {
@@ -224,19 +256,22 @@ export class Harbor {
     }
     this.placeCart(this.cartAt);
 
-    // At the end of the dock with a push waiting: load the crate onto the boat.
-    if (this.shipPending && this.cartAt >= this.total - 0.05 && this.boatState === "docked") {
+    // At the end of the dock with a push waiting: load the crates onto the boat.
+    // (A push that only published the branch has no crates, so the boat doesn't wait for the cart.)
+    const cartArrived = this.shipping === 0 || this.cartAt >= this.total - 0.05;
+    if (this.shipPending && cartArrived && this.boatState === "docked") {
       this.shipPending = false;
-      this.cartCrate.visible = false;
-      this.boatCargo = Math.min(3, this.boatCargo + 1);
+      this.boatCargo = this.shipping;
       this.boatCrates.forEach((c, i) => (c.visible = i < this.boatCargo));
       this.boatState = "sailing";
       this.boatTimer = 0;
     }
-    if (!this.shipPending && this.status === "none" && this.cartAt < 0.05) this.cartCrate.visible = false;
+    // The cart carries the crates for the waiting push, or else the ones on their way.
+    this.load(this.shipPending ? this.shipping : this.waiting);
 
     // Barrier: open for a cleared crate, or to let the cart come back.
-    const wantOpen = this.status === "cleared" || this.shipPending || (goal === "start" && this.cartAt > gateDistance - 0.5);
+    const wantOpen =
+      this.status === "cleared" || (this.shipPending && this.shipping > 0) || (goal === "start" && this.cartAt > gateDistance - 0.5);
     this.barrierOpen += ((wantOpen ? 1 : 0) - this.barrierOpen) * Math.min(1, dt * 3);
     this.barrier.rotation.z = this.barrierOpen * 1.35;
 

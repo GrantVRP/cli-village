@@ -3,6 +3,7 @@
 // red, the column shows health, and the camera visits the key moment.
 
 import * as THREE from "three";
+import { WAITING } from "../../src/events/explain.js";
 import { isWalking, type AgentState, type VillageState } from "../../src/events/state.js";
 import { BUILDINGS, type Building } from "../../src/events/types.js";
 import { createBuildingModels, type BuildingModel } from "./buildings.js";
@@ -147,9 +148,12 @@ export class Village {
     }
 
     this.column.setHealth(state.health);
-    this.harbor.sync(state.crates, state.stats.pushes);
-    this.overlay.setStatus(state, document.body.dataset.mode ?? "");
-    this.overlay.setCaption(state.headline);
+    this.harbor.sync(state.crates, state.stats.pushes, state.lastPush);
+    const mode = document.body.dataset.mode ?? "";
+    this.overlay.setStatus(state, mode);
+    // Live, and nothing has happened yet: suggest something to try.
+    const waiting = state.headline.seq === 0 && mode !== "" && mode !== "demo";
+    this.overlay.setCaption(waiting ? { ...state.headline, ...WAITING } : state.headline, waiting);
     this.overlay.updatePanel(state);
 
     // Camera: visit where the key message is happening.

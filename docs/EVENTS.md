@@ -70,6 +70,8 @@ Every event has a `type` and an `agent` (a short name: letters, numbers, spaces,
 
 `task` is an id you make up, like `"r1"` or `"tests-3"` (letters, numbers, `. _ : # -`). Use the same one for a task's `start`, `progress` and `done` or `fail`.
 
+At the harbor, a `scan` task can come before or after its `commit`. Scan first (as `cli-village commit` does): the gate packs a crate for your changes, and the `commit` fills it in. Commit first: the crate waits for the next scan. A failed scan stops the cart at the gate under a red light, a passed one lets it through to the dock, and `push` sails the boat.
+
 ### Kinds of work and their buildings
 
 | `kind` | Building | For |

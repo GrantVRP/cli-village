@@ -7,9 +7,11 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import net from "node:net";
 import path from "node:path";
 import { after, describe, it } from "node:test";
-import { CLI, cliEnv, dist, jsonLines, leaks, STRIPE_TEST, tempDir, tempRepo, testSocket } from "./helpers.mjs";
+import { CLI, cliEnv, dist, jsonLines, leaks, STRIPE_LIVE, STRIPE_TEST, tempDir, tempRepo, testSocket } from "./helpers.mjs";
 
 const { EventBus } = await import(dist("events/bus.js"));
+const { describeHarbor } = await import(dist("events/state.js"));
+const { VillageStore } = await import(dist("events/store.js"));
 const { startHub, MAX_LINE } = await import(dist("hub/server.js"));
 const { HubSender, follow } = await import(dist("hub/client.js"));
 const { hubAddress, isSafeToConnect, preparePrivateDir } = await import(dist("hub/address.js"));
@@ -298,6 +300,41 @@ describe("cli-village emit", () => {
     assert.equal(res.code, 0, res.stderr);
     await until(() => seen.includes("you:done"));
     assert.deepEqual(seen, ["you:move", "you:start", "you:done", "you:move"]);
+    await hub.close();
+  });
+
+  it("moves a real commit through the harbor: stopped at the gate, then shipped", async () => {
+    const { bus, hub, socket } = await openHub();
+    const store = VillageStore.fromBus(bus);
+    const env = { CLI_VILLAGE_SOCKET: socket, CLI_VILLAGE_FORWARD: "1" };
+    const { work } = tempRepo({ remote: true });
+    const backHome = async (n) => {
+      // Each command ends with its robot walking home.
+      await until(() => Object.values(store.getState().log).filter((e) => e.type === "move" && e.text.includes("HOME")).length >= n);
+    };
+
+    // A secret in the changes: the scan runs before anything is saved, and the crate stops at the gate.
+    writeFileSync(path.join(work, "pay.js"), `const key = "${STRIPE_LIVE}";\n`);
+    const stopped = await cliAsync(["commit", "-q", "-m", "Add payments"], { cwd: work, env });
+    assert.equal(stopped.code, 1);
+    await backHome(1);
+    let state = store.getState();
+    assert.deepEqual(state.crates.map((c) => c.status), ["blocked"]);
+    assert.equal(describeHarbor(state).level, "attention");
+    assert.ok(state.buildings.harbor.problem);
+
+    // Fixed: the same crate passes the gate, gets the snapshot, and the boat takes it.
+    writeFileSync(path.join(work, "pay.js"), "const key = process.env.STRIPE_KEY;\n");
+    const sent = await cliAsync(["commit", "-q", "-m", "Add payments", "--push"], { cwd: work, env });
+    assert.equal(sent.code, 0, sent.stderr);
+    await backHome(2);
+    state = store.getState();
+    assert.deepEqual(state.crates.map((c) => [c.status, c.message]), [["shipped", "Add payments"]]);
+    assert.match(state.crates[0].sha, /^[0-9a-f]{7,}$/);
+    assert.equal(state.buildings.harbor.problem, undefined);
+    assert.deepEqual([state.lastPush.crates, state.lastPush.branch], [1, "main"]);
+    assert.equal(describeHarbor(state).text, "Last boat: 1 commit to origin/main");
+    assert.deepEqual(leaks(JSON.stringify(state)), []);
     await hub.close();
   });
 });
