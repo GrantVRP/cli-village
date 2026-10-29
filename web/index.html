@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>CLI Village</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <!-- Status bar: mode, robots, problems, health. -->
+    <header id="status" class="status" aria-live="polite">
+      <span class="brand">CLI VILLAGE</span>
+      <span id="status-mode" class="mode"></span>
+      <span class="sep">·</span>
+      <span id="status-robots"></span>
+      <span class="sep">·</span>
+      <span id="status-problems" class="problems"></span>
+      <span class="sep">·</span>
+      <span>health <span id="status-health-bar" class="bar"></span> <span id="status-health-text"></span></span>
+      <button id="help-button" class="help-button" type="button" title="What am I looking at? (?)">?</button>
+    </header>
+
+    <!-- The one key message. -->
+    <section id="caption" class="caption calm" aria-live="polite">
+      <span id="caption-icon" class="caption-icon">○</span>
+      <div class="caption-body">
+        <div id="caption-title" class="caption-title">Waiting for the village…</div>
+        <div id="caption-subtitle" class="caption-subtitle"></div>
+        <div id="caption-command" class="caption-command" hidden>
+          <span class="caption-command-label">Try:</span>
+          <code id="caption-command-text"></code>
+        </div>
+      </div>
+    </section>
+
+    <div id="connection" class="connection" hidden></div>
+
+    <!-- A building's log, opened by clicking it. -->
+    <aside id="panel" class="panel" hidden>
+      <button id="panel-close" class="close" type="button" aria-label="Close">×</button>
+      <h2 id="panel-title"></h2>
+      <p id="panel-help" class="panel-help"></p>
+      <p id="panel-status" class="panel-status"></p>
+      <ol id="panel-log" class="panel-log"></ol>
+    </aside>
+
+    <!-- Help: what everything means. -->
+    <div id="help" class="help" hidden>
+      <div class="help-card" role="dialog" aria-labelledby="help-title">
+        <button id="help-close" class="close" type="button" aria-label="Close">×</button>
+        <h2 id="help-title">What am I looking at?</h2>
+        <p>
+          Each robot is an agent (a helper program). When it starts a task, it walks to the building for that kind of
+          work. The glowing column in the plaza shows how healthy the village is.
+        </p>
+        <div id="help-buildings" class="help-buildings"></div>
+        <p class="help-keys">
+          <kbd>drag</kbd> look around · <kbd>scroll</kbd> zoom · <kbd>click</kbd> a building to see its log ·
+          <kbd>n</kbd> night · <kbd>h</kbd> back to the whole village · <kbd>?</kbd> this help · <kbd>Esc</kbd> close
+        </p>
+        <p class="help-safe">Secret values never appear here: only key names and counts.</p>
+      </div>
+    </div>
+
+    <footer class="hints">
+      <kbd>?</kbd> help · <kbd>n</kbd> night · <kbd>h</kbd> home view · click a building for its log
+    </footer>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
