@@ -6,7 +6,7 @@ CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https:
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days, step 5 of 9. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), and watch a demo in the terminal (`--demo`) or in a 3D village (`open --demo`).
+**Status:** early days, step 7 of 9. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch a demo in the terminal (`--demo`) or in a 3D village (`open --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
@@ -14,7 +14,7 @@ It's made for beginners (every action is explained in plain English, next to the
 
 - Node.js 22 or newer
 - git
-- The Infisical CLI (`cli-village doctor` tells you how to install it)
+- The Infisical CLI, for secrets and the secret scan (`cli-village doctor` tells you how to install it)
 
 ## Try it (from source)
 
@@ -40,6 +40,10 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | `cli-village secrets diff dev prod` | Compares two environments by name: what's only in one, and which values differ (without showing them). |
 | `cli-village secrets export --out .env` | Writes secrets to a file, only when you ask. The file must be in `.gitignore` (and not already tracked by git). `--format` can be dotenv, dotenv-export, json, csv or yaml. `--force` replaces an existing file. |
 | `cli-village run -- npm start` | Runs your command with your secrets as environment variables (through `infisical run`). Your program's output goes straight to your terminal. |
+| `cli-village status` | What changed since your last snapshot, in plain English, and what to do next. |
+| `cli-village commit -m "Fix login"` | Saves a snapshot (a commit) after a secret scan. Only what you staged (`git add`), or else every change. Add `--push` to send it too. |
+| `cli-village push` | Sends your snapshots to GitHub after a secret scan. The first push of a branch links it (`--set-upstream`). |
+| `cli-village test` | Finds and runs your tests: the `test` script in package.json (npm, pnpm, yarn or bun), `cargo test`, `go test ./...` or pytest. Or give your own: `cli-village test -- node --test`. |
 | `cli-village open --demo` | Opens the 3D village in your browser and plays the demo there (the terminal keeps its own view). Add `--no-open` to just print the address, `--port 4317` to pick the port, or `--speed 2`. |
 
 ## Learning as you go (or not)
@@ -121,6 +125,38 @@ $ cli-village secrets diff dev prod
 - Leave out `--env` and Infisical uses your project's default environment.
 - `secrets export` refuses to write a file git could commit, and on macOS and Linux makes it readable only by you.
 
+## The GitHub Harbor: saving and sending your work
+
+`commit` and `push` use your own git and your own GitHub login. Before anything is saved or sent, a checkpoint gate scans it for passwords and keys with Infisical's scanner (`infisical scan`, which runs on your computer and needs no login). If the gate finds something, nothing is saved or sent:
+
+```
+$ cli-village commit -m "Add payments"
+▶ Picking every change for the snapshot at the GITHUB HARBOR
+  → git add --all
+    Picks which changes go into the next snapshot.
+✔ Picked 2 changes
+▶ Checkpoint: scanning your changes for secrets at the GITHUB HARBOR
+  → infisical scan git-changes --staged --redact
+    Checks your changes for passwords or keys that shouldn't be shared.
+✖ Stopped at the gate: 1 possible secret in src/pay.ts line 1 (value hidden). Nothing was saved.
+
+  Possible secrets (values hidden)
+    ✖ src/pay.ts:1  Stripe Access Token
+
+  To fix it: move the secret into Infisical and take it out of the file.
+  Then save again: cli-village commit -m "..."
+  False alarm? Add its fingerprint as a line in a file named .infisicalignore:
+    src/pay.ts:stripe-access-token:1
+```
+
+- You see the file, line and kind of secret, never the secret itself.
+- If the scan picked your changes for you (`git add --all`) and then stops, it puts them back the way they were.
+- `push` scans every snapshot that isn't on GitHub yet, so a secret saved earlier (or with `--skip-scan`) is still caught before it leaves your computer.
+- Files like `.env` are never saved, whatever the scanner says. (`.env.example` and other templates are fine.)
+- Common problems come with a plain explanation and a fix: no name and email set up in git, GitHub has newer snapshots (`git pull`), not on a branch, no GitHub repository linked yet.
+- Without the Infisical CLI, `commit` and `push` refuse to go ahead unless you add `--skip-scan` (which prints a warning).
+- For scripts: `commit -q` prints just the new snapshot id, and `--json` gives the result (with the findings' file, line, rule and fingerprint if the gate stops it).
+
 ## The 3D village
 
 `cli-village open --demo` starts a small web server on your own computer and opens the village in your browser. Your terminal shows the address. It looks like `http://127.0.0.1:53021/?token=…`, and only works on this computer.
@@ -152,6 +188,8 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - The village server only listens on your own computer (`127.0.0.1`). Each session gets a new random key, which must be in the page address and on the live connection. Requests from other websites are refused, and the page makes no outside calls.
 - Secrets are never written to disk unless you ask for it (`secrets export --out .env`), and never to a file git could commit.
 - `cli-village run` lets Infisical hand the secrets straight to your program. They never pass through CLI Village, and your program's output isn't recorded.
+- The secret scan runs on your computer. CLI Village asks Infisical for a redacted report in a private temporary folder, reads only where each possible secret is (file, line, rule, fingerprint), and deletes the report straight away.
+- `commit` and `push` use your own git login. CLI Village never sees or stores it, and never shows your remote's address (it can contain a token).
 
 ## Roadmap
 
@@ -161,7 +199,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - [x] 4. 3D village
 - [x] 5. Vault (real Infisical commands)
 - [x] 6. Beginner explainer + expert flags
-- [ ] 7. GitHub Harbor with the secret-scan checkpoint
+- [x] 7. GitHub Harbor with the secret-scan checkpoint
 - [ ] 8. Library + external-agent event API
 - [ ] 9. Tests + CI
 

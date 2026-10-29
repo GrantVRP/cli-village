@@ -82,6 +82,8 @@ export interface RunOptions {
   timeoutMs?: number;
   /** Stop collecting output after this many characters per stream (default 1 MB). */
   maxOutput?: number;
+  /** "inherit": the program can read the keyboard (e.g. a passphrase prompt) while its output is still collected. */
+  stdin?: "inherit";
 }
 
 /** Run a program and collect its output. Never throws: failures come back in the result. */
@@ -91,7 +93,12 @@ export function run(file: string, args: string[], options: RunOptions = {}): Pro
   if ("error" in plan) return Promise.resolve({ code: null, stdout: "", stderr: plan.error, timedOut: false });
 
   return new Promise((resolve) => {
-    const child = spawn(plan.command, plan.args, { ...plan.options, cwd: options.cwd, windowsHide: true });
+    const child = spawn(plan.command, plan.args, {
+      ...plan.options,
+      cwd: options.cwd,
+      windowsHide: true,
+      stdio: [options.stdin === "inherit" ? "inherit" : "ignore", "pipe", "pipe"],
+    });
 
     let stdout = "";
     let stderr = "";
@@ -131,7 +138,15 @@ export function run(file: string, args: string[], options: RunOptions = {}): Pro
  * screen, and it can read the keyboard). Resolves with its exit code.
  * Ctrl+C reaches the program itself, so we wait for it to finish rather than exiting first.
  */
-export function runInherit(file: string, args: string[], options: { cwd?: string } = {}): Promise<{ code: number | null; error?: string }> {
+export function runInherit(
+  file: string,
+  args: string[],
+  options: {
+    cwd?: string;
+    /** Send the program's stdout to our stderr (so stdout can carry a JSON result). */
+    stdoutToStderr?: boolean;
+  } = {},
+): Promise<{ code: number | null; error?: string }> {
   const plan = spawnPlan(file, args);
   if ("error" in plan) return Promise.resolve({ code: null, error: plan.error });
 
@@ -144,7 +159,11 @@ export function runInherit(file: string, args: string[], options: { cwd?: string
       process.off("SIGTERM", ignore);
       resolve(result);
     };
-    const child = spawn(plan.command, plan.args, { ...plan.options, cwd: options.cwd, stdio: "inherit" });
+    const child = spawn(plan.command, plan.args, {
+      ...plan.options,
+      cwd: options.cwd,
+      stdio: options.stdoutToStderr ? ["inherit", 2, "inherit"] : "inherit",
+    });
     child.on("error", (err) => done({ code: null, error: err.message }));
     // Stopped by a signal (e.g. Ctrl+C): report it the usual way, 128 + signal number (SIGINT = 2).
     child.on("close", (code, signal) => done({ code: code ?? (signal ? 130 : null) }));

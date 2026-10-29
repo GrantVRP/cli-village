@@ -5,7 +5,6 @@
 import { chmodSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { EventBus } from "../events/bus.js";
-import { secretGuard } from "../events/guard.js";
 import {
   checkScope,
   describeScope,
@@ -15,18 +14,13 @@ import {
   showCommand,
   writeSecretsFile,
   type ExportFormat,
-  type InfisicalError,
   type SecretScope,
 } from "../infisical/client.js";
 import { findExecutable, run } from "../lib/exec.js";
-import { bold, cyan, dim, green, red, symbols, yellow } from "../lib/style.js";
-import type { Detail, Ui } from "../lib/ui.js";
-import { attachTaskView } from "../views/task.js";
-
-/** The robot that does work you start yourself. */
-export const YOU = "you";
-const KEY_NAME = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/;
-const MAX_EVENT_KEYS = 100;
+import { bold, cyan, dim, green, symbols, yellow } from "../lib/style.js";
+import type { Ui } from "../lib/ui.js";
+import { count, Output } from "./output.js";
+import { Worker, type Job } from "./worker.js";
 
 export interface ScopeOptions {
   env?: string;
@@ -34,87 +28,24 @@ export interface ScopeOptions {
   projectId?: string;
 }
 
-const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-const stdout = (text: string) => process.stdout.write(`${text}\n`);
-const stderr = (text: string) => process.stderr.write(`${text}\n`);
-
-/**
- * Prints for people, or one JSON object for scripts (--json).
- * With --quiet, only results go to stdout and problems go to stderr,
- * so `names=$(cli-village secrets fetch --quiet)` captures just the names.
- */
-class Output {
-  readonly json: boolean;
-  readonly detail: Detail;
-  constructor(ui: Ui) {
-    this.json = ui.json;
-    this.detail = ui.detail;
-  }
-  get quiet(): boolean {
-    return !this.json && this.detail === "quiet";
-  }
-  get full(): boolean {
-    return !this.json && this.detail === "full";
-  }
-  /** A line for people. Not shown with --json or --quiet. */
-  line = (text = "") => {
-    if (!this.json && !this.quiet) stdout(text);
-  };
-  /** A blank line for breathing room (full detail only). */
-  gap(): void {
-    if (this.full) stdout("");
-  }
-  /** A line of the result itself, which --quiet still prints. */
-  data(text: string): void {
-    if (!this.json) stdout(text);
-  }
-  /** Follow a job's events: what's happening and how it ended. */
-  watch(bus: EventBus): () => void {
-    if (this.json) return () => {};
-    return attachTaskView(bus, this.quiet ? stderr : stdout, this.detail);
-  }
-  result(data: object): void {
-    if (this.json) stdout(JSON.stringify({ ok: true, ...data }));
-  }
-  /** Show a problem (and what might fix it). Returns the exit code. */
-  problem(err: Omit<InfisicalError, "ok">, alreadyShown = false): number {
-    if (this.json) {
-      stdout(JSON.stringify({ ok: false, error: err.error, hint: err.hint }));
-    } else {
-      const write = this.quiet ? stderr : stdout;
-      if (!alreadyShown) write(`${red(symbols.fail)} ${err.error}`);
-      if (err.hint) write(`  ${dim("Try:")} ${cyan(err.hint)}`);
-    }
-    return 1;
-  }
-}
-
-/** One piece of VAULT work, told as events (so every view can show it). */
+/** One piece of VAULT work: walk to the VAULT, do it, walk home. */
 export class VaultJob {
-  private static next = 0;
-  readonly task = `vault-${++VaultJob.next}`;
+  private readonly worker: Worker;
+  private readonly job: Job;
 
-  constructor(
-    private readonly bus: EventBus,
-    title: string,
-    command: string,
-  ) {
-    bus.emit({ type: "move", agent: YOU, to: "vault" });
-    bus.emit({ type: "start", agent: YOU, task: this.task, kind: "secrets", title, command });
+  constructor(bus: EventBus, title: string, command: string) {
+    this.worker = new Worker(bus);
+    this.job = this.worker.job("secrets", title, command);
   }
 
   done(message: string, keys?: string[], total?: number): void {
-    const names = keys?.filter((k) => KEY_NAME.test(k) && !secretGuard.containsSecret(k)).slice(0, MAX_EVENT_KEYS);
-    const sent = this.bus.emit({ type: "done", agent: YOU, task: this.task, message, keys: names, count: total });
-    // If a name was refused for any reason, still report the result, just without names.
-    if (!sent.ok) this.bus.emit({ type: "done", agent: YOU, task: this.task, message, count: total });
-    this.bus.emit({ type: "move", agent: YOU, to: "home" });
+    this.job.done(message, keys, total);
+    this.worker.home();
   }
 
   fail(message: string): void {
-    this.bus.emit({ type: "fail", agent: YOU, task: this.task, message });
-    this.bus.emit({ type: "move", agent: YOU, to: "home" });
+    this.job.fail(message);
+    this.worker.home();
   }
 }
 
