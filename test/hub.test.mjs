@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { statSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -138,12 +138,17 @@ describe("the local socket", () => {
     const dir = tempDir();
     const sock = path.join(dir, "private", "village.sock");
     const address = addressFor(sock);
+    // The folder starts out readable by others; the village must lock it down.
+    mkdirSync(path.dirname(sock), { mode: 0o755 });
+    chmodSync(path.dirname(sock), 0o755);
     // A village that crashed: its socket file stays behind.
     const crashed = spawn(process.execPath, ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => console.log("up"))`], { stdio: ["ignore", "pipe", "inherit"] });
     cleanup.push(() => crashed.kill("SIGKILL"));
-    await within(new Promise((resolve) => crashed.stdout.once("data", resolve)));
+    const closed = new Promise((resolve) => crashed.once("close", resolve));
+    const up = await within(Promise.race([new Promise((resolve) => crashed.stdout.once("data", () => resolve(true))), closed.then(() => false)]));
+    assert.ok(up, "the stand-in village couldn't start (see its error above)");
     crashed.kill("SIGKILL");
-    await within(new Promise((resolve) => crashed.once("close", resolve)));
+    await within(closed);
     assert.ok(existsSync(sock), "a stale socket is left over");
 
     const started = await startHub(new EventBus(), address);
