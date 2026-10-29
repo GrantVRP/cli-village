@@ -3,6 +3,7 @@
 // `json` mode prints each event as one line of JSON instead (for scripts).
 
 import type { EventBus } from "../events/bus.js";
+import { summarizeKeys } from "../events/state.js";
 import { BUILDING_NAMES, type VillageEvent } from "../events/types.js";
 import { bold, cyan, dim, green, red, symbols, yellow } from "../lib/style.js";
 
@@ -15,13 +16,6 @@ const AGENT_WIDTH = 9;
 
 function clock(ts: number): string {
   return new Date(ts).toTimeString().slice(0, 8);
-}
-
-/** "DATABASE_URL, STRIPE_SECRET_KEY, REDIS_URL +9 more" */
-export function summarizeKeys(keys: string[], total = keys.length): string {
-  const shown = keys.slice(0, 3).join(", ");
-  const more = total - Math.min(keys.length, 3);
-  return more > 0 ? `${shown} +${more} more` : shown;
 }
 
 /** Turn one event into the line(s) a person reads. */
