@@ -17,6 +17,8 @@ export interface HubAddress {
   path: string;
   /** The private folder it lives in (not on Windows). */
   dir?: string;
+  /** You picked this path (CLI_VILLAGE_SOCKET): its folder is checked, but never changed. */
+  chosen?: boolean;
 }
 
 // Unix socket paths can't be longer than this (macOS allows 104 bytes).
@@ -39,7 +41,7 @@ export function hubAddress(env: NodeJS.ProcessEnv = process.env, platform = proc
     return { path: `\\\\.\\pipe\\${slashed.split("\\").filter(Boolean).pop() ?? "cli-village"}` };
   }
   const p = path.posix;
-  if (custom) return { path: custom, dir: p.dirname(custom) };
+  if (custom) return { path: custom, dir: p.dirname(custom), chosen: true };
   if (platform === "win32") return { path: `\\\\.\\pipe\\cli-village-${userName()}` };
 
   const runtime = env.XDG_RUNTIME_DIR?.trim();
@@ -55,16 +57,23 @@ export function hubAddress(env: NodeJS.ProcessEnv = process.env, platform = proc
 /**
  * Make sure the socket's folder exists and is private: a real folder (not a
  * link), owned by you, that nobody else can open. Returns a problem, or null.
+ * A folder that already existed is only locked down if it's the village's
+ * own (`mayChange`); one you picked is left as it is, and refused if it's open.
  */
-export async function preparePrivateDir(dir: string): Promise<string | null> {
+export async function preparePrivateDir(dir: string, { mayChange = true } = {}): Promise<string | null> {
   try {
-    await mkdir(dir, { recursive: true, mode: 0o700 });
+    const made = await mkdir(dir, { recursive: true, mode: 0o700 });
     const info = await lstat(dir);
     if (!info.isDirectory() || info.isSymbolicLink()) return `${dir} isn't a normal folder, so the village won't put its socket there.`;
     if (typeof process.getuid === "function" && info.uid !== process.getuid()) {
       return `${dir} belongs to another user, so the village won't put its socket there.`;
     }
-    if ((info.mode & 0o077) !== 0) await chmod(dir, 0o700);
+    if ((info.mode & 0o077) !== 0) {
+      if (!mayChange && made === undefined) {
+        return `Other users can open ${dir}, so the village won't put its socket there. Use a folder only you can open (chmod 700 it), or unset CLI_VILLAGE_SOCKET.`;
+      }
+      await chmod(dir, 0o700);
+    }
     return null;
   } catch (err) {
     return `Couldn't prepare ${dir}: ${(err as Error).message}`;

@@ -12,7 +12,7 @@ import { CLI, cliEnv, dist, jsonLines, leaks, STRIPE_TEST, tempDir, tempRepo, te
 const { EventBus } = await import(dist("events/bus.js"));
 const { startHub, MAX_LINE } = await import(dist("hub/server.js"));
 const { HubSender, follow } = await import(dist("hub/client.js"));
-const { hubAddress } = await import(dist("hub/address.js"));
+const { hubAddress, preparePrivateDir } = await import(dist("hub/address.js"));
 
 const isWindows = process.platform === "win32";
 const addressFor = (socket) => hubAddress({ CLI_VILLAGE_SOCKET: socket });
@@ -136,11 +136,30 @@ describe("the local socket", () => {
 
   it("keeps the socket private, tidies a stale one, and never deletes an ordinary file", { skip: isWindows && "Unix sockets only" }, async () => {
     const dir = tempDir();
+    const mode = (p) => statSync(p).mode & 0o777;
+
+    // A folder the village makes itself is private.
+    const fresh = path.join(dir, "new", "village.sock");
+    const made = await startHub(new EventBus(), addressFor(fresh));
+    assert.equal(made.ok, true, made.error);
+    cleanup.push(() => made.hub.close());
+    assert.equal(mode(path.dirname(fresh)), 0o700);
+    assert.equal(mode(fresh), 0o600);
+    await made.hub.close();
+
+    // A folder you picked that others can open is refused, and left as it was.
     const sock = path.join(dir, "private", "village.sock");
     const address = addressFor(sock);
-    // The folder starts out readable by others; the village must lock it down.
-    mkdirSync(path.dirname(sock), { mode: 0o755 });
+    mkdirSync(path.dirname(sock));
     chmodSync(path.dirname(sock), 0o755);
+    const open = await startHub(new EventBus(), address);
+    assert.equal(open.ok, false);
+    assert.match(open.error, /Other users can open/);
+    assert.equal(mode(path.dirname(sock)), 0o755);
+    // The village's own folder (not one you picked) is locked down instead.
+    assert.equal(await preparePrivateDir(path.dirname(sock)), null);
+    assert.equal(mode(path.dirname(sock)), 0o700);
+
     // A village that crashed: its socket file stays behind.
     const crashed = spawn(process.execPath, ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => console.log("up"))`], { stdio: ["ignore", "pipe", "inherit"] });
     cleanup.push(() => crashed.kill("SIGKILL"));
@@ -154,9 +173,12 @@ describe("the local socket", () => {
     const started = await startHub(new EventBus(), address);
     assert.equal(started.ok, true, started.error);
     cleanup.push(() => started.hub.close());
-    assert.equal(statSync(path.dirname(sock)).mode & 0o777, 0o700);
-    assert.equal(statSync(sock).mode & 0o777, 0o600);
+    assert.equal(mode(sock), 0o600);
+    const sender = await HubSender.open(address);
+    assert.ok(sender, "the new village answers");
+    await sender.close();
     await started.hub.close();
+    assert.equal(existsSync(sock), false, "a clean close removes the socket");
 
     const file = path.join(dir, "notes.txt");
     writeFileSync(file, "keep me");

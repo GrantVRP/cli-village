@@ -68,7 +68,7 @@ function listen(server: net.Server, address: string): Promise<NodeJS.ErrnoExcept
 /** Start the hub, unless another village already runs one (then `busy`). */
 export async function startHub(bus: EventBus, address: HubAddress = hubAddress()): Promise<HubStart> {
   if (address.dir && !isWindows) {
-    const problem = await preparePrivateDir(address.dir);
+    const problem = await preparePrivateDir(address.dir, { mayChange: !address.chosen });
     if (problem) return { ok: false, busy: false, error: problem };
   }
 
