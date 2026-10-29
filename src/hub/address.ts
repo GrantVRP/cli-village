@@ -38,17 +38,18 @@ export function hubAddress(env: NodeJS.ProcessEnv = process.env, platform = proc
     if (/^\\\\[.?]\\pipe\\[^\\]+$/i.test(slashed)) return { path: slashed };
     return { path: `\\\\.\\pipe\\${slashed.split("\\").filter(Boolean).pop() ?? "cli-village"}` };
   }
-  if (custom) return { path: custom, dir: path.dirname(custom) };
+  const p = path.posix;
+  if (custom) return { path: custom, dir: p.dirname(custom) };
   if (platform === "win32") return { path: `\\\\.\\pipe\\cli-village-${userName()}` };
 
   const runtime = env.XDG_RUNTIME_DIR?.trim();
-  const dir = runtime ? path.join(runtime, "cli-village") : path.join(homedir(), ".cli-village");
-  const file = path.join(dir, "village.sock");
+  const dir = runtime ? p.join(runtime, "cli-village") : p.join(homedir(), ".cli-village");
+  const file = p.join(dir, "village.sock");
   if (Buffer.byteLength(file) <= MAX_UNIX_PATH) return { path: file, dir };
   // A very long home folder: fall back to a private folder in the temp directory.
   const uid = typeof process.getuid === "function" ? process.getuid() : userName();
-  const short = path.join(tmpdir(), `cli-village-${uid}`);
-  return { path: path.join(short, "village.sock"), dir: short };
+  const short = p.join(tmpdir(), `cli-village-${uid}`);
+  return { path: p.join(short, "village.sock"), dir: short };
 }
 
 /**

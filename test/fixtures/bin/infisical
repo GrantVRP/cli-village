@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stand-in for the Infisical CLI in tests (see ../fake-infisical.cjs).
+exec node "$(dirname "$0")/../fake-infisical.cjs" "$@"
