@@ -2,7 +2,8 @@
 // Every output is also checked for leaked secret values.
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { AWS_KEY, cli, dist, git, jsonLines, leaks, STRIPE_LIVE, tempDir, tempRepo } from "./helpers.mjs";
@@ -81,7 +82,16 @@ describe("the VAULT (secrets)", () => {
     assert.equal(refused.code, 1);
     assert.match(refused.stdout, /isn't listed in \.gitignore/);
     assert.equal(existsSync(path.join(work, ".env")), false);
-    writeFileSync(path.join(work, ".gitignore"), ".env\n");
+    // The suggested fix works even when .gitignore's last line has no line break.
+    writeFileSync(path.join(work, ".gitignore"), "node_modules");
+    const { hint } = JSON.parse(run(["secrets", "export", "--out", ".env", "--json"], { cwd: work }).stdout);
+    if (process.platform === "win32") {
+      assert.equal(hint, undefined);
+      writeFileSync(path.join(work, ".gitignore"), "node_modules\n.env\n");
+    } else {
+      assert.equal(spawnSync("sh", ["-c", hint], { cwd: work }).status, 0, hint);
+      assert.equal(readFileSync(path.join(work, ".gitignore"), "utf8"), "node_modules\n.env\n");
+    }
     const ok = run(["secrets", "export", "--out", ".env", "--json"], { cwd: work });
     assert.equal(ok.code, 0, ok.all);
     assert.equal(JSON.parse(ok.stdout).count, 5);
@@ -139,6 +149,22 @@ describe("the GITHUB HARBOR (status, commit, push)", () => {
     assert.match(res.stdout, /\.env looks like a secrets file/);
     git(work, "add", ".env");
     assert.match(run(["commit", "-m", "x"], { cwd: work }).stdout, /git rm --cached -- \.env/);
+
+    // The suggested command works from where you are, and is only offered for plain names.
+    git(work, "rm", "-q", "--cached", ".env");
+    mkdirSync(path.join(work, "app"));
+    writeFileSync(path.join(work, "app", ".env"), "A=1\n");
+    git(work, "add", "app/.env");
+    const fromApp = JSON.parse(run(["commit", "-m", "x", "--json"], { cwd: path.join(work, "app") }).stdout);
+    assert.equal(fromApp.hint, "git rm --cached -- .env");
+    assert.equal(JSON.parse(run(["commit", "-m", "x", "--json"], { cwd: work }).stdout).hint, "git rm --cached -- app/.env");
+    git(work, "rm", "-q", "--cached", "app/.env");
+    const odd = ".env.$(touch pwned)";
+    writeFileSync(path.join(work, odd), "A=1\n");
+    git(work, "add", "--", odd);
+    const oddRes = JSON.parse(run(["commit", "-m", "x", "--json"], { cwd: work }).stdout);
+    assert.equal(oddRes.hint, undefined);
+    assert.match(oddRes.error, /looks like a secrets file/);
   });
 
   it("saves, then sends, scanning each time", () => {
