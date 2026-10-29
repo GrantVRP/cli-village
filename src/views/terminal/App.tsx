@@ -30,6 +30,14 @@ export interface AppProps {
   compact?: boolean;
   /** Fixed size, for tests. Normally the terminal's own size is used. */
   size?: { columns: number; rows: number };
+  /** What to suggest before anything has happened (live mode). */
+  waiting?: WaitingHint;
+}
+
+export interface WaitingHint {
+  subtitle: string;
+  command: string;
+  explain: string;
 }
 
 /** Rows the key message takes: title, subtitle, command, explanation, plus a blank line above and below. */
@@ -122,8 +130,10 @@ function headlineStyle(headline: Headline) {
  * The one key message: what's happening now, or what needs attention.
  * Beginners also see the real command and a line explaining what it does.
  */
-function KeyMessage({ state, width, compact }: { state: VillageState; width: number; compact: boolean }) {
-  const { headline } = state;
+function KeyMessage({ state, width, compact, waiting }: { state: VillageState; width: number; compact: boolean; waiting?: WaitingHint }) {
+  // Nothing has happened yet: suggest something to try instead.
+  const idle = waiting && state.headline.seq === 0 ? waiting : undefined;
+  const headline = idle ? { ...state.headline, ...idle } : state.headline;
   const style = headlineStyle(headline);
   // If something still needs attention but the headline moved on, keep a quiet reminder.
   const stillOpen = openProblems(state).find((b) => b.problem && b.problem.seq !== headline.seq);
@@ -138,7 +148,7 @@ function KeyMessage({ state, width, compact }: { state: VillageState; width: num
       {"  "}
       <Text dimColor>{icons.arrow} </Text>
       <Text color={theme.accent}>{headline.command}</Text>
-      {compact ? null : <Text dimColor> (the real command)</Text>}
+      {compact || idle ? null : <Text dimColor> (the real command)</Text>}
     </Text>
   ) : null;
 
@@ -364,7 +374,7 @@ function KeyHints({
   );
 }
 
-export function App({ store, mode, url, onStop, compact = false, size }: AppProps) {
+export function App({ store, mode, url, onStop, compact = false, size, waiting }: AppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const windowSize = useWindowSize();
   const columns = size?.columns ?? (windowSize.columns || 80);
@@ -417,7 +427,7 @@ export function App({ store, mode, url, onStop, compact = false, size }: AppProp
         <HelpOverlay width={width} rows={rows - chrome} />
       ) : (
         <>
-          <KeyMessage state={state} width={width} compact={compact} />
+          <KeyMessage state={state} width={width} compact={compact} waiting={waiting} />
           <Rule width={width} />
           {wide ? (
             <Box flexDirection="row" width={width} height={bodyRows}>

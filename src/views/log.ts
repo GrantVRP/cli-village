@@ -9,7 +9,7 @@
 
 import type { EventBus } from "../events/bus.js";
 import { commitCommand, explainCommand, explainProblem, explainTask } from "../events/explain.js";
-import { summarizeKeys } from "../events/state.js";
+import { summarizeKeys, summarizeSources } from "../events/state.js";
 import { BUILDING_NAMES, type TaskKind, type VillageEvent } from "../events/types.js";
 import { bold, cyan, dim, green, red, symbols, yellow } from "../lib/style.js";
 import { teachOnce, type Detail } from "../lib/ui.js";
@@ -87,7 +87,11 @@ export function createFormatter(detail: Detail = "full"): (event: VillageEvent) 
         return [line(dim(`${symbols.progress} ${event.message ?? "working"}${pct}`))];
       }
       case "done": {
-        const keys = event.keys?.length ? dim(`: ${summarizeKeys(event.keys, event.count)}`) : "";
+        const keys = event.keys?.length
+          ? dim(`: ${summarizeKeys(event.keys, event.count)}`)
+          : event.sources?.length
+            ? dim(` (${summarizeSources(event.sources)})`)
+            : "";
         return [line(`${green(`${symbols.ok} done`)} ${event.message ?? "finished"}${keys}`)];
       }
       case "fail": {

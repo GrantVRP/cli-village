@@ -5,7 +5,7 @@ import type { EventBus } from "../../events/bus.js";
 import type { VillageState } from "../../events/state.js";
 import { VillageStore } from "../../events/store.js";
 import type { Ui } from "../../lib/ui.js";
-import { App } from "./App.js";
+import { App, type WaitingHint } from "./App.js";
 
 export interface TerminalViewOptions {
   bus: EventBus;
@@ -15,6 +15,8 @@ export interface TerminalViewOptions {
   compact?: boolean;
   /** Called when you press q (or Ctrl+C) the first time. */
   onStop: () => void;
+  /** What to suggest before anything has happened. */
+  waiting?: WaitingHint;
 }
 
 /** True when we can draw the interactive view (a real terminal, not a pipe or CI log). */
@@ -38,7 +40,7 @@ export async function runTerminalView(options: TerminalViewOptions): Promise<Vil
   const showCursor = () => process.stdout.write("\u001B[?25h");
   process.once("exit", showCursor);
 
-  const instance = render(<App store={store} mode={options.mode} url={options.url} onStop={options.onStop} compact={options.compact} />, {
+  const instance = render(<App store={store} mode={options.mode} url={options.url} onStop={options.onStop} compact={options.compact} waiting={options.waiting} />, {
     // Draw on a separate screen; your terminal comes back exactly as it was.
     alternateScreen: true,
     // We handle Ctrl+C ourselves so the robots can walk home first.
