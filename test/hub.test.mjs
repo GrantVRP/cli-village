@@ -12,7 +12,7 @@ import { CLI, cliEnv, dist, jsonLines, leaks, STRIPE_TEST, tempDir, tempRepo, te
 const { EventBus } = await import(dist("events/bus.js"));
 const { startHub, MAX_LINE } = await import(dist("hub/server.js"));
 const { HubSender, follow } = await import(dist("hub/client.js"));
-const { hubAddress, preparePrivateDir } = await import(dist("hub/address.js"));
+const { hubAddress, isSafeToConnect, preparePrivateDir } = await import(dist("hub/address.js"));
 
 const isWindows = process.platform === "win32";
 const addressFor = (socket) => hubAddress({ CLI_VILLAGE_SOCKET: socket });
@@ -156,9 +156,11 @@ describe("the local socket", () => {
     assert.equal(open.ok, false);
     assert.match(open.error, /Other users can open/);
     assert.equal(mode(path.dirname(sock)), 0o755);
+    assert.equal(isSafeToConnect(address), false, "commands won't send events into an open folder either");
     // The village's own folder (not one you picked) is locked down instead.
     assert.equal(await preparePrivateDir(path.dirname(sock)), null);
     assert.equal(mode(path.dirname(sock)), 0o700);
+    assert.equal(isSafeToConnect(address), true);
 
     // A village that crashed: its socket file stays behind.
     const crashed = spawn(process.execPath, ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => console.log("up"))`], { stdio: ["ignore", "pipe", "inherit"] });
@@ -227,6 +229,38 @@ describe("cli-village emit", () => {
     assert.deepEqual(JSON.parse(res.stdout), { ok: true, delivered: false });
   });
 
+  it("doesn't stop your agent when the village closes, or never answers", async () => {
+    const listen = async (onConnection) => {
+      const socket = testSocket();
+      const server = net.createServer(onConnection);
+      await new Promise((resolve) => server.listen(addressFor(socket).path, resolve));
+      cleanup.push(() => new Promise((resolve) => server.close(resolve)));
+      return socket;
+    };
+    // Answers the first event, then closes.
+    const closing = await listen((conn) => {
+      conn.once("data", () => {
+        conn.write('{"ok":true,"seq":1}\n');
+        setTimeout(() => conn.destroy(), 50);
+      });
+    });
+    const lines = ["a1", "a2", "a3"].map((t) => JSON.stringify(start(t))).join("\n");
+    const stream = await cliAsync(["emit", "-", "--json"], { env: { CLI_VILLAGE_SOCKET: closing }, input: lines });
+    assert.equal(stream.code, 0, stream.stderr);
+    const result = JSON.parse(stream.stdout);
+    assert.equal(result.sent, 1);
+    assert.equal(result.lost, 2);
+    assert.deepEqual(result.refused, []);
+
+    // Takes the connection but never answers.
+    const silent = await listen((conn) => conn.on("data", () => {}));
+    const started = Date.now();
+    const one = await cliAsync(["emit", "--json", JSON.stringify(start())], { env: { CLI_VILLAGE_SOCKET: silent } });
+    assert.equal(one.code, 0, one.stderr);
+    assert.deepEqual(JSON.parse(one.stdout), { ok: true, delivered: false });
+    assert.ok(Date.now() - started < 15_000, "it gave up waiting");
+  });
+
   it("shows CLI Village's own commands in an open village", async () => {
     const { bus, hub, socket } = await openHub();
     const seen = [];
@@ -255,6 +289,17 @@ describe("cli-village watch", () => {
     const [hello, event] = jsonLines(out);
     assert.equal(hello.following, false);
     assert.equal(event.agent, "my-agent");
-    watcher.kill();
+
+    const exited = new Promise((resolve) => watcher.once("exit", (code) => resolve(code)));
+    if (isWindows) {
+      // Windows has no Ctrl+C signal to send to another program, so it's just stopped.
+      watcher.kill();
+      await within(exited);
+      return;
+    }
+    // Ctrl+C: it closes the village properly, exits with 0, and tidies its socket away.
+    watcher.kill("SIGINT");
+    assert.equal(await within(exited), 0);
+    assert.equal(existsSync(socket), false, "the socket is removed");
   });
 });

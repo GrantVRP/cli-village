@@ -5,12 +5,17 @@
 import net from "node:net";
 import type { EventBus } from "../events/bus.js";
 import type { EventSource, VillageEvent } from "../events/types.js";
-import { hubAddress, type HubAddress } from "./address.js";
+import { hubAddress, isSafeToConnect, type HubAddress } from "./address.js";
 
-export type Ack = { ok: true; seq?: number } | { ok: false; error: string };
+/** The village's answer to one event. `lost`: no answer came (the village closed or stopped answering). */
+export type Ack = { ok: true; seq?: number } | { ok: false; error: string; lost?: boolean };
+
+const ANSWER_TIMEOUT_MS = 5000;
 
 /** Connect to the open village, or null if none is open. */
 export function connect(address: HubAddress = hubAddress(), timeoutMs = 1500): Promise<net.Socket | null> {
+  // A socket in a folder someone else controls isn't the village: don't tell it anything.
+  if (!isSafeToConnect(address)) return Promise.resolve(null);
   return new Promise((resolve) => {
     const socket = net.createConnection(address.path);
     const timer = setTimeout(() => {
@@ -63,7 +68,7 @@ export class HubSender {
     this.closed = new Promise((resolve) => socket.once("close", () => resolve()));
     socket.on("error", () => socket.destroy());
     void this.closed.then(() => {
-      for (const resolve of this.pending.splice(0)) resolve({ ok: false, error: "The village closed before it answered." });
+      for (const resolve of this.pending.splice(0)) resolve({ ok: false, error: "The village closed before it answered.", lost: true });
     });
   }
 
@@ -72,10 +77,15 @@ export class HubSender {
     return socket ? new HubSender(socket) : null;
   }
 
-  send(event: unknown): Promise<Ack> {
-    if (this.socket.destroyed) return Promise.resolve({ ok: false, error: "The village closed." });
+  /** Send one event. If no answer comes in time, the connection is closed (answers come in order, so it can't go on). */
+  send(event: unknown, timeoutMs = ANSWER_TIMEOUT_MS): Promise<Ack> {
+    if (this.socket.destroyed) return Promise.resolve({ ok: false, error: "The village closed.", lost: true });
     return new Promise((resolve) => {
-      this.pending.push(resolve);
+      const timer = setTimeout(() => this.socket.destroy(), timeoutMs);
+      this.pending.push((ack) => {
+        clearTimeout(timer);
+        resolve(ack);
+      });
       this.socket.write(`${JSON.stringify(event)}\n`);
     });
   }
@@ -125,7 +135,7 @@ const sockets = new Set<net.Socket>();
  * there's something to send. CLI_VILLAGE_FORWARD=0 turns it off.
  */
 export function forwardToVillage(bus: EventBus, address: HubAddress = hubAddress()): void {
-  if (forwarded.has(bus) || process.env.CLI_VILLAGE_FORWARD === "0") return;
+  if (forwarded.has(bus) || process.env.CLI_VILLAGE_FORWARD === "0" || !isSafeToConnect(address)) return;
   forwarded.add(bus);
   let socket: net.Socket | null = null;
   bus.subscribe((event) => {

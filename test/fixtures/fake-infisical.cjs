@@ -6,6 +6,7 @@
 // notlogged, noproject, network, leaky, garbage, scanerror, scanold.
 // FAKE_SCAN=unredacted puts the real secret into the scan report (to prove
 // CLI Village never reads those fields). FAKE_LOG=<file> records each call.
+// FAKE_SCAN_TOUCH=<file> edits that file during a scan (like an editor saving).
 
 const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -80,6 +81,7 @@ if (argv[0] === "scan") {
       line++;
     }
   }
+  if (process.env.FAKE_SCAN_TOUCH) fs.appendFileSync(process.env.FAKE_SCAN_TOUCH, "edited during the scan\n");
   const report = flag("report-path");
   if (report) fs.writeFileSync(report, process.env.FAKE_SCAN === "badreport" ? "not json" : JSON.stringify(findings, null, 1));
   console.error(findings.length ? `WRN leaks found: ${findings.length}` : "INF no leaks found");

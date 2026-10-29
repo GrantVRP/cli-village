@@ -1,12 +1,12 @@
 // Small pieces: running programs safely, reading git and scan output, printing, and the terminal view.
 
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { dist, STRIPE_LIVE, tempDir } from "./helpers.mjs";
 
-const { quoteArg, spawnPlan } = await import(dist("lib/exec.js"));
+const { quoteArg, run, spawnPlan } = await import(dist("lib/exec.js"));
 const { parseStatus, looksLikeSecretsFile, explainGitFailure } = await import(dist("git/client.js"));
 const { readReport } = await import(dist("infisical/scan.js"));
 const { createFormatter } = await import(dist("views/log.js"));
@@ -22,6 +22,24 @@ const React = (await import("react")).default;
 const strip = (s) => s.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "");
 
 describe("running programs", () => {
+  it("gives up on a program that takes too long, even if something it started holds on", async () => {
+    // The program starts another one that shares its output, then both just wait.
+    const holder = `require("child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 15000)"], { stdio: "inherit" }); setTimeout(() => {}, 15000);`;
+    const started = Date.now();
+    const res = await run(process.execPath, ["-e", holder], { timeoutMs: 300 });
+    assert.equal(res.timedOut, true);
+    assert.ok(Date.now() - started < 6000, "it didn't wait for the program it started");
+    if (process.platform === "win32") {
+      // A .cmd runs inside cmd.exe: the whole tree has to stop, or the wait goes on.
+      const dir = tempDir();
+      writeFileSync(path.join(dir, "slow.cmd"), `@"${process.execPath}" -e "setTimeout(() => {}, 15000)"\r\n`);
+      const begun = Date.now();
+      const cmd = await run(path.join(dir, "slow.cmd"), [], { timeoutMs: 300 });
+      assert.equal(cmd.timedOut, true);
+      assert.ok(Date.now() - begun < 6000, "the .cmd's program was stopped too");
+    }
+  });
+
   it("quotes arguments the way Windows programs read them", () => {
     assert.equal(quoteArg("plain"), '"plain"');
     assert.equal(quoteArg('say "hi"'), '"say \\"hi\\""');
@@ -81,7 +99,7 @@ describe("git", () => {
   });
 
   it("knows which files hold secrets", () => {
-    for (const f of [".env", ".env.local", "config/.env.production", ".ENV"]) assert.equal(looksLikeSecretsFile(f), true, f);
+    for (const f of [".env", ".env.local", "config/.env.production", ".ENV", ".envrc"]) assert.equal(looksLikeSecretsFile(f), true, f);
     for (const f of [".env.example", ".env.sample", ".env.template", "env.ts", ".envrc.md", "src/.environment"]) assert.equal(looksLikeSecretsFile(f), false, f);
   });
 
@@ -91,7 +109,15 @@ describe("git", () => {
     assert.equal(fail(" ! [rejected]        main -> main (fetch first)").hint, "git pull");
     assert.equal(fail("remote: Permission to x denied to y.\nfatal: unable to access").hint, "gh auth login");
     assert.match(fail("fatal: unable to access 'https://github.com/': Could not resolve host: github.com").error, /Couldn't reach GitHub/);
-    assert.doesNotMatch(fail(`error: token ${STRIPE_LIVE} rejected weirdly`).error, /sk_live/);
+    assert.notEqual(fail("error: wrote 14013 objects, then broke").hint, "gh auth login", "a number isn't an HTTP 401");
+    // git's own words go in details (your terminal only), never in the error (which events carry).
+    const odd = fail(`error: token ${STRIPE_LIVE} rejected weirdly`);
+    assert.equal(odd.error, "git couldn't send.");
+    assert.match(odd.details, /rejected weirdly/);
+    assert.doesNotMatch(odd.details, /sk_live/);
+    const hook = fail("lint-staged: src/a.ts has problems\nhusky - pre-commit hook exited with code 1");
+    assert.match(hook.error, /A git hook .* stopped it\.$/);
+    assert.match(hook.details, /pre-commit hook exited/);
   });
 });
 
@@ -178,7 +204,15 @@ describe("terminal view", () => {
 
 describe("socket address", () => {
   it("is private to you, and can be overridden", () => {
-    assert.equal(hubAddress({}, "win32").path.startsWith("\\\\.\\pipe\\cli-village-"), true);
+    // Windows: a random pipe name nobody else can guess, made once and then kept.
+    const appData = tempDir();
+    const pipe = hubAddress({ LOCALAPPDATA: appData }, "win32").path;
+    assert.match(pipe, /^\\\\\.\\pipe\\cli-village-[0-9a-f]{32}$/);
+    assert.equal(hubAddress({ LOCALAPPDATA: appData }, "win32").path, pipe, "the same name every time");
+    assert.equal(readFileSync(path.join(appData, "cli-village", "pipe-name"), "utf8").trim(), pipe.split("\\").pop());
+    assert.notEqual(hubAddress({ LOCALAPPDATA: tempDir() }, "win32").path, pipe, "another user gets another name");
+    writeFileSync(path.join(appData, "cli-village", "pipe-name"), "broken");
+    assert.match(hubAddress({ LOCALAPPDATA: appData }, "win32").path, /cli-village-[0-9a-f]{32}$/, "a broken file is replaced");
     assert.equal(hubAddress({ CLI_VILLAGE_SOCKET: "my-pipe" }, "win32").path, "\\\\.\\pipe\\my-pipe");
     assert.equal(hubAddress({ CLI_VILLAGE_SOCKET: "//./pipe/other" }, "win32").path, "\\\\.\\pipe\\other");
     assert.equal(hubAddress({ XDG_RUNTIME_DIR: "/run/user/1000" }, "linux").path, "/run/user/1000/cli-village/village.sock");

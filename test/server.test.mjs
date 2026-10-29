@@ -41,11 +41,13 @@ after(async () => {
 });
 
 async function village() {
-  const webRoot = tempDir();
-  mkdirSync(path.join(webRoot, "assets"));
+  // The page's folder, with a private file right next to it that must never be served.
+  const dir = tempDir();
+  const webRoot = path.join(dir, "web");
+  mkdirSync(path.join(webRoot, "assets"), { recursive: true });
   writeFileSync(path.join(webRoot, "index.html"), "<!doctype html><title>village</title>");
   writeFileSync(path.join(webRoot, "assets", "app.js"), "console.log(1)");
-  writeFileSync(path.join(path.dirname(webRoot), "outside.txt"), "private");
+  writeFileSync(path.join(dir, "outside.txt"), "private");
   const bus = new EventBus();
   const server = await startVillageServer({ bus, mode: "live", version: "test", webRoot });
   servers.push(server);

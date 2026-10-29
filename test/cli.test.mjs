@@ -41,9 +41,17 @@ describe("basics", () => {
 
   it("checks the setup with doctor", () => {
     const report = JSON.parse(run(["doctor", "--json"]).stdout);
-    const names = report.checks.map((c) => c.name ?? c.label ?? c.id);
-    assert.ok(names.length >= 4);
-    assert.ok(report.checks.some((c) => c.status === "ok"));
+    assert.deepEqual(
+      report.checks.map((c) => c.id),
+      ["node", "git", "git-repo", "infisical", "infisical-login", "infisical-project"],
+    );
+    for (const check of report.checks) {
+      assert.ok(check.title && check.explain, `${check.id} explains itself`);
+      assert.ok(["ok", "warn", "fail", "skip"].includes(check.status), `${check.id}: ${check.status}`);
+    }
+    // The pretend Infisical is installed and logged in.
+    assert.equal(report.checks.find((c) => c.id === "infisical").status, "ok");
+    assert.equal(report.checks.find((c) => c.id === "infisical-login").status, "ok");
     const none = run(["doctor", "-q"], { env: { FAKE_MODE: "none" } });
     assert.match(none.stderr, /log/i);
   });
@@ -203,6 +211,100 @@ describe("the GITHUB HARBOR (status, commit, push)", () => {
     assert.match(res.stdout, /Stopped at the gate: 1 possible secret in keys\.py line 1 \(value hidden\)\. Nothing was sent\./);
     assert.match(res.stdout, /git commit --amend --no-edit/);
     assert.equal(git(remote, "rev-parse", "main"), before, "nothing reached the remote");
+  });
+
+  it("sends only this branch, under its own name, whatever git's push settings say", () => {
+    const { work, remote } = tempRepo({ remote: true });
+    writeFileSync(path.join(work, "README.md"), "# Hi\n");
+    assert.equal(run(["commit", "-q", "-m", "First", "--push"], { cwd: work }).code, 0);
+    // Another branch on GitHub gets a snapshot with a secret, which this push doesn't scan.
+    git(work, "switch", "-q", "-c", "other");
+    git(work, "push", "-q", "origin", "other");
+    writeFileSync(path.join(work, "keys.py"), `aws = "${AWS_KEY}"\n`);
+    git(work, "add", "keys.py");
+    git(work, "commit", "-q", "-m", "Keys");
+    git(work, "switch", "-q", "main");
+    git(work, "config", "push.default", "matching"); // a bare `git push` would send "other" too
+    writeFileSync(path.join(work, "a.txt"), "a\n");
+    const res = run(["commit", "-q", "-m", "A", "--push"], { cwd: work });
+    assert.equal(res.code, 0, res.all);
+    assert.equal(git(remote, "rev-parse", "main"), git(work, "rev-parse", "main"));
+    assert.notEqual(git(remote, "rev-parse", "other"), git(work, "rev-parse", "other"), "the unscanned branch stayed here");
+
+    // A branch made from origin/main goes up under its own name (and is linked to it), leaving main alone.
+    git(work, "switch", "-q", "-c", "my-idea", "origin/main");
+    writeFileSync(path.join(work, "idea.txt"), "idea\n");
+    const idea = run(["commit", "-m", "Idea", "--push", "--json"], { cwd: work });
+    assert.equal(idea.code, 0, idea.all);
+    assert.deepEqual(JSON.parse(idea.stdout).pushed, { remote: "origin", branch: "my-idea", commits: 1 });
+    assert.equal(git(remote, "rev-parse", "my-idea"), git(work, "rev-parse", "HEAD"));
+    assert.equal(git(remote, "rev-parse", "main"), git(work, "rev-parse", "main"));
+    assert.equal(git(work, "rev-parse", "--abbrev-ref", "@{u}"), "origin/my-idea");
+
+    // Deleted on GitHub (say, after the pull request was merged): status doesn't
+    // claim it's up to date, and push makes the branch again.
+    git(work, "push", "-q", "origin", "--delete", "my-idea");
+    git(work, "fetch", "-q", "--prune");
+    writeFileSync(path.join(work, "more.txt"), "more\n");
+    assert.equal(run(["commit", "-q", "-m", "More"], { cwd: work }).code, 0);
+    const status = JSON.parse(run(["status", "--json"], { cwd: work }).stdout);
+    assert.equal(status.upstreamGone, true);
+    assert.equal(status.unpushed, 2);
+    assert.doesNotMatch(run(["status"], { cwd: work }).stdout, /up to date/);
+    const again = run(["push", "--json"], { cwd: work });
+    assert.equal(again.code, 0, again.all);
+    assert.deepEqual(JSON.parse(again.stdout).pushed, { remote: "origin", branch: "my-idea", commits: 2 });
+    assert.equal(git(remote, "rev-parse", "my-idea"), git(work, "rev-parse", "HEAD"));
+  });
+
+  it("walks you through a merge conflict", () => {
+    const { work } = tempRepo();
+    writeFileSync(path.join(work, "a.txt"), "base\n");
+    git(work, "add", "a.txt");
+    git(work, "commit", "-q", "-m", "Base");
+    git(work, "switch", "-q", "-c", "other");
+    writeFileSync(path.join(work, "a.txt"), "theirs\n");
+    git(work, "commit", "-q", "-am", "Theirs");
+    git(work, "switch", "-q", "main");
+    writeFileSync(path.join(work, "a.txt"), "ours\n");
+    git(work, "commit", "-q", "-am", "Ours");
+    assert.notEqual(spawnSync("git", ["merge", "-q", "other"], { cwd: work }).status, 0, "the merge stops with a conflict");
+
+    assert.match(run(["status"], { cwd: work }).stdout, /Next: git add -- a\.txt/);
+    const refused = JSON.parse(run(["commit", "-m", "Merge", "--json"], { cwd: work }).stdout);
+    assert.match(refused.error, /merge conflicts.*git add/);
+    assert.equal(refused.hint, "git add -- a.txt");
+    writeFileSync(path.join(work, "a.txt"), "ours and theirs\n");
+    git(work, "add", "--", "a.txt");
+    const saved = run(["commit", "-m", "Merge other"], { cwd: work });
+    assert.equal(saved.code, 0, saved.all);
+    assert.equal(git(work, "rev-list", "--count", "--merges", "HEAD"), "1");
+  });
+
+  it("still gives the snapshot's id when sending it fails", () => {
+    const { work } = tempRepo(); // no remote, so the push step fails
+    writeFileSync(path.join(work, "a.txt"), "a\n");
+    const res = run(["commit", "-m", "A", "--push", "--json"], { cwd: work });
+    assert.equal(res.code, 1);
+    const data = JSON.parse(res.stdout);
+    assert.equal(data.ok, false);
+    assert.match(data.error, /isn't linked to GitHub/);
+    assert.equal(data.committed, true);
+    assert.equal(data.sha, git(work, "rev-parse", "--short", "HEAD"));
+    writeFileSync(path.join(work, "b.txt"), "b\n");
+    const quiet = run(["commit", "-q", "-m", "B", "--push"], { cwd: work });
+    assert.equal(quiet.code, 1);
+    assert.equal(quiet.stdout.trim(), git(work, "rev-parse", "--short", "HEAD"));
+  });
+
+  it("puts the files back after a stopped first snapshot, even if one changed during the scan", () => {
+    const { work } = tempRepo();
+    writeFileSync(path.join(work, "pay.js"), leakyLine);
+    writeFileSync(path.join(work, "notes.txt"), "notes\n");
+    const res = run(["commit", "-m", "First"], { cwd: work, env: { FAKE_SCAN_TOUCH: "notes.txt" } });
+    assert.equal(res.code, 1);
+    assert.doesNotMatch(res.all, /Couldn't put your changes back/);
+    assert.equal(git(work, "diff", "--cached", "--name-only"), "", "nothing is left staged");
   });
 
   it("refuses to go unchecked when the scanner is missing or broken", () => {
