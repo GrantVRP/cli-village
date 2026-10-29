@@ -5,6 +5,7 @@
 // Both views use this: the terminal view and the 3D village in the browser.
 // So: no Node-only imports, and `reduce` never changes the old state.
 
+import { commitCommand, explainCommand, explainProblem, explainTask } from "./explain.js";
 import {
   BUILDINGS,
   BUILDING_NAMES,
@@ -85,6 +86,8 @@ export interface Headline {
   title: string;
   subtitle?: string;
   command?: string;
+  /** The beginner explainer: what that command (or kind of work) means, in plain English. */
+  explain?: string;
   level: HeadlineLevel;
   agent?: string;
   building?: Building;
@@ -242,6 +245,7 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         title: event.title,
         subtitle: `${event.agent} at ${at(event.building)}`,
         command: event.command,
+        explain: explainTask(event.kind, event.command),
         level: "active",
         agent: event.agent,
         building: event.building,
@@ -319,6 +323,7 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
       next.headline = {
         title: `Problem: ${event.message}`,
         subtitle: `${event.agent} at ${at(building)} needs attention`,
+        explain: task ? explainProblem(task.kind) : undefined,
         level: "attention",
         agent: event.agent,
         building,
@@ -349,6 +354,8 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
       next.headline = {
         title: `Snapshot saved: "${event.message}"`,
         subtitle: `${event.agent} packed it into a crate for the GitHub Harbor`,
+        command: commitCommand(event.message),
+        explain: explainCommand("git commit"),
         level: "active",
         agent: event.agent,
         building: "harbor",
@@ -369,6 +376,8 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
       next.headline = {
         title: `Sent to GitHub: ${n} commit${n === 1 ? "" : "s"} to ${target}`,
         subtitle: `${event.agent}'s boat sails from the GITHUB HARBOR`,
+        command: `git push ${event.remote ?? "origin"} ${event.branch ?? "main"}`,
+        explain: explainCommand("git push"),
         level: "active",
         agent: event.agent,
         building: "harbor",

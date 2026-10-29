@@ -42,6 +42,29 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | `cli-village run -- npm start` | Runs your command with your secrets as environment variables (through `infisical run`). Your program's output goes straight to your terminal. |
 | `cli-village open --demo` | Opens the 3D village in your browser and plays the demo there (the terminal keeps its own view). Add `--no-open` to just print the address, `--port 4317` to pick the port, or `--speed 2`. |
 
+## Learning as you go (or not)
+
+By default, CLI Village explains itself. Every step says what's happening in plain English, shows the real command behind it, and adds one line about what that command does:
+
+```
+▶ Saving a snapshot of your work at the GITHUB HARBOR
+  → git commit -m "Retry failed payments"
+    Saves a snapshot of your work, with a note about what changed.
+```
+
+When something goes wrong, the explanation says what usually helps. In a long log, each explanation appears only the first time. Press `?` (in the terminal view or the 3D village) to see what the buildings, words and symbols mean.
+
+Already know all this? These flags work with every command, before or after its name (`cli-village --compact doctor` or `cli-village doctor --compact`):
+
+| Flag | What you get |
+|---|---|
+| `--compact` | The same facts in fewer lines: one line per step, no explanations. |
+| `-q`, `--quiet` | Only results and problems. Problems go to stderr, so `cli-village secrets fetch -q` prints just the key names, one per line, and `cli-village run -q -- npm test` shows only your program's output. |
+| `--json` | Machine-readable output on stdout: one JSON object, or one event per line for `--demo` and `open`. (`run` leaves stdout to your program and writes JSON lines to stderr.) |
+| `--no-animation` | Nothing moves: plain lines instead of the live screen, and a still 3D village (no orbiting camera, no walking, no drifting effects). |
+
+If you combine them, `--json` beats `--quiet`, which beats `--compact`. To make one your default in bash or zsh: `alias cv='cli-village --compact'`.
+
 ## The terminal view
 
 ```
@@ -50,6 +73,7 @@ CLI VILLAGE · demo                       5 robots · 1 working · no problems �
   ▶ Fetching dev secrets
     Bolt at the VAULT · Reading secret names (values stay hidden) (60%)
     → infisical export --env=dev --format=json (the real command)
+      Asks Infisical for one environment's secrets. You only see the names.
 ──────────────────────────────────────────────────────────────────────────────────────────────
 Robots                                  │ What's happening (summary)
 ▶ Bolt   VAULT      Fetching dev secrets │ 17:11:50 ▶ Bolt started: Fetching dev secrets
@@ -60,8 +84,8 @@ q quit · ? what do the buildings mean? · d more detail
 
 - The one thing that matters most right now is at the top, with the real command under it.
 - Problems turn the message red (with a ✖, so it doesn't rely on color) until they're fixed.
-- Keys: `q` quit (robots walk home first), `?` explains each building, `d` shows every detail.
-- No interactive terminal (a pipe, CI)? You get a plain log instead. `NO_COLOR` is respected.
+- Keys: `q` quit (robots walk home first), `?` explains the buildings, words and symbols, `d` shows every detail.
+- No interactive terminal (a pipe, CI), or `--quiet` / `--no-animation`? You get plain lines instead. `NO_COLOR` is respected.
 
 ## The Vault: your real secrets
 
@@ -71,6 +95,7 @@ These commands use the Infisical CLI you already have, with your own login (`inf
 $ cli-village secrets fetch --env dev
 ▶ Fetching dev secrets at the VAULT
   → infisical export --env=dev --format=json
+    Asks Infisical for one environment's secrets. You only see the names.
 ✔ Loaded 5 secrets from dev
 
   Key names (values stay hidden):
@@ -105,7 +130,8 @@ $ cli-village secrets diff dev prod
 - The glass column in the plaza shows the village's health: green → yellow → orange → red.
 - The camera drifts slowly and glides to wherever the most important thing is happening. The caption at the top says what that is (and the real command).
 - **Drag** to look around, **scroll** to zoom, **click** a building to see its log. Keys: `?` help, `n` night, `h` back to the whole village, `Esc` close.
-- If your system asks for less motion (*reduce motion*), the camera stops drifting and wind effects are turned off.
+- If your system asks for less motion (*reduce motion*), or you start it with `--no-animation`, the village stands still: robots appear where they're going, and the camera only moves when you click a building or press `h`.
+- With `--compact`, the caption drops the explanation line and the key hints are hidden.
 
 | Night | A building's log |
 |---|---|
@@ -134,7 +160,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - [x] 3. Terminal view
 - [x] 4. 3D village
 - [x] 5. Vault (real Infisical commands)
-- [ ] 6. Beginner explainer + expert flags
+- [x] 6. Beginner explainer + expert flags
 - [ ] 7. GitHub Harbor with the secret-scan checkpoint
 - [ ] 8. Library + external-agent event API
 - [ ] 9. Tests + CI

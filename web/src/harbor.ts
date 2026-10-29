@@ -250,7 +250,7 @@ export class Harbor {
     this.scanner.material.emissiveIntensity = this.status === "scanning" ? 2 + Math.sin(t * 14) : this.status === "blocked" ? 2 * blink : 0.5;
     this.beam.material.color.set(lampColor);
     this.beam.material.opacity = this.status === "scanning" ? 0.16 + Math.sin(t * 10) * 0.06 : this.status === "blocked" ? 0.22 * blink : 0;
-    this.beam.rotation.y += dt * 2;
+    this.beam.rotation.y = t * 2;
     this.alarm.intensity = this.status === "blocked" ? 9 * blink : 0;
 
     // Boat: bob at the dock, sail away on push, then a fresh boat glides in.

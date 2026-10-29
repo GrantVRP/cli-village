@@ -30,9 +30,11 @@
         <div id="caption-title" class="caption-title">Waiting for the village…</div>
         <div id="caption-subtitle" class="caption-subtitle"></div>
         <div id="caption-command" class="caption-command" hidden>
-          <span class="caption-command-label">Try:</span>
+          <span class="caption-command-label">Real command:</span>
           <code id="caption-command-text"></code>
         </div>
+        <!-- The beginner explainer: what that command means. Hidden with --compact. -->
+        <div id="caption-explain" class="caption-explain"></div>
       </div>
     </section>
 
@@ -57,11 +59,14 @@
           work. The glowing column in the plaza shows how healthy the village is.
         </p>
         <div id="help-buildings" class="help-buildings"></div>
+        <h3>Words you'll see</h3>
+        <div id="help-words" class="help-words"></div>
         <p class="help-keys">
           <kbd>drag</kbd> look around · <kbd>scroll</kbd> zoom · <kbd>click</kbd> a building to see its log ·
           <kbd>n</kbd> night · <kbd>h</kbd> back to the whole village · <kbd>?</kbd> this help · <kbd>Esc</kbd> close
         </p>
         <p class="help-safe">Secret values never appear here: only key names and counts.</p>
+        <p id="help-experts" class="help-experts"></p>
       </div>
     </div>
 

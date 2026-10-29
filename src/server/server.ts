@@ -17,9 +17,17 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { EventBus } from "../events/bus.js";
 import type { VillageEvent } from "../events/types.js";
 
+/** How the page should look: set by --compact and --no-animation. */
+export interface PageView {
+  /** Hide the beginner explanations and key hints. */
+  compact: boolean;
+  /** false = a still village: no orbiting camera, no walking, no drifting effects. */
+  animation: boolean;
+}
+
 /** Messages the server sends to the page. */
 export type ServerMessage =
-  | { kind: "hello"; mode: string; version: string; history: readonly VillageEvent[] }
+  | { kind: "hello"; mode: string; version: string; view: PageView; history: readonly VillageEvent[] }
   | { kind: "event"; event: VillageEvent }
   | { kind: "end" };
 
@@ -27,6 +35,7 @@ export interface VillageServerOptions {
   bus: EventBus;
   mode: string;
   version: string;
+  view?: PageView;
   /** 0 = let the computer pick a free port. */
   port?: number;
   /** Folder with the built page. Defaults to dist/web next to this file. */
@@ -161,7 +170,8 @@ export async function startVillageServer(options: VillageServerOptions): Promise
   };
 
   wss.on("connection", (ws: WebSocket) => {
-    send(ws, { kind: "hello", mode: options.mode, version: options.version, history: options.bus.recent() });
+    const view = options.view ?? { compact: false, animation: true };
+    send(ws, { kind: "hello", mode: options.mode, version: options.version, view, history: options.bus.recent() });
     if (options.bus.isClosed) {
       send(ws, { kind: "end" });
       return;

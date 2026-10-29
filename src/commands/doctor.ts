@@ -6,6 +6,7 @@ import path from "node:path";
 import { findExecutable, run } from "../lib/exec.js";
 import { maskTokens } from "../lib/redact.js";
 import { bold, cyan, dim, green, red, symbols, yellow } from "../lib/style.js";
+import { DEFAULT_UI, type Detail, type Ui } from "../lib/ui.js";
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";
 
@@ -271,53 +272,61 @@ const LABELS: Record<CheckStatus, (text: string) => string> = {
   skip: (t) => dim(t),
 };
 
-function printCheck(check: CheckResult): void {
+type Write = (line: string) => void;
+
+function printCheck(check: CheckResult, detail: Detail, write: Write): void {
+  if (detail === "quiet" && check.status !== "fail") return;
   const label = LABELS[check.status](`${symbols[check.status]} ${check.status.padEnd(4)}`);
   const title = check.status === "skip" ? dim(check.title.padEnd(18)) : bold(check.title.padEnd(18));
-  const detail = check.status === "skip" ? dim(check.detail) : check.detail;
-  console.log(`  ${label}  ${title} ${detail}`);
-  console.log(`          ${dim(`${check.explain} ${symbols.arrow}`)} ${cyan(check.command)}`);
+  const found = check.status === "skip" ? dim(check.detail) : check.detail;
+  write(`  ${label}  ${title} ${found}`);
+  // The beginner explainer: what this check is about, and the real command behind it.
+  if (detail === "full") write(`          ${dim(`${check.explain} ${symbols.arrow}`)} ${cyan(check.command)}`);
   if (check.fix && (check.status === "fail" || check.status === "warn")) {
     const [first, ...rest] = check.fix.split("\n");
-    console.log(`          ${bold("Fix:")} ${first}`);
-    for (const line of rest) console.log(`               ${line}`);
+    write(`          ${bold("Fix:")} ${first}`);
+    for (const line of rest) write(`               ${line}`);
   }
 }
 
-function printSummary(checks: CheckResult[]): void {
+function printSummary(checks: CheckResult[], detail: Detail, write: Write): void {
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
-  console.log("");
+  const things = `${fails.length} thing${fails.length > 1 ? "s" : ""} to fix`;
+  if (detail === "quiet") {
+    if (fails.length) write(red(`${symbols.fail} ${things}.`));
+    return;
+  }
+  if (detail === "full") write("");
   if (fails.length === 0 && warns.length === 0) {
-    console.log(bold(green(`${symbols.ok} All set! CLI Village is ready to use.`)));
+    write(bold(green(`${symbols.ok} All set! CLI Village is ready to use.`)));
     return;
   }
   if (fails.length === 0) {
     const names = warns.map((c) => c.title).join(", ");
-    console.log(bold(yellow(`${symbols.warn} Ready, with ${warns.length} note${warns.length > 1 ? "s" : ""}: ${names}.`)));
+    write(bold(yellow(`${symbols.warn} Ready, with ${warns.length} note${warns.length > 1 ? "s" : ""}: ${names}.`)));
     return;
   }
-  const names = fails.map((c) => c.title).join(", ");
-  console.log(bold(red(`${symbols.fail} ${fails.length} thing${fails.length > 1 ? "s" : ""} to fix: ${names}.`)));
-  console.log(dim("  Follow the Fix lines above, then run `cli-village doctor` again."));
+  write(bold(red(`${symbols.fail} ${things}: ${fails.map((c) => c.title).join(", ")}.`)));
+  if (detail === "full") write(dim("  Follow the Fix lines above, then run `cli-village doctor` again."));
 }
 
-export interface DoctorOptions {
-  json?: boolean;
-}
-
-/** Runs every check. Returns the exit code: 1 if anything must be fixed, otherwise 0. */
-export async function runDoctor(options: DoctorOptions = {}): Promise<number> {
-  const json = options.json === true;
+/**
+ * Runs every check. Returns the exit code: 1 if anything must be fixed, otherwise 0.
+ * --compact: one line per check. --quiet: only what must be fixed (on stderr). --json: one JSON report.
+ */
+export async function runDoctor(ui: Ui = DEFAULT_UI): Promise<number> {
+  const { json, detail } = ui;
+  const write: Write = (line) => (detail === "quiet" ? process.stderr : process.stdout).write(`${line}\n`);
   const report = (check: CheckResult) => {
-    if (!json) printCheck(check);
+    if (!json) printCheck(check, detail, write);
     return check;
   };
 
-  if (!json) {
-    console.log("");
-    console.log(`${bold("CLI Village doctor")} ${dim("· checking that your tools are ready")}`);
-    console.log("");
+  if (!json && detail !== "quiet") {
+    if (detail === "full") write("");
+    write(`${bold("CLI Village doctor")} ${dim("· checking that your tools are ready")}`);
+    if (detail === "full") write("");
   }
 
   const gitPath = findExecutable("git");
@@ -335,8 +344,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<number> {
   if (json) {
     console.log(JSON.stringify({ ok, checks }, null, 2));
   } else {
-    printSummary(checks);
-    console.log("");
+    printSummary(checks, detail, write);
+    if (detail === "full") write("");
   }
   return ok ? 0 : 1;
 }

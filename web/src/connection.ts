@@ -6,13 +6,19 @@ import type { VillageState } from "../../src/events/state.js";
 import { VillageStore } from "../../src/events/store.js";
 import type { VillageEvent } from "../../src/events/types.js";
 
+/** How the page should look (from --compact and --no-animation in the terminal). */
+export interface PageView {
+  compact: boolean;
+  animation: boolean;
+}
+
 type ServerMessage =
-  | { kind: "hello"; mode: string; version: string; history: VillageEvent[] }
+  | { kind: "hello"; mode: string; version: string; view?: PageView; history: VillageEvent[] }
   | { kind: "event"; event: VillageEvent }
   | { kind: "end" };
 
 export interface ConnectionHandlers {
-  onHello(mode: string, version: string): void;
+  onHello(mode: string, version: string, view: PageView): void;
   /** A message to show about the connection, or null when all is well. */
   onStatus(message: string | null): void;
 }
@@ -33,7 +39,7 @@ export function connect(token: string, handlers: ConnectionHandlers): StateSourc
 
   const handle = (data: ServerMessage) => {
     if (data.kind === "hello") {
-      handlers.onHello(data.mode, data.version);
+      handlers.onHello(data.mode, data.version, data.view ?? { compact: false, animation: true });
       // Start fresh from the server's history, so a reconnect never counts an event twice.
       store = new VillageStore();
       for (const event of data.history) store.apply(event);

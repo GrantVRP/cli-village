@@ -141,11 +141,16 @@ export class Robot {
     this.lookTarget = lookAt;
   }
 
-  /** Put the robot somewhere right away (when it first appears). */
+  /** Put the robot somewhere right away, already facing the right way (when it first appears, or in still mode). */
   place(point: THREE.Vector3, lookAt: THREE.Vector3 | null): void {
     this.group.position.copy(point);
     this.path = [];
     this.lookTarget = lookAt;
+    if (lookAt) {
+      const to = lookAt.clone().sub(point);
+      this.heading = Math.atan2(to.x, to.z);
+      this.group.rotation.y = this.heading;
+    }
   }
 
   update(dt: number, t: number, trails: TrailSink): void {
