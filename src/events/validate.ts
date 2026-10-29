@@ -24,7 +24,9 @@ const AGENT_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$/;
 const TASK_ID = /^[A-Za-z0-9][\w.:#-]{0,63}$/;
 const KEY_NAME = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/;
 const GIT_REF = /^[\w./-]{1,100}$/;
-const SHA = /^[0-9a-f]{4,40}$/i;
+const SHA = /^[0-9a-f]{4,64}$/i;
+const MAX_SOURCES = 10;
+const MAX_SOURCE = 120;
 
 class InvalidEvent extends Error {}
 
@@ -120,6 +122,36 @@ class Fields {
     });
   }
 
+  /**
+   * Web pages research came from. Each is cut down to site + path: the query
+   * string, #fragment and any login are dropped (they can hold tokens), and
+   * the rest goes through the privacy guard.
+   */
+  optionalSources(): string[] | undefined {
+    const value = this.raw.sources;
+    if (value === undefined || value === null) return undefined;
+    const usage = `"sources" must be a list of web addresses, like ["https://docs.stripe.com/api"].`;
+    if (!Array.isArray(value)) this.fail(usage);
+    if (value.length > MAX_SOURCES) this.fail(`"sources" can list at most ${MAX_SOURCES} addresses.`);
+    const seen = new Set<string>();
+    for (const item of value) {
+      let url: URL | null = null;
+      try {
+        // Already cut down (site + path, no https://) is fine too, so a checked event checks out the same again.
+        url = typeof item === "string" ? new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(item) ? item : `https://${item}`) : null;
+      } catch {
+        url = null;
+      }
+      if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) this.fail(usage);
+      // A site name that looks like a token is left out. In the path, each part is checked on its own,
+      // so a token becomes [hidden] and the rest of the address stays readable.
+      if (this.guard.clean(url.host) !== url.host) continue;
+      const parts = url.pathname === "/" ? [] : url.pathname.split("/").map((part) => this.guard.clean(part));
+      seen.add(`${url.host}${parts.join("/")}`.slice(0, MAX_SOURCE));
+    }
+    return [...seen];
+  }
+
   optionalSha(): string | undefined {
     const value = this.raw.sha;
     if (value === undefined || value === null) return undefined;
@@ -179,6 +211,7 @@ function build(input: unknown, guard: SecretGuard): EventBody {
         message: f.optionalText("message"),
         keys: f.optionalKeys(),
         count: f.optionalCount("count"),
+        sources: f.optionalSources(),
       });
     case "fail":
       return compact({ type, agent, task: f.taskId(), message: f.text("message") });

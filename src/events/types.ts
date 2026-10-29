@@ -101,6 +101,8 @@ export interface DoneEvent extends EventMeta {
   keys?: string[];
   /** How many things were handled, e.g. number of secrets or tests. */
   count?: number;
+  /** For research: the web pages it came from, as site + path only (e.g. "docs.stripe.com/api/errors"). */
+  sources?: string[];
 }
 
 export interface FailEvent extends EventMeta {

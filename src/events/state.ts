@@ -148,6 +148,13 @@ export function summarizeKeys(keys: readonly string[], total = keys.length): str
   return more > 0 ? `${shown} +${more} more` : shown;
 }
 
+/** "from docs.stripe.com, github.com +2 more": the sites research came from. */
+export function summarizeSources(sources: readonly string[]): string {
+  const sites = [...new Set(sources.map((s) => s.split("/")[0]!))];
+  const more = sites.length - Math.min(sites.length, 3);
+  return `from ${sites.slice(0, 3).join(", ")}${more > 0 ? ` +${more} more` : ""}`;
+}
+
 function computeHealth(buildings: Record<Building, BuildingState>): number {
   let health = 1;
   for (const b of Object.values(buildings)) {
@@ -277,7 +284,11 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
     case "done": {
       const task = state.tasks[event.task];
       const building = task?.building ?? agent.location;
-      const keys = event.keys?.length ? ` (${summarizeKeys(event.keys, event.count)})` : "";
+      const keys = event.keys?.length
+        ? ` (${summarizeKeys(event.keys, event.count)})`
+        : event.sources?.length
+          ? ` (${summarizeSources(event.sources)})`
+          : "";
       const text = event.message ?? (task ? `${task.title}: done` : "Finished");
       putAgent({ ...agent, status: "idle", task: agent.task?.id === event.task ? undefined : agent.task, say: text });
       const { [event.task]: _finished, ...tasks } = state.tasks;

@@ -5,6 +5,7 @@
 import type { EventBus } from "../events/bus.js";
 import { secretGuard } from "../events/guard.js";
 import { KIND_TO_BUILDING, type Building, type TaskKind } from "../events/types.js";
+import { forwardToVillage } from "../hub/client.js";
 
 /** The robot name for work you start yourself. */
 export const YOU = "you";
@@ -19,7 +20,10 @@ export class Worker {
   constructor(
     readonly bus: EventBus,
     readonly name = YOU,
-  ) {}
+  ) {
+    // If a village is open (in another terminal or the browser), it shows this work too.
+    forwardToVillage(bus);
+  }
 
   /** Walk somewhere (only if not already there). */
   walk(to: Building): void {
