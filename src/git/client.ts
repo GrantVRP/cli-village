@@ -102,11 +102,14 @@ export class Git {
     return parseStatus(res.stdout);
   }
 
-  /** How many snapshots aren't on GitHub (or any remote) yet. */
-  async unpushedCount(): Promise<number> {
-    const res = await this.run(["rev-list", "--count", "HEAD", "--not", "--remotes"]);
+  /**
+   * How many snapshots `remote` doesn't have yet (or, without one, that no
+   * remote has). Null if git couldn't count them: then don't assume there are none.
+   */
+  async unpushedCount(remote?: string): Promise<number | null> {
+    const res = await this.run(["rev-list", "--count", "HEAD", "--not", remote ? `--remotes=${remote}` : "--remotes"]);
     const n = Number(res.stdout.trim());
-    return res.code === 0 && Number.isInteger(n) ? n : 0;
+    return res.code === 0 && res.stdout.trim() !== "" && Number.isInteger(n) ? n : null;
   }
 
   async remotes(): Promise<string[]> {
@@ -123,14 +126,18 @@ export class Git {
   /**
    * Which remote a branch is sent to, picked the way git does: the branch's
    * pushRemote, then remote.pushDefault, then the branch's own remote, then
-   * "origin", then the first one there is.
+   * "origin", then the first one there is. `separate`: you set a remote just
+   * for pushing (say, your fork), different from where you pull from.
    */
-  async pushRemote(branch: string, remotes: string[]): Promise<string | undefined> {
-    for (const key of [`branch.${branch}.pushRemote`, "remote.pushDefault", `branch.${branch}.remote`]) {
+  async pushRemote(branch: string, remotes: string[]): Promise<{ name: string; separate: boolean } | undefined> {
+    for (const key of [`branch.${branch}.pushRemote`, "remote.pushDefault"]) {
       const name = await this.config(key);
-      if (remotes.includes(name)) return name;
+      if (remotes.includes(name)) return { name, separate: true };
     }
-    return remotes.includes("origin") ? "origin" : remotes[0];
+    const own = await this.config(`branch.${branch}.remote`);
+    if (remotes.includes(own)) return { name: own, separate: false };
+    const name = remotes.includes("origin") ? "origin" : remotes[0];
+    return name ? { name, separate: false } : undefined;
   }
 
   /**

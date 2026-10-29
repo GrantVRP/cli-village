@@ -23,7 +23,7 @@ cli-village emit '{"type":"done","agent":"claude-code","task":"r1","message":"Fo
 ### The local socket
 
 - **macOS and Linux:** `$XDG_RUNTIME_DIR/cli-village/village.sock`, or `~/.cli-village/village.sock`. The folder is only open to you (0700), and so is the socket (0600).
-- **Windows:** a named pipe with a random name, `\\.\pipe\cli-village-<32 random letters and digits>`. The name is kept in `%LOCALAPPDATA%\cli-village\pipe-name`, a file only you can read (CLI Village makes it the first time it runs). Only your account can write to the pipe, and nobody else can guess its name and take it first.
+- **Windows:** a named pipe, `\\.\pipe\cli-village-<32 random letters and digits>`, with a new random name each time a village opens. While it's open, the name is in `%LOCALAPPDATA%\cli-village\pipe-name`, a file only you can read; when it closes, the file goes. (No file: no village is open.) Only your account can write to the pipe, and a name that's never used twice can't be taken by someone who saw it before.
 - `cli-village emit --help` prints the exact path on your computer. Set `CLI_VILLAGE_SOCKET` to use another one (on Windows, a pipe name). On macOS and Linux its folder must be one only you can open (`chmod 700`): the village won't change a folder you picked, it just refuses an open one.
 
 For every line you send, you get one line back: `{"ok":true,"seq":12}` or `{"ok":false,"error":"…"}`. The error says what to fix.
@@ -35,6 +35,7 @@ import net from "node:net";
 import os from "node:os";
 const { LOCALAPPDATA, XDG_RUNTIME_DIR } = process.env;
 const path =
+  // (On Windows, if the file isn't there, no village is open.)
   process.platform === "win32" ? `\\\\.\\pipe\\${fs.readFileSync(`${LOCALAPPDATA}\\cli-village\\pipe-name`, "utf8").trim()}`
   : XDG_RUNTIME_DIR ? `${XDG_RUNTIME_DIR}/cli-village/village.sock`
   : `${os.homedir()}/.cli-village/village.sock`;

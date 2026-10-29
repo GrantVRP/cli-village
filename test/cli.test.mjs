@@ -231,7 +231,7 @@ describe("the GITHUB HARBOR (status, commit, push)", () => {
     assert.equal(git(remote, "rev-parse", "main"), git(work, "rev-parse", "main"));
     assert.notEqual(git(remote, "rev-parse", "other"), git(work, "rev-parse", "other"), "the unscanned branch stayed here");
 
-    // A branch made from origin/main goes up under its own name (and is linked to it), leaving main alone.
+    // A branch made from origin/main goes up under its own name, leaving main (and the branch's link to it) alone.
     git(work, "switch", "-q", "-c", "my-idea", "origin/main");
     writeFileSync(path.join(work, "idea.txt"), "idea\n");
     const idea = run(["commit", "-m", "Idea", "--push", "--json"], { cwd: work });
@@ -239,10 +239,11 @@ describe("the GITHUB HARBOR (status, commit, push)", () => {
     assert.deepEqual(JSON.parse(idea.stdout).pushed, { remote: "origin", branch: "my-idea", commits: 1 });
     assert.equal(git(remote, "rev-parse", "my-idea"), git(work, "rev-parse", "HEAD"));
     assert.equal(git(remote, "rev-parse", "main"), git(work, "rev-parse", "main"));
-    assert.equal(git(work, "rev-parse", "--abbrev-ref", "@{u}"), "origin/my-idea");
+    assert.equal(git(work, "rev-parse", "--abbrev-ref", "@{u}"), "origin/main", "the link you had is kept");
 
     // Deleted on GitHub (say, after the pull request was merged): status doesn't
-    // claim it's up to date, and push makes the branch again.
+    // claim it's up to date, and push makes the branch again (and links it).
+    git(work, "branch", "-q", "--set-upstream-to=origin/my-idea");
     git(work, "push", "-q", "origin", "--delete", "my-idea");
     git(work, "fetch", "-q", "--prune");
     writeFileSync(path.join(work, "more.txt"), "more\n");
@@ -255,6 +256,75 @@ describe("the GITHUB HARBOR (status, commit, push)", () => {
     assert.equal(again.code, 0, again.all);
     assert.deepEqual(JSON.parse(again.stdout).pushed, { remote: "origin", branch: "my-idea", commits: 2 });
     assert.equal(git(remote, "rev-parse", "my-idea"), git(work, "rev-parse", "HEAD"));
+    assert.equal(git(work, "rev-parse", "--abbrev-ref", "@{u}"), "origin/my-idea");
+  });
+
+  it("scans everything the remote you push to doesn't have, even what another remote has", () => {
+    const { dir, work, remote } = tempRepo({ remote: true });
+    writeFileSync(path.join(work, "README.md"), "# Hi\n");
+    assert.equal(run(["commit", "-q", "-m", "First", "--push"], { cwd: work }).code, 0);
+    // A second remote already has a snapshot with a secret in it, and you bring it in.
+    git(dir, "init", "-q", "--bare", "internal.git");
+    git(work, "remote", "add", "internal", path.join(dir, "internal.git"));
+    git(work, "switch", "-q", "-c", "tmp");
+    writeFileSync(path.join(work, "keys.py"), `aws = "${AWS_KEY}"\n`);
+    git(work, "add", "keys.py");
+    git(work, "commit", "-q", "-m", "Keys");
+    git(work, "push", "-q", "internal", "tmp:main");
+    git(work, "switch", "-q", "main");
+    git(work, "branch", "-q", "-D", "tmp");
+    git(work, "fetch", "-q", "internal");
+    git(work, "merge", "-q", "--ff-only", "internal/main");
+    const before = git(remote, "rev-parse", "main");
+    const res = run(["push"], { cwd: work });
+    assert.equal(res.code, 1, res.all);
+    assert.match(res.stdout, /Stopped at the gate: 1 possible secret in keys\.py/);
+    assert.equal(git(remote, "rev-parse", "main"), before, "nothing reached origin");
+
+    // Pushing to your fork leaves where you pull from alone.
+    git(dir, "init", "-q", "--bare", "fork.git");
+    git(work, "remote", "add", "fork", path.join(dir, "fork.git"));
+    git(work, "config", "remote.pushDefault", "fork");
+    git(work, "switch", "-q", "-c", "topic", "origin/main");
+    writeFileSync(path.join(work, "topic.txt"), "topic\n");
+    const forked = run(["commit", "-m", "Topic", "--push", "--json"], { cwd: work });
+    assert.equal(forked.code, 0, forked.all);
+    // The fork is empty, so both snapshots on this branch go.
+    assert.deepEqual(JSON.parse(forked.stdout).pushed, { remote: "fork", branch: "topic", commits: 2 });
+    assert.equal(git(path.join(dir, "fork.git"), "rev-parse", "topic"), git(work, "rev-parse", "HEAD"));
+    assert.equal(git(work, "rev-parse", "--abbrev-ref", "@{u}"), "origin/main");
+  });
+
+  it("never sends a submodule's snapshots along (the scan can't see inside them)", () => {
+    const { dir, work, remote } = tempRepo({ remote: true });
+    const allowFile = ["-c", "protocol.file.allow=always"];
+    // A submodule with its own "GitHub".
+    git(dir, "init", "-q", "--bare", "-b", "main", "sub.git");
+    git(dir, "init", "-q", "-b", "main", "sub-src");
+    const src = path.join(dir, "sub-src");
+    for (const [k, v] of [["user.name", "Test Robot"], ["user.email", "robot@example.com"], ["commit.gpgsign", "false"]]) git(src, "config", k, v);
+    writeFileSync(path.join(src, "lib.txt"), "lib\n");
+    git(src, "add", "lib.txt");
+    git(src, "commit", "-q", "-m", "Lib");
+    git(src, "push", "-q", path.join(dir, "sub.git"), "main");
+    git(work, ...allowFile, "submodule", "add", "-q", path.join(dir, "sub.git"), "sub");
+    git(work, "commit", "-q", "-m", "Add sub");
+    assert.equal(run(["push", "-q"], { cwd: work }).code, 0);
+
+    // A secret in the submodule, then the bump in the main project.
+    const sub = path.join(work, "sub");
+    for (const [k, v] of [["user.name", "Test Robot"], ["user.email", "robot@example.com"], ["commit.gpgsign", "false"]]) git(sub, "config", k, v);
+    writeFileSync(path.join(sub, "keys.py"), `aws = "${AWS_KEY}"\n`);
+    git(sub, "add", "keys.py");
+    git(sub, "commit", "-q", "-m", "Keys");
+    git(work, "add", "sub");
+    git(work, "commit", "-q", "-m", "Bump sub");
+    git(work, "config", "push.recurseSubmodules", "on-demand"); // a bare `git push` would send the submodule's snapshot too
+    const subBefore = git(path.join(dir, "sub.git"), "rev-parse", "main");
+    const res = run(["push"], { cwd: work });
+    assert.equal(res.code, 1, res.all);
+    assert.equal(git(path.join(dir, "sub.git"), "rev-parse", "main"), subBefore, "the submodule's secret stayed here");
+    assert.notEqual(git(remote, "rev-parse", "main"), git(work, "rev-parse", "HEAD"));
   });
 
   it("walks you through a merge conflict", () => {

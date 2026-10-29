@@ -95,3 +95,8 @@ export const jsonLines = (text) =>
     .split(/\r?\n/)
     .filter((l) => l.trim().startsWith("{"))
     .map((l) => JSON.parse(l));
+
+// Code the tests run in this process never sends events to a village you have open,
+// and never looks for one in your own folders.
+process.env.CLI_VILLAGE_FORWARD = "0";
+process.env.CLI_VILLAGE_SOCKET = testSocket();

@@ -1,7 +1,7 @@
 // Small pieces: running programs safely, reading git and scan output, printing, and the terminal view.
 
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { dist, STRIPE_LIVE, tempDir } from "./helpers.mjs";
@@ -204,15 +204,16 @@ describe("terminal view", () => {
 
 describe("socket address", () => {
   it("is private to you, and can be overridden", () => {
-    // Windows: a random pipe name nobody else can guess, made once and then kept.
+    // Windows: the open village's pipe is named in a file in your own AppData. No file, no village.
     const appData = tempDir();
-    const pipe = hubAddress({ LOCALAPPDATA: appData }, "win32").path;
-    assert.match(pipe, /^\\\\\.\\pipe\\cli-village-[0-9a-f]{32}$/);
-    assert.equal(hubAddress({ LOCALAPPDATA: appData }, "win32").path, pipe, "the same name every time");
-    assert.equal(readFileSync(path.join(appData, "cli-village", "pipe-name"), "utf8").trim(), pipe.split("\\").pop());
-    assert.notEqual(hubAddress({ LOCALAPPDATA: tempDir() }, "win32").path, pipe, "another user gets another name");
-    writeFileSync(path.join(appData, "cli-village", "pipe-name"), "broken");
-    assert.match(hubAddress({ LOCALAPPDATA: appData }, "win32").path, /cli-village-[0-9a-f]{32}$/, "a broken file is replaced");
+    const registry = path.join(appData, "cli-village", "pipe-name");
+    assert.deepEqual(hubAddress({ LOCALAPPDATA: appData }, "win32"), { path: "", registry });
+    mkdirSync(path.dirname(registry));
+    const name = `cli-village-${"ab12".repeat(8)}`;
+    writeFileSync(registry, `${name}\n`);
+    assert.equal(hubAddress({ LOCALAPPDATA: appData }, "win32").path, `\\\\.\\pipe\\${name}`);
+    writeFileSync(registry, "\\\\.\\pipe\\someone-elses");
+    assert.equal(hubAddress({ LOCALAPPDATA: appData }, "win32").path, "", "only a name of ours counts");
     assert.equal(hubAddress({ CLI_VILLAGE_SOCKET: "my-pipe" }, "win32").path, "\\\\.\\pipe\\my-pipe");
     assert.equal(hubAddress({ CLI_VILLAGE_SOCKET: "//./pipe/other" }, "win32").path, "\\\\.\\pipe\\other");
     assert.equal(hubAddress({ XDG_RUNTIME_DIR: "/run/user/1000" }, "linux").path, "/run/user/1000/cli-village/village.sock");
