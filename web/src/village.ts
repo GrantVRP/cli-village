@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import { WAITING } from "../../src/events/explain.js";
-import { isWalking, type AgentState, type VillageState } from "../../src/events/state.js";
+import { harborLoad, isWalking, type AgentState, type VillageState } from "../../src/events/state.js";
 import { BUILDINGS, type Building } from "../../src/events/types.js";
 import { createBuildingModels, type BuildingModel } from "./buildings.js";
 import type { CameraRig } from "./camera.js";
@@ -148,7 +148,7 @@ export class Village {
     }
 
     this.column.setHealth(state.health);
-    this.harbor.sync(state.crates, state.stats.pushes, state.lastPush);
+    this.harbor.sync(harborLoad(state), state.stats.pushes, state.lastPush);
     const mode = document.body.dataset.mode ?? "";
     this.overlay.setStatus(state, mode);
     // Live, and nothing has happened yet: suggest something to try.
