@@ -32,7 +32,7 @@ const COMMANDS: readonly (readonly [RegExp, string])[] = [
   [/^gh\s+pr\s+create\b/, "Opens a pull request: asks to add your branch's changes to main."],
   [/^gh\s+pr\s+merge\b/, "Adds a pull request's changes to main."],
   [
-    /^(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|^(npx\s+)?(vitest|jest|mocha)\b|^node\s+--test\b|^pytest\b/,
+    /^(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|^(npx\s+)?(vitest|jest|mocha)\b|^node\s+--test\b|^(python3?\s+-m\s+)?pytest\b|^(cargo|go)\s+test\b/,
     "Runs the tests: small programs that check your code still works.",
   ],
   [/^(npm|pnpm|yarn|bun)\s+(install|i|ci|add)\b/, "Downloads the packages (code by other people) this project uses."],
