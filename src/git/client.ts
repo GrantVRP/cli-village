@@ -2,6 +2,7 @@
 // GitHub (push). Uses your own git and your own login; CLI Village never sees
 // or stores your GitHub credentials.
 
+import path from "node:path";
 import { secretGuard } from "../events/guard.js";
 import { findExecutable, run, type RunResult } from "../lib/exec.js";
 
@@ -60,13 +61,15 @@ export class Git {
     readonly bin: string,
     /** The top folder of the repository. */
     readonly root: string,
+    /** Where you are inside it, like "app/" (empty at the top). */
+    readonly prefix: string = "",
   ) {}
 
   /** Find git and the repository this folder is in. */
   static async open(cwd = process.cwd()): Promise<Git | GitProblem> {
     const bin = findExecutable("git");
     if (!bin) return { ok: false, error: "git isn't installed (or isn't on your PATH).", hint: "cli-village doctor" };
-    const res = await run(bin, ["rev-parse", "--show-toplevel"], { cwd, timeoutMs: GIT_TIMEOUT_MS });
+    const res = await run(bin, ["rev-parse", "--show-toplevel", "--show-prefix"], { cwd, timeoutMs: GIT_TIMEOUT_MS });
     if (res.code !== 0) {
       return {
         ok: false,
@@ -74,7 +77,13 @@ export class Git {
         hint: "git init",
       };
     }
-    return new Git(bin, res.stdout.trim());
+    const [root = "", prefix = ""] = res.stdout.split(/\r?\n/);
+    return new Git(bin, root.trim(), prefix.trim());
+  }
+
+  /** A path from the top of the repository, as you'd type it from the folder you're in. */
+  fromHere(file: string): string {
+    return path.posix.relative(`/${this.prefix}`, `/${file}`) || ".";
   }
 
   /** Run git in the repository and collect its output. */

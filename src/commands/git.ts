@@ -3,8 +3,6 @@
 // sent, the checkpoint gate (Infisical's secret scanner) checks it for
 // passwords and keys. Found something? Nothing is saved or sent.
 
-import { realpathSync } from "node:fs";
-import path from "node:path";
 import { EventBus } from "../events/bus.js";
 import { commitCommand } from "../events/explain.js";
 import { secretGuard } from "../events/guard.js";
@@ -22,21 +20,13 @@ const MAX_LISTED = 20;
 
 const isProblem = (x: object): x is GitProblem => "ok" in x && x.ok === false;
 
-const real = (p: string) => {
-  try {
-    return realpathSync(p);
-  } catch {
-    return p;
-  }
-};
-
 /**
  * A file in the repository as you'd type it from the folder you're in, for a
  * command to copy and paste. Only plain names (letters, numbers, . _ / -), so
  * pasting it can't run anything else; otherwise undefined (and no hint).
  */
-function fromHere(git: Git, file: string): string | undefined {
-  const rel = path.relative(real(process.cwd()), path.join(real(git.root), file)).split(path.sep).join("/");
+function pasteable(git: Git, file: string): string | undefined {
+  const rel = git.fromHere(file);
   return /^[\w./-]+$/.test(rel) && !rel.startsWith("-") ? rel : undefined;
 }
 
@@ -257,13 +247,13 @@ export async function runCommit(options: CommitOptions, ui: Ui): Promise<number>
     const file = risky[0]!;
     const inGit = useStaged || !status.untracked.includes(file);
     const others = risky.length > 1 ? ` (and ${risky.length - 1} more)` : "";
-    const pasteable = inGit ? fromHere(git, file) : undefined;
+    const pastePath = inGit ? pasteable(git, file) : undefined;
     return out.problem(
       {
         error: inGit
           ? `${safePath(file)}${others} looks like a secrets file, so nothing was saved. Take it out of git (this keeps the file on your computer), list it in .gitignore, and keep its secrets in Infisical.`
           : `${safePath(file)}${others} looks like a secrets file, so nothing was saved. Add a line with ${safePath(file.split("/").pop()!)} to your .gitignore file so git leaves it alone, and keep its secrets in Infisical.`,
-        hint: pasteable ? `git rm --cached -- ${pasteable}` : undefined,
+        hint: pastePath ? `git rm --cached -- ${pastePath}` : undefined,
       },
       false,
       { files: risky },
