@@ -6,7 +6,7 @@ CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https:
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days, step 4 of 9. You can check your setup with `doctor`, watch a demo in the terminal with `--demo`, and watch it in a 3D village with `open --demo`.
+**Status:** early days, step 5 of 9. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), and watch a demo in the terminal (`--demo`) or in a 3D village (`open --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
@@ -36,6 +36,10 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 |---|---|
 | `cli-village doctor` | Checks Node.js, git, the Infisical CLI, your Infisical login and your project link. Add `--json` for scripts. |
 | `cli-village --demo` | Pretend robots act out a workday (nothing real runs) in the live terminal view. Add `--once` to play one round, `--speed 2` to go faster, or `--json` for one JSON event per line. |
+| `cli-village secrets fetch` | Loads your secrets and lists their **names** (values stay in memory, hidden). Pick with `--env prod`, `--path /payments`, `--project-id <id>`. Add `--json` for scripts. |
+| `cli-village secrets diff dev prod` | Compares two environments by name: what's only in one, and which values differ (without showing them). |
+| `cli-village secrets export --out .env` | Writes secrets to a file, only when you ask. The file must be in `.gitignore` (and not already tracked by git). `--format` can be dotenv, dotenv-export, json, csv or yaml. `--force` replaces an existing file. |
+| `cli-village run -- npm start` | Runs your command with your secrets as environment variables (through `infisical run`). Your program's output goes straight to your terminal. |
 | `cli-village open --demo` | Opens the 3D village in your browser and plays the demo there (the terminal keeps its own view). Add `--no-open` to just print the address, `--port 4317` to pick the port, or `--speed 2`. |
 
 ## The terminal view
@@ -58,6 +62,39 @@ q quit · ? what do the buildings mean? · d more detail
 - Problems turn the message red (with a ✖, so it doesn't rely on color) until they're fixed.
 - Keys: `q` quit (robots walk home first), `?` explains each building, `d` shows every detail.
 - No interactive terminal (a pipe, CI)? You get a plain log instead. `NO_COLOR` is respected.
+
+## The Vault: your real secrets
+
+These commands use the Infisical CLI you already have, with your own login (`infisical login`, or `INFISICAL_TOKEN` for machines). CLI Village never sees or stores your login.
+
+```
+$ cli-village secrets fetch --env dev
+▶ Fetching dev secrets at the VAULT
+  → infisical export --env=dev --format=json
+✔ Loaded 5 secrets from dev
+
+  Key names (values stay hidden):
+  DATABASE_URL       DEBUG_PAYMENTS     RETRY_LIMIT        SHARED_SAME
+  STRIPE_SECRET_KEY
+```
+
+```
+$ cli-village secrets diff dev prod
+▶ Comparing dev and prod secrets (names only) at the VAULT
+✔ dev: 5 secrets · prod: 5 secrets · 6 differences
+
+  Only in dev (2)
+    DEBUG_PAYMENTS  RETRY_LIMIT
+  Only in prod (2)
+    LOCKED_KEY  SENTRY_DSN
+  Different values (2) · names only, the values stay hidden
+    DATABASE_URL       STRIPE_SECRET_KEY
+```
+
+- Every step shows the real Infisical command (after `→`), so you learn it as you go.
+- If something's wrong, you get a plain explanation and the command that usually fixes it, e.g. `infisical login` or `infisical init`.
+- Leave out `--env` and Infisical uses your project's default environment.
+- `secrets export` refuses to write a file git could commit, and on macOS and Linux makes it readable only by you.
 
 ## The 3D village
 
@@ -87,7 +124,8 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - Secret **values** never appear in any view, event or log. Only key names and counts.
 - Logging in is handled by Infisical itself (`infisical login` or `INFISICAL_TOKEN`). CLI Village never stores tokens.
 - The village server only listens on your own computer (`127.0.0.1`). Each session gets a new random key, which must be in the page address and on the live connection. Requests from other websites are refused, and the page makes no outside calls.
-- Secrets are never written to disk unless you ask for it (`--out .env`).
+- Secrets are never written to disk unless you ask for it (`secrets export --out .env`), and never to a file git could commit.
+- `cli-village run` lets Infisical hand the secrets straight to your program. They never pass through CLI Village, and your program's output isn't recorded.
 
 ## Roadmap
 
@@ -95,7 +133,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - [x] 2. Event bus + `--demo` mode
 - [x] 3. Terminal view
 - [x] 4. 3D village
-- [ ] 5. Vault (real Infisical commands)
+- [x] 5. Vault (real Infisical commands)
 - [ ] 6. Beginner explainer + expert flags
 - [ ] 7. GitHub Harbor with the secret-scan checkpoint
 - [ ] 8. Library + external-agent event API
