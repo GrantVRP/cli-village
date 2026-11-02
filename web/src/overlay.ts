@@ -5,7 +5,7 @@
 import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import type * as THREE from "three";
 import { EXPERT_FLAGS, GLOSSARY } from "../../src/events/explain.js";
-import type { Headline, LogEntry, VillageState } from "../../src/events/state.js";
+import { describeHarbor, type Headline, type HarborSummary, type LogEntry, type VillageState } from "../../src/events/state.js";
 import { BUILDING_HELP, BUILDING_NAMES, type Building } from "../../src/events/types.js";
 
 export type LabelMode = "idle" | "active" | "problem";
@@ -24,6 +24,7 @@ const clock = (ts: number) => new Date(ts).toTimeString().slice(0, 8);
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const ICONS = { start: "▶", move: "·", progress: "…", done: "✔", fail: "✖", commit: "■", push: "▲" } as const;
+const HARBOR_ICONS: Record<HarborSummary["icon"], string> = { scan: "…", stop: "✖", crate: "■", boat: "▲" };
 
 export class Overlay {
   readonly labelRenderer = new CSS2DRenderer();
@@ -107,12 +108,12 @@ export class Overlay {
     document.body.classList.toggle("stopped", state.stopped);
   }
 
-  /** The one key message, at the top. */
-  setCaption(headline: Headline): void {
+  /** The one key message, at the top. `suggestion`: the command is something to try, not one that ran. */
+  setCaption(headline: Headline, suggestion = false): void {
     const subtitle = headline.subtitle ?? "";
     const command = headline.command ?? "";
     const explain = headline.explain ?? "";
-    const key = [headline.level, headline.title, subtitle, command, explain].join("|");
+    const key = [headline.level, headline.title, subtitle, command, explain, suggestion].join("|");
     if (key === this.captionKey) return;
     // Only a new message gets the little entrance animation, not small updates to the same one.
     const isNew = headline.title !== this.captionTitle;
@@ -124,6 +125,7 @@ export class Overlay {
     $("#caption-title").textContent = headline.title;
     $("#caption-subtitle").textContent = subtitle;
     $("#caption-command").hidden = !command;
+    $("#caption-command-label").textContent = suggestion ? "Try:" : "Real command:";
     $("#caption-command-text").textContent = command;
     $("#caption-explain").textContent = explain;
     caption.className = `caption ${headline.level}`;
@@ -169,6 +171,12 @@ export class Overlay {
       : b.working.length
         ? `▶ Working here: ${b.working.join(", ")}`
         : "○ Quiet right now";
+    // At the harbor: what's at the gate, what's waiting, or the last boat.
+    const harbor = id === "harbor" ? describeHarbor(state) : null;
+    const note = $("#panel-note");
+    note.hidden = !harbor;
+    note.className = `panel-note ${harbor?.level ?? ""}`;
+    note.textContent = harbor ? `${HARBOR_ICONS[harbor.icon]} ${harbor.text}` : "";
     const list = $("#panel-log");
     list.replaceChildren(
       ...(b.log.length ? [...b.log].reverse().slice(0, 14).map((entry) => this.logItem(entry)) : [el("li", "empty", "Nothing has happened here yet.")]),

@@ -15,6 +15,7 @@ const { EventBus } = await import(dist("events/bus.js"));
 const { VillageStore } = await import(dist("events/store.js"));
 const { demoRound } = await import(dist("demo/script.js"));
 const { App } = await import(dist("views/terminal/App.js"));
+const { BUILDING_NAMES } = await import(dist("events/types.js"));
 const { WAITING } = await import(dist("commands/watch.js"));
 const { renderToString } = await import("ink");
 const React = (await import("react")).default;
@@ -172,6 +173,18 @@ describe("plain log lines", () => {
 describe("terminal view", () => {
   const render = (store, columns, rows, extra = {}) =>
     strip(renderToString(React.createElement(App, { store, mode: "demo", onStop() {}, size: { columns, rows }, ...extra }), { columns }));
+  const URL = "http://127.0.0.1:43210/?token=0123456789abcdef0123456789abcdef";
+  /** Nothing scrolls off or is drawn over: the titles are there, and the key hints are last, under a full rule. */
+  const assertFits = (out, columns, rows, title = /What's happening/) => {
+    const lines = out.split("\n");
+    const at = `at ${columns}x${rows}`;
+    assert.ok(lines.length <= rows - 1, `${lines.length} lines ${at}`);
+    assert.ok(lines.every((l) => l.length <= columns), `too wide ${at}`);
+    assert.match(out, /^Robots/m, `robots title ${at}`);
+    assert.match(out, title, `log title ${at}`);
+    assert.match(lines.at(-1), /q quit/, `key hints last ${at}`);
+    assert.match(lines.at(-2), new RegExp(`^[─-]{${columns}}$`), `rule above the key hints ${at}`);
+  };
 
   it("fits 80x24 and 120x40 all through the demo", () => {
     const bus = new EventBus();
@@ -187,12 +200,62 @@ describe("terminal view", () => {
         [120, 40],
       ]) {
         for (const compact of [false, true]) {
-          const lines = render(store, columns, rows, { compact }).split("\n");
-          assert.ok(lines.length <= rows - 1, `${lines.length} lines at ${columns}x${rows}`);
-          assert.ok(lines.every((l) => l.length <= columns), `too wide at ${columns}x${rows}`);
+          // With the 3D village open, its address takes a row too.
+          for (const url of [undefined, URL]) assertFits(render(store, columns, rows, { compact, url }), columns, rows);
         }
       }
     }
+  });
+
+  it("shows the harbor, and one building up close (Tab)", () => {
+    const bus = new EventBus();
+    const store = VillageStore.fromBus(bus);
+    // A real commit: the gate scans your changes first, and finds something.
+    bus.emit({ type: "start", agent: "you", task: "s1", kind: "scan", title: "Checkpoint: scanning your changes for secrets" });
+    bus.emit({ type: "fail", agent: "you", task: "s1", message: "Stopped at the gate: 1 possible secret in pay.js line 1 (value hidden)." });
+    const all = render(store, 80, 24);
+    assert.match(all, /[✖×] Harbor A crate is stopped at the gate/);
+    assert.match(all, /tab one building/);
+    const close = render(store, 80, 24, { focus: "harbor" });
+    assert.match(close, /GITHUB HARBOR · Commits become crates/);
+    assert.match(close, /[✖×] Needs attention: Stopped at the gate: 1 possible secret/);
+    assert.match(close, /tab next building · esc everything/);
+    const quiet = render(store, 80, 24, { focus: "vault" });
+    assert.match(quiet, /[○o] Quiet right now/);
+    assert.match(quiet, /Nothing has happened here yet\./);
+  });
+
+  it("fits 80x24 up close at every building, all through the demo", () => {
+    const bus = new EventBus();
+    const store = VillageStore.fromBus(bus);
+    const buildings = ["harbor", "lab", "vault", "library"];
+    let n = 0;
+    for (const step of [...demoRound(1), ...demoRound(2)]) {
+      if (!step.event) continue;
+      bus.emit(step.event, "demo");
+      if (!["fail", "commit", "push", "done"].includes(step.event.type)) continue;
+      const focus = buildings[n++ % buildings.length];
+      for (const url of [undefined, URL]) assertFits(render(store, 80, 24, { focus, url }), 80, 24, new RegExp(`^${BUILDING_NAMES[focus]} · `, "m"));
+    }
+  });
+
+  it("lists as many robots as fit, problems first, and keeps the log", () => {
+    const bus = new EventBus();
+    const store = VillageStore.fromBus(bus);
+    for (let i = 1; i <= 12; i++) bus.emit({ type: "start", agent: `Bot${i}`, task: `t${i}`, kind: "test", title: "Running tests" });
+    bus.emit({ type: "fail", agent: "Bot12", task: "t12", message: "2 tests failed" });
+    bus.emit({ type: "commit", agent: "Bot1", message: "Add payments" });
+    for (const columns of [80, 120]) {
+      const out = render(store, columns, 24, { url: URL });
+      assertFits(out, columns, 24);
+      assert.match(out, /\+\d+ more/);
+      assert.match(out, /Bot12 +.*problem: 2 tests failed/);
+      assert.match(out, /Harbor 1 crate waiting, not scanned yet/);
+    }
+    // Stacked, the log keeps at least 3 lines under its title (then the rule and key hints).
+    const lines = render(store, 80, 24, { url: URL }).split("\n");
+    const title = lines.findIndex((l) => l.startsWith("What's happening"));
+    assert.ok(lines.length - 2 - (title + 1) >= 3, "3 log lines");
   });
 
   it("suggests what to try while it waits", () => {

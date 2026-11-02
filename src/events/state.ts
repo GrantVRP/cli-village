@@ -70,6 +70,9 @@ export interface BuildingState {
 
 export type CrateStatus = "packed" | "scanning" | "blocked" | "cleared" | "shipped";
 
+/** Why the gate packed a crate itself, before there was a snapshot to pack. */
+export type DraftKind = "changes" | "snapshots";
+
 export interface Crate {
   seq: number;
   agent: string;
@@ -77,6 +80,26 @@ export interface Crate {
   sha?: string;
   files?: number;
   status: CrateStatus;
+  /**
+   * Packed by the gate itself. "changes": your changes, scanned before they're
+   * saved (cli-village commit does this; the commit fills the crate in).
+   * "snapshots": commits made outside CLI Village, scanned before a push.
+   */
+  draft?: DraftKind;
+  /** The scan checking this crate right now (its task id). */
+  scan?: string;
+  /** What the gate found, while the crate is stopped there. */
+  reason?: string;
+}
+
+/** The last time the boat sailed. */
+export interface LastPush {
+  remote: string;
+  branch: string;
+  commits: number;
+  /** How many crates it took (0 when the push only published the branch). */
+  crates: number;
+  ts: number;
 }
 
 export type HeadlineLevel = "attention" | "active" | "calm";
@@ -99,6 +122,9 @@ export interface VillageState {
   buildings: Record<Building, BuildingState>;
   tasks: Record<string, TaskState>;
   crates: Crate[];
+  lastPush?: LastPush;
+  /** A crate the gate had stopped was sent anyway. The harbor says so until a scan passes. */
+  harborWarning?: string;
   headline: Headline;
   log: LogEntry[];
   stats: { done: number; failed: number; fixed: number; commits: number; pushes: number };
@@ -221,7 +247,8 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         movedAt: event.ts,
         status: agent.status === "failed" ? "failed" : "walking",
         task: undefined,
-        say: undefined,
+        // A robot with a problem keeps saying what it was, even on its way home.
+        say: agent.status === "failed" ? agent.say : undefined,
       });
       // Leaving a building means no longer working there.
       if (agent.task) next.buildings = setBuilding(state.buildings, agent.task.building, (b) => ({ ...b, working: without(b.working, agent.name) }));
@@ -247,7 +274,7 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         ...b,
         working: [...without(b.working, agent.name), agent.name],
       }));
-      if (event.kind === "scan") next.crates = setCrates(state.crates, ["packed"], "scanning");
+      if (event.kind === "scan") next.crates = startScan(state.crates, state.tasks, task, event.seq);
       next.headline = {
         title: event.title,
         subtitle: `${event.agent} at ${at(event.building)}`,
@@ -295,14 +322,23 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
       next.tasks = tasks;
       const logged = withLog(state, entry(`${event.agent} done: ${text}${keys}`, "secondary", building));
       next.log = logged.log;
-      const fixed = logged.buildings[building].problem !== undefined;
+      if (task?.kind === "scan") {
+        next.crates = finishScan(state.crates, task, null, event.seq);
+        next.harborWarning = undefined; // a passing scan is the all-clear
+      } else if (task?.kind === "git" && task.command === "git status" && event.count === 0) {
+        // Nothing left to save: changes the gate had stopped were thrown away.
+        next.crates = state.crates.filter((c) => !(c.draft === "changes" && c.status !== "scanning"));
+      }
+      // A success here fixes the earlier problem. At the harbor, a crate stopped at the
+      // gate (or one sent anyway) stays the problem until a scan passes.
+      const stillStopped = building === "harbor" ? harborTrouble(next) : undefined;
+      const fixed = logged.buildings[building].problem !== undefined && !stillStopped;
       next.buildings = setBuilding(logged.buildings, building, (b) => ({
         ...b,
         working: without(b.working, agent.name),
-        problem: undefined, // a success here fixes the earlier problem
+        problem: stillStopped ? { agent: b.problem?.agent ?? event.agent, seq: b.problem?.seq ?? event.seq, message: stillStopped } : undefined,
       }));
       next.stats = { ...state.stats, done: state.stats.done + 1, fixed: state.stats.fixed + (fixed ? 1 : 0) };
-      if (task?.kind === "scan") next.crates = setCrates(state.crates, ["scanning"], "cleared");
       next.health = computeHealth(next.buildings);
       next.headline = {
         title: fixed ? `Fixed: ${text}` : text,
@@ -329,7 +365,11 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         problem: { agent: event.agent, message: event.message, seq: event.seq },
       }));
       next.stats = { ...state.stats, failed: state.stats.failed + 1 };
-      if (task?.kind === "scan") next.crates = setCrates(state.crates, ["scanning"], "blocked");
+      if (task?.kind === "scan") next.crates = finishScan(state.crates, task, event.message, event.seq);
+      // The snapshot couldn't be saved, so the crate the gate packed for it is unpacked again.
+      else if (task?.kind === "git" && task.command?.startsWith("git commit")) {
+        next.crates = state.crates.filter((c) => !(c.draft === "changes" && c.status === "cleared"));
+      }
       next.health = computeHealth(next.buildings);
       next.headline = {
         title: `Problem: ${event.message}`,
@@ -344,7 +384,6 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
     }
 
     case "commit": {
-      // A new snapshot replaces any crate that was stopped at the gate.
       const crate: Crate = {
         seq: event.seq,
         agent: event.agent,
@@ -353,7 +392,8 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         files: event.files,
         status: "packed",
       };
-      next.crates = [...state.crates.filter((c) => c.status !== "blocked"), crate].slice(-MAX_CRATES);
+      // `git commit --amend` rewrites the newest snapshot instead of adding one.
+      next.crates = packCommit(state.crates, crate, Boolean(agent.task?.command?.includes("--amend")));
       putAgent({ ...agent, say: `Packed "${event.message}"` });
       const logged = withLog(
         state,
@@ -378,14 +418,24 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
     case "push": {
       const n = event.commits ?? 1;
       const target = `${event.remote ?? "origin"}/${event.branch ?? "main"}`;
-      next.crates = setCrates(state.crates, ["cleared", "packed"], "shipped");
+      // With no new commits, the push only published the branch.
+      const what = n === 0 ? "the branch" : `${n} commit${n === 1 ? "" : "s"}`;
+      const shipped = shipCrates(state.crates);
+      next.crates = shipped.crates;
+      next.lastPush = {
+        remote: event.remote ?? "origin",
+        branch: event.branch ?? "main",
+        commits: n,
+        crates: shipped.count,
+        ts: event.ts,
+      };
       putAgent({ ...agent, say: "Bon voyage!" });
-      const logged = withLog(state, entry(`${event.agent} pushed ${n} commit${n === 1 ? "" : "s"} to ${target}`, "secondary", "harbor"));
+      const logged = withLog(state, entry(`${event.agent} pushed ${what} to ${target}`, shipped.flagged ? "primary" : "secondary", "harbor"));
       next.log = logged.log;
       next.buildings = logged.buildings;
       next.stats = { ...state.stats, pushes: state.stats.pushes + 1 };
       next.headline = {
-        title: `Sent to GitHub: ${n} commit${n === 1 ? "" : "s"} to ${target}`,
+        title: `Sent to GitHub: ${what} to ${target}`,
         subtitle: `${event.agent}'s boat sails from the GITHUB HARBOR`,
         command: `git push ${event.remote ?? "origin"} ${event.branch ?? "main"}`,
         explain: explainCommand("git push"),
@@ -394,13 +444,149 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         building: "harbor",
         seq: event.seq,
       };
+      if (shipped.flagged) {
+        // The gate had stopped one of these crates, and it was sent anyway (the scan was skipped).
+        next.harborWarning = SENT_ANYWAY;
+        next.buildings = setBuilding(next.buildings, "harbor", (b) => ({ ...b, problem: { agent: event.agent, message: SENT_ANYWAY, seq: event.seq } }));
+        next.health = computeHealth(next.buildings);
+        next.headline = { ...next.headline, title: `Sent to GitHub with a possible secret in it`, subtitle: SENT_ANYWAY, level: "attention" };
+      }
       return next;
     }
   }
 }
 
-function setCrates(crates: Crate[], from: CrateStatus[], to: CrateStatus): Crate[] {
-  return crates.map((c) => (from.includes(c.status) ? { ...c, status: to } : c));
+// --- The harbor: crates on their way to GitHub ----------------------------------------
+//
+// Real commands and the demo send events in different orders, and both must look right:
+//   cli-village commit:  scan your changes → save the snapshot → (push: scan what's unsent → push)
+//   the demo, agents:    save the snapshot → scan → push
+// There are two kinds of scan. One checks your changes before they're saved
+// (`infisical scan git-changes --staged`); the other checks the snapshots a push would
+// send (`infisical scan --log-opts=…`). Each only moves the crates it checks.
+
+const SENT_ANYWAY = "A crate the gate had stopped was sent anyway. Change that secret now: make a new one in Infisical.";
+
+const onTheWay = (c: Crate) => c.status !== "shipped";
+/** Your changes, packed by the gate: not a snapshot yet, so never part of a push. */
+const isChanges = (c: Crate) => c.draft === "changes" && onTheWay(c);
+/** Saved snapshots (or ones made outside CLI Village) that a push would send. */
+const isSaved = (c: Crate) => c.draft !== "changes" && onTheWay(c);
+
+/** What a scan checks, from its command. Without one: snapshots waiting at the gate, or else your changes. */
+function scanScope(crates: readonly Crate[], command?: string): DraftKind {
+  if (command && /\bgit-changes\b/.test(command)) return "changes";
+  if (command && /\binfisical\s+scan\b|--log-opts/.test(command)) return "snapshots";
+  return crates.some((c) => isSaved(c) && (c.status === "packed" || c.status === "blocked")) ? "snapshots" : "changes";
+}
+
+function startScan(crates: Crate[], running: Record<string, TaskState>, task: TaskState, seq: number): Crate[] {
+  const mark = (c: Crate): Crate => ({ ...c, status: "scanning", scan: task.id, reason: undefined });
+  // A crate still marked by a scan that's no longer running (it never finished) can be checked again.
+  const waiting = (c: Crate) => c.status === "packed" || c.status === "blocked" || (c.status === "scanning" && !running[c.scan ?? ""]);
+  if (scanScope(crates, task.command) === "changes") {
+    const earlier = crates.findLastIndex((c) => isChanges(c) && (waiting(c) || c.status === "cleared"));
+    if (earlier >= 0) return crates.map((c, i) => (i === earlier ? mark(c) : c));
+    return [...crates, mark({ seq, agent: task.agent, message: "Your changes", status: "scanning", draft: "changes" })].slice(-MAX_CRATES);
+  }
+  // Before a push: every saved crate that hasn't passed the gate. Ones that passed wait at the dock.
+  if (!crates.some(isSaved)) {
+    return [...crates, mark({ seq, agent: task.agent, message: "Your snapshots", status: "scanning", draft: "snapshots" })].slice(-MAX_CRATES);
+  }
+  return crates.map((c) => (isSaved(c) && waiting(c) ? mark(c) : c));
+}
+
+/** A scan ended: what it checked passes the gate (`reason` null) or is stopped there. */
+function finishScan(crates: Crate[], task: TaskState, reason: string | null, seq: number): Crate[] {
+  const mine = (c: Crate) => c.scan === task.id && c.status === "scanning";
+  if (reason === null) return crates.map((c) => (mine(c) ? { ...c, status: "cleared", scan: undefined } : c));
+  if (crates.some(mine)) return crates.map((c) => (mine(c) ? { ...c, status: "blocked", scan: undefined, reason } : c));
+  // A check before a push found something, but every crate here had passed: it's in
+  // snapshots CLI Village didn't see being made.
+  const outside = crates.findLastIndex((c) => c.draft === "snapshots" && onTheWay(c));
+  if (outside >= 0) return crates.map((c, i) => (i === outside ? { ...c, status: "blocked", reason } : c));
+  return [...crates, { seq, agent: task.agent, message: "Your snapshots", status: "blocked", draft: "snapshots", reason } satisfies Crate].slice(-MAX_CRATES);
+}
+
+/** A snapshot was saved: it fills the crate the gate packed for your changes, or gets a new crate. */
+function packCommit(crates: Crate[], crate: Crate, amend: boolean): Crate[] {
+  if (amend) {
+    // The newest snapshot was rewritten: its crate gets the new one, to be checked again.
+    const newest = crates.findLastIndex(isSaved);
+    if (newest >= 0) return crates.map((c, i) => (i === newest ? crate : c)).filter((c) => !(isChanges(c) && c.status !== "scanning"));
+  }
+  const changes = crates.findLastIndex((c) => isChanges(c) && (c.status === "cleared" || c.status === "blocked"));
+  if (changes >= 0) {
+    // Changes the gate had stopped, saved anyway (--skip-scan), stay stopped: the secret is in the snapshot now.
+    const { status, reason } = crates[changes]!;
+    return crates.map((c, i) => (i === changes ? { ...crate, status, reason } : c));
+  }
+  return [...crates, crate].slice(-MAX_CRATES);
+}
+
+/**
+ * The boat sails with every saved crate on the way (your unsaved changes stay behind).
+ * `flagged`: one of them was stopped at the gate, and went anyway.
+ */
+function shipCrates(crates: Crate[]): { crates: Crate[]; count: number; flagged: boolean } {
+  const sailing = crates.filter(isSaved);
+  return {
+    crates: crates.map((c) => (isSaved(c) ? { ...c, status: "shipped", scan: undefined } : c)),
+    count: sailing.length,
+    flagged: sailing.some((c) => c.status === "blocked"),
+  };
+}
+
+/** What still needs attention at the harbor: a crate stopped at the gate, or one that was sent anyway. */
+function harborTrouble(state: Pick<VillageState, "crates" | "harborWarning">): string | undefined {
+  const stopped = state.crates.findLast((c) => onTheWay(c) && c.status === "blocked");
+  return stopped ? (stopped.reason ?? "A crate is stopped at the gate") : state.harborWarning;
+}
+
+/** Where the crates are, for drawing the harbor. */
+export interface HarborLoad {
+  /** Crates that haven't passed the gate yet: being scanned, stopped, or not scanned. */
+  atGate: number;
+  /** Crates that passed, waiting at the dock for a push. */
+  atDock: number;
+  /** What the gate's lights show. */
+  gate: "stopped" | "scanning" | "waiting" | "clear" | "idle";
+}
+
+export function harborLoad(state: Pick<VillageState, "crates" | "tasks">): HarborLoad {
+  const waiting = state.crates.filter(onTheWay);
+  const atGate = waiting.filter((c) => c.status !== "cleared");
+  // A check before a push can run with every crate already past the gate.
+  const scanning = atGate.some((c) => c.status === "scanning") || Object.values(state.tasks).some((t) => t.kind === "scan");
+  const gate = atGate.some((c) => c.status === "blocked") ? "stopped" : scanning ? "scanning" : atGate.length ? "waiting" : waiting.length ? "clear" : "idle";
+  return { atGate: atGate.length, atDock: waiting.length - atGate.length, gate };
+}
+
+export interface HarborSummary {
+  level: HeadlineLevel;
+  /** What the icon stands for: a scan, a stop, crates waiting, or the boat that sailed. */
+  icon: "scan" | "stop" | "crate" | "boat";
+  text: string;
+}
+
+/** One line about the harbor for every view: what's at the gate, what's waiting, or the last boat. */
+export function describeHarbor(state: VillageState): HarborSummary | null {
+  const load = harborLoad(state);
+  const crates = (n: number) => `${n} crate${n === 1 ? "" : "s"}`;
+  if (load.gate === "stopped") return { level: "attention", icon: "stop", text: "A crate is stopped at the gate" };
+  if (load.gate === "scanning") return { level: "active", icon: "scan", text: "At the gate: scanning for secrets…" };
+  if (state.harborWarning) return { level: "attention", icon: "stop", text: "A possible secret went to GitHub" };
+  // Not scanned yet: saved with --skip-scan, or by an agent. The next push scans it.
+  const total = load.atGate + load.atDock;
+  if (load.atGate && load.atDock) return { level: "calm", icon: "crate", text: `${crates(total)} waiting (${load.atGate} not scanned yet)` };
+  if (load.atGate) return { level: "calm", icon: "crate", text: `${crates(load.atGate)} waiting, not scanned yet` };
+  if (load.atDock) return { level: "calm", icon: "crate", text: `${crates(load.atDock)} at the dock, ready to push` };
+  const last = state.lastPush;
+  if (last) {
+    const what = last.commits ? `${last.commits} commit${last.commits === 1 ? "" : "s"}` : "the branch";
+    return { level: "calm", icon: "boat", text: `Last boat: ${what} to ${last.remote}/${last.branch}` };
+  }
+  return null;
 }
 
 function trimTasks(tasks: Record<string, TaskState>): Record<string, TaskState> {

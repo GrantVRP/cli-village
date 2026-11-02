@@ -6,14 +6,17 @@
 import { Box, Text, useApp, useInput, useWindowSize } from "ink";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
+  describeHarbor,
   isWalking,
   openProblems,
   type AgentState,
+  type AgentStatus,
+  type HarborSummary,
   type Headline,
   type LogEntry,
   type VillageState,
 } from "../../events/state.js";
-import { EXPERT_FLAGS, GLOSSARY } from "../../events/explain.js";
+import { EXPERT_FLAGS, GLOSSARY, type WaitingHint } from "../../events/explain.js";
 import type { VillageStore } from "../../events/store.js";
 import { BUILDING_HELP, BUILDING_NAMES, type Building, type EventType } from "../../events/types.js";
 import { icons, theme } from "./theme.js";
@@ -32,18 +35,31 @@ export interface AppProps {
   size?: { columns: number; rows: number };
   /** What to suggest before anything has happened (live mode). */
   waiting?: WaitingHint;
+  /** Start looking at one building (as if you'd pressed Tab), for tests. */
+  focus?: Building;
 }
 
-export interface WaitingHint {
-  subtitle: string;
-  command: string;
-  explain: string;
-}
+export type { WaitingHint };
 
 /** Rows the key message takes: title, subtitle, command, explanation, plus a blank line above and below. */
 const keyMessageRows = (compact: boolean) => (compact ? 2 : 6);
+/** The stacked log always keeps this many lines, even with lots of robots. */
+const MIN_LOG_LINES = 3;
 
 const HELP_ORDER: Building[] = ["vault", "library", "workshop", "lab", "townhall", "home", "harbor"];
+
+/** Tab and Shift+Tab: the next (or previous) building to look at. */
+function nextBuilding(current: Building | null, by: 1 | -1): Building {
+  const i = current ? HELP_ORDER.indexOf(current) : by === 1 ? -1 : 0;
+  return HELP_ORDER[(i + by + HELP_ORDER.length) % HELP_ORDER.length]!;
+}
+
+const HARBOR_ICONS: Record<HarborSummary["icon"], string> = {
+  scan: icons.progress,
+  stop: icons.fail,
+  crate: icons.commit,
+  boat: icons.push,
+};
 const TYPE_ICONS: Record<EventType, string> = {
   start: icons.start,
   move: icons.move,
@@ -211,8 +227,41 @@ function agentRow(agent: AgentState, now: number) {
   return { icon: icons.idle, color: undefined, dim: true, place, activity };
 }
 
-function Robots({ state, now, width }: { state: VillageState; now: number; width: number }) {
-  const agents = Object.values(state.agents);
+/** What the robots column shows, so the screen never scrolls: some or all robots, the harbor line, and a blank line. */
+interface RobotsFit {
+  /** How many robots are listed. Any more get one "+N more" row. */
+  shown: number;
+  harbor: boolean;
+  /** A blank line: above the harbor line when side by side, under the robots when stacked. */
+  gap: boolean;
+}
+
+/** Rows the robots column takes: its title, the robots (or "No robots yet."), "+N more", the harbor line and the gap. */
+const robotRows = (fit: RobotsFit, agents: number) =>
+  1 + Math.max(1, fit.shown) + (fit.shown < agents ? 1 : 0) + (fit.harbor ? 1 : 0) + (fit.gap ? 1 : 0);
+
+/** Fit the robots column into `room` rows. The gap goes first, then robots, then the harbor line. */
+function fitRobots(state: VillageState, room: number, wide: boolean): RobotsFit {
+  const agents = Object.keys(state.agents).length;
+  const harbor = describeHarbor(state) !== null;
+  const tries: RobotsFit[] = [
+    // Side by side, the gap only sits above the harbor line.
+    { shown: agents, harbor, gap: wide ? harbor : true },
+    { shown: agents, harbor, gap: false },
+    // Title, the robots, "+N more" and the harbor line.
+    { shown: room - 2 - (harbor ? 1 : 0), harbor, gap: false },
+    { shown: room - 2, harbor: false, gap: false },
+  ];
+  const fits = tries.find((fit) => (fit.shown >= 1 || agents === 0) && robotRows(fit, agents) <= room) ?? tries[3]!;
+  return { ...fits, shown: Math.min(agents, Math.max(1, fits.shown)) };
+}
+
+/** When not every robot fits: the ones with a problem first, then the busy ones. */
+const ROBOT_ORDER: Record<AgentStatus, number> = { failed: 0, working: 1, walking: 2, idle: 3 };
+
+function Robots({ state, now, width, fit, wide }: { state: VillageState; now: number; width: number; fit: RobotsFit; wide: boolean }) {
+  const all = Object.values(state.agents);
+  const agents = fit.shown < all.length ? all.toSorted((a, b) => ROBOT_ORDER[a.status] - ROBOT_ORDER[b.status]).slice(0, fit.shown) : all;
   const nameWidth = Math.min(12, Math.max(5, ...agents.map((a) => a.name.length)));
   return (
     <Box flexDirection="column" width={width}>
@@ -227,7 +276,30 @@ function Robots({ state, now, width }: { state: VillageState; now: number; width
           </Text>
         );
       })}
+      {agents.length < all.length ? <Text dimColor>+{all.length - agents.length} more</Text> : null}
+      {fit.harbor ? <HarborLine state={state} spaced={wide && fit.gap} /> : null}
     </Box>
+  );
+}
+
+/** The crates on their way to GitHub: at the gate, waiting at the dock, or the last boat. */
+function HarborLine({ state, spaced }: { state: VillageState; spaced: boolean }) {
+  const harbor = describeHarbor(state);
+  if (!harbor) return null;
+  const color = harbor.level === "attention" ? theme.bad : harbor.level === "active" ? theme.accent : undefined;
+  // The same colors as in the ? help: a crate is yellow, the boat green.
+  const iconColor = color ?? (harbor.icon === "boat" ? theme.good : theme.warn);
+  return (
+    <>
+      {spaced ? <Text> </Text> : null}
+      <Text wrap="truncate-end" dimColor={harbor.icon === "boat"}>
+        <Text color={iconColor}>{HARBOR_ICONS[harbor.icon]} </Text>
+        <Text bold>{"Harbor".padEnd(6)}</Text>{" "}
+        <Text color={color} bold={harbor.level === "attention"}>
+          {harbor.text}
+        </Text>
+      </Text>
+    </>
   );
 }
 
@@ -256,6 +328,41 @@ function Activity({ state, lines, details, width }: { state: VillageState; lines
         <Text dimColor>{details ? " (all details)" : " (summary)"}</Text>
       </Text>
       {entries.length === 0 ? <Text dimColor>Nothing yet.</Text> : null}
+      {entries.map((entry) => (
+        <ActivityLine key={entry.seq} entry={entry} />
+      ))}
+    </Box>
+  );
+}
+
+/** One building up close (Tab): what it's for, how it's doing, and its own log. Like clicking it in the 3D village. */
+function BuildingLog({ state, id, lines, details, width }: { state: VillageState; id: Building; lines: number; details: boolean; width: number }) {
+  const b = state.buildings[id];
+  const harbor = id === "harbor" ? describeHarbor(state) : null;
+  const status = b.problem
+    ? { icon: icons.fail, color: theme.bad, text: `Needs attention: ${b.problem.message}` }
+    : b.working.length
+      ? { icon: icons.start, color: theme.accent, text: `Working here: ${b.working.join(", ")}` }
+      : { icon: icons.idle, color: undefined, text: "Quiet right now" };
+  const room = Math.max(1, lines - 1 - (harbor ? 1 : 0));
+  const entries = (details ? b.log : b.log.filter((e) => e.emphasis !== "tertiary")).slice(-room);
+  return (
+    <Box flexDirection="column" width={width}>
+      <Text wrap="truncate-end">
+        <Text bold color={theme.gold}>
+          {BUILDING_NAMES[id]}
+        </Text>
+        <Text dimColor> · {BUILDING_HELP[id]}</Text>
+      </Text>
+      <Text wrap="truncate-end" color={status.color} bold={Boolean(b.problem)} dimColor={!b.problem && !b.working.length}>
+        {status.icon} {status.text}
+      </Text>
+      {harbor ? (
+        <Text wrap="truncate-end" color={harbor.level === "attention" ? theme.bad : undefined}>
+          {HARBOR_ICONS[harbor.icon]} {harbor.text}
+        </Text>
+      ) : null}
+      {entries.length === 0 ? <Text dimColor>Nothing has happened here yet.</Text> : null}
       {entries.map((entry) => (
         <ActivityLine key={entry.seq} entry={entry} />
       ))}
@@ -350,31 +457,42 @@ function HelpOverlay({ width, rows }: { width: number; rows: number }) {
 function KeyHints({
   help,
   details,
+  focus,
   finished,
   stopping,
   compact,
 }: {
   help: boolean;
   details: boolean;
+  focus: Building | null;
   finished: boolean;
   stopping: boolean;
   compact: boolean;
 }) {
   if (stopping) return <Text dimColor>Stopping… everyone walks home. (press q again to quit now)</Text>;
   return (
-    <Text>
+    <Text wrap="truncate-end">
       {finished ? <Text color={theme.good}>Finished. </Text> : null}
       <Text bold>q</Text>
       <Text dimColor> quit · </Text>
       <Text bold>?</Text>
-      <Text dimColor>{help ? " close help · " : compact ? " help · " : " what do the buildings mean? · "}</Text>
+      <Text dimColor>{help ? " close help · " : compact || focus ? " help · " : " what the buildings mean · "}</Text>
       <Text bold>d</Text>
-      <Text dimColor>{compact ? " details" : details ? " less detail" : " more detail"}</Text>
+      <Text dimColor>{compact ? " details · " : details ? " less detail · " : " more detail · "}</Text>
+      <Text bold>tab</Text>
+      <Text dimColor>{focus ? " next building" : compact ? " building" : " one building"}</Text>
+      {focus && !help ? (
+        <>
+          <Text dimColor> · </Text>
+          <Text bold>esc</Text>
+          <Text dimColor> everything</Text>
+        </>
+      ) : null}
     </Text>
   );
 }
 
-export function App({ store, mode, url, onStop, compact = false, size, waiting }: AppProps) {
+export function App({ store, mode, url, onStop, compact = false, size, waiting, focus: initialFocus }: AppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const windowSize = useWindowSize();
   const columns = size?.columns ?? (windowSize.columns || 80);
@@ -387,6 +505,8 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting }
   const [help, setHelp] = useState(false);
   const [details, setDetails] = useState(false);
   const [stopping, setStopping] = useState(false);
+  /** The building you're looking at up close (Tab), or null for everything. */
+  const [focus, setFocus] = useState<Building | null>(initialFocus ?? null);
 
   useInput((input, key) => {
     if (input === "q" || (key.ctrl && input === "c")) {
@@ -398,8 +518,15 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting }
       return;
     }
     if (input === "?") setHelp((open) => !open);
-    else if (key.escape) setHelp(false);
-    else if (input === "d") setDetails((more) => !more);
+    else if (key.escape) {
+      // Esc closes the help first, then goes back from one building to everything.
+      if (help) setHelp(false);
+      else setFocus(null);
+    } else if (input === "d") setDetails((more) => !more);
+    else if (key.tab) {
+      setHelp(false);
+      setFocus((current) => nextBuilding(current, key.shift ? -1 : 1));
+    }
   });
 
   // After you press q: give the robots a moment to head home, then close.
@@ -411,13 +538,21 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting }
 
   const width = Math.max(40, columns);
   const wide = width >= 100;
-  const agentCount = Object.keys(state.agents).length;
   // Rows used by everything except the main area: status bar, rules, key message, key hints, +1 spare so the screen never scrolls.
   const chrome = 1 + (url ? 1 : 0) + 1 + 1 + 1 + 1;
   const fixed = chrome + keyMessageRows(compact) + 1;
   const bodyRows = Math.max(4, rows - fixed);
-  const activityLines = wide ? bodyRows - 1 : Math.max(3, bodyRows - (agentCount + 2) - 1);
+  // Side by side, each column gets the full height. Stacked, the robots share it with the
+  // log, which keeps its title and at least MIN_LOG_LINES lines.
+  const agents = Object.keys(state.agents).length;
+  const fit = fitRobots(state, wide ? bodyRows : bodyRows - 1 - MIN_LOG_LINES, wide);
+  const activityLines = wide ? bodyRows - 1 : Math.max(1, bodyRows - robotRows(fit, agents) - 1);
   const leftWidth = wide ? Math.floor(width * 0.45) : width;
+  const log = focus ? (
+    <BuildingLog state={state} id={focus} lines={activityLines} details={details} width={wide ? width - leftWidth - 2 : width} />
+  ) : (
+    <Activity state={state} lines={activityLines} details={details} width={wide ? width - leftWidth - 2 : width} />
+  );
 
   return (
     <Box flexDirection="column" width={width}>
@@ -431,7 +566,7 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting }
           <Rule width={width} />
           {wide ? (
             <Box flexDirection="row" width={width} height={bodyRows}>
-              <Robots state={state} now={now} width={leftWidth} />
+              <Robots state={state} now={now} width={leftWidth} fit={fit} wide />
               <Box
                 borderStyle={icons.vrule === "│" ? "single" : "classic"}
                 borderTop={false}
@@ -441,20 +576,20 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting }
                 paddingLeft={1}
                 width={width - leftWidth}
               >
-                <Activity state={state} lines={activityLines} details={details} width={width - leftWidth - 2} />
+                {log}
               </Box>
             </Box>
           ) : (
             <Box flexDirection="column" width={width} height={bodyRows}>
-              <Robots state={state} now={now} width={width} />
-              <Text> </Text>
-              <Activity state={state} lines={activityLines} details={details} width={width} />
+              <Robots state={state} now={now} width={width} fit={fit} wide={false} />
+              {fit.gap ? <Text> </Text> : null}
+              {log}
             </Box>
           )}
         </>
       )}
       <Rule width={width} />
-      <KeyHints help={help} details={details} finished={state.stopped && !stopping} stopping={stopping} compact={compact} />
+      <KeyHints help={help} details={details} focus={focus} finished={state.stopped && !stopping} stopping={stopping} compact={compact} />
     </Box>
   );
 }

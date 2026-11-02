@@ -2,9 +2,13 @@
 // gate. A commit becomes a crate on a rail cart. The cart stops at the gate
 // while it's scanned for leaked secrets: a leak keeps it there under a red
 // warning light; a clean scan lifts the barrier. On push, the boat sails away.
+//
+// Once the cart is past the gate it waits at the dock. A newer crate that
+// hasn't passed yet waits at the gate on its own, until it passes and joins
+// the cart (or the cart comes back for it).
 
 import * as THREE from "three";
-import type { Crate } from "../../src/events/state.js";
+import type { HarborLoad, LastPush } from "../../src/events/state.js";
 import { HARBOR, RIVER_Z } from "./layout.js";
 import { glowMesh, makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
@@ -21,10 +25,42 @@ function crateModel(): THREE.Group {
 
 type CartGoal = "start" | "gate" | "end";
 
+/** The most crates a cart (or the boat) carries at once. More snapshots still fit: they're just not all drawn. */
+const MAX_LOAD = 3;
+/** Where crates sit on the cart, for 1, 2 or 3 of them: two side by side, the third on top. */
+const CART_SPOTS: [number, number, number][][] = [
+  [[0, 0.83, 0]],
+  [
+    [0, 0.83, -0.29],
+    [0, 0.83, 0.29],
+  ],
+  [
+    [0, 0.83, -0.29],
+    [0, 0.83, 0.29],
+    [0.02, 1.3, 0],
+  ],
+];
+/** Crates waiting at the gate without the cart sit on a pallet, this much lower than on the cart. */
+const PALLET_DROP = 0.34;
+
+/** Show `n` of these crates, arranged like on the cart. */
+function arrange(crates: THREE.Group[], n: number, drop = 0): void {
+  crates.forEach((crate, i) => {
+    crate.visible = i < n;
+    const spot = CART_SPOTS[Math.max(0, Math.min(n, MAX_LOAD) - 1)]?.[i];
+    if (spot) crate.position.set(spot[0], spot[1] - drop, spot[2]);
+    crate.rotation.y = i === 2 ? 0.35 : 0;
+    crate.scale.setScalar(n > 1 ? 0.92 : 1);
+  });
+}
+
 export class Harbor {
   readonly group = new THREE.Group();
   private readonly cart = new THREE.Group();
-  private readonly cartCrate: THREE.Group;
+  private readonly cartCrates: THREE.Group[] = [];
+  /** Crates waiting at the gate while the cart is at the dock. */
+  private readonly gateStack = new THREE.Group();
+  private readonly gateCrates: THREE.Group[] = [];
   private readonly boat = new THREE.Group();
   private readonly boatCrates: THREE.Group[] = [];
   private readonly barrier = new THREE.Group();
@@ -36,10 +72,13 @@ export class Harbor {
   private readonly route = HARBOR.cartRoute;
   private readonly routeLengths: number[] = [];
   private readonly total: number;
+  private readonly gateDistance: number;
   private cartAt = 0;
-  private status: Crate["status"] | "none" = "none";
+  private load: HarborLoad = { atGate: 0, atDock: 0, gate: "idle" };
   private pushes = 0;
   private shipPending = false;
+  /** How many crates the waiting push puts on the boat. */
+  private shipping = 0;
   private boatState: "docked" | "sailing" | "returning" = "docked";
   private boatTimer = 0;
   private boatCargo = 0;
@@ -54,6 +93,8 @@ export class Harbor {
       this.routeLengths.push(sum);
     }
     this.total = sum;
+    // Where the cart stops, just before the barrier.
+    this.gateDistance = this.routeLengths[2]! - 0.9;
 
     this.group.add(this.buildDock());
     this.group.add(this.buildGate());
@@ -88,12 +129,28 @@ export class Harbor {
       cb.add(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 8), P.iron, { at: [x, 0.17, z], rot: [0, 0, Math.PI / 2], material: materials.metal });
     }
     this.cart.add(cb.build("cart"));
-    this.cartCrate = crateModel();
-    this.cartCrate.position.y = 0.83;
-    this.cartCrate.visible = false;
-    this.cart.add(this.cartCrate);
+    for (let i = 0; i < MAX_LOAD; i++) {
+      const crate = crateModel();
+      crate.visible = false;
+      this.cart.add(crate);
+      this.cartCrates.push(crate);
+    }
     this.group.add(this.cart);
     this.placeCart(0);
+
+    // A pallet on the rails where the cart stops at the gate, for crates waiting there on their own.
+    const pallet = new ModelBuilder();
+    pallet.box([0.9, 0.08, 1.05], P.wood, { at: [0, 0.2, 0], jitter: 0.05 });
+    for (const z of [-0.38, 0, 0.38]) pallet.box([0.9, 0.08, 0.14], P.woodLight, { at: [0, 0.12, z] });
+    this.gateStack.add(pallet.build("pallet"));
+    for (let i = 0; i < MAX_LOAD; i++) {
+      const crate = crateModel();
+      this.gateStack.add(crate);
+      this.gateCrates.push(crate);
+    }
+    this.place(this.gateStack, this.gateDistance);
+    this.gateStack.visible = false;
+    this.group.add(this.gateStack);
 
     // The boat, moored by the dock.
     this.sail = this.buildBoat();
@@ -166,7 +223,7 @@ export class Harbor {
     sail.position.set(0.35, 1.05, 0.02);
     sail.castShadow = true;
     this.boat.add(sail);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < MAX_LOAD; i++) {
       const crate = crateModel();
       crate.position.set(1.0 - i * 0.62, 0.77, 0);
       crate.visible = false;
@@ -176,82 +233,97 @@ export class Harbor {
     return sail;
   }
 
-  private placeCart(distance: number): void {
+  /** Put something on the rails, this far along the cart's route. */
+  private place(obj: THREE.Object3D, distance: number): void {
     const d = Math.max(0, Math.min(this.total, distance));
     let i = 1;
     while (i < this.route.length - 1 && this.routeLengths[i]! < d) i++;
     const a = this.route[i - 1]!;
     const b = this.route[i]!;
     const k = (d - this.routeLengths[i - 1]!) / (this.routeLengths[i]! - this.routeLengths[i - 1]!);
-    this.cart.position.lerpVectors(a, b, k);
-    this.cart.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+    obj.position.lerpVectors(a, b, k);
+    obj.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
   }
 
-  /** Follow the village state: the newest crate and how many pushes happened. */
-  sync(crates: readonly Crate[], pushes: number): void {
-    const latest = [...crates].reverse().find((c) => c.status !== "shipped");
-    this.status = latest?.status ?? "none";
-    if (latest) this.cartCrate.visible = true;
-    if (pushes > this.pushes) this.shipPending = true;
+  private placeCart(distance: number): void {
+    this.place(this.cart, distance);
+  }
+
+  /** Follow the village state: where the crates are, and how many pushes happened. */
+  sync(load: HarborLoad, pushes: number, lastPush?: LastPush): void {
+    this.load = load;
+    if (pushes > this.pushes) {
+      // A push sends its commits even when none were seen being saved (made outside CLI
+      // Village, or a forced push). Pushes the boat hasn't taken yet add up.
+      const sent = Math.max(lastPush?.crates ?? 0, lastPush?.commits ?? 0);
+      this.shipping = Math.min(MAX_LOAD, (this.shipPending ? this.shipping : 0) + sent);
+      this.shipPending = true;
+    }
     this.pushes = pushes;
   }
 
   private goal(): CartGoal {
-    if (this.shipPending) return "end";
-    switch (this.status) {
-      case "packed":
-      case "scanning":
-      case "blocked":
-        return "gate";
-      case "cleared":
-        return "end";
-      default:
-        return "start";
-    }
+    if (this.shipPending && this.shipping > 0) return "end";
+    // Crates that passed the gate wait at the dock; ones that haven't wait at the gate.
+    if (this.load.atDock > 0) return "end";
+    if (this.load.atGate > 0) return "gate";
+    return "start";
   }
 
   update(dt: number, t: number): void {
     // Move the cart toward where it should be.
-    const gateDistance = this.routeLengths[2]! - 0.9;
+    const gate = this.gateDistance;
     const goal = this.goal();
-    const target = goal === "start" ? 0 : goal === "gate" ? gateDistance : this.total;
+    const target = goal === "start" ? 0 : goal === "gate" ? gate : this.total;
     const speed = 3.2;
     if (Math.abs(target - this.cartAt) > 0.01) {
       // The cart can't pass the closed barrier.
-      const limit = this.barrierOpen < 0.8 && this.cartAt <= gateDistance + 0.01 ? gateDistance : this.total;
+      const limit = this.barrierOpen < 0.8 && this.cartAt <= gate + 0.01 ? gate : this.total;
       const next = this.cartAt + Math.sign(target - this.cartAt) * Math.min(Math.abs(target - this.cartAt), speed * dt);
       this.cartAt = Math.min(next, Math.max(limit, this.cartAt));
     }
     this.placeCart(this.cartAt);
 
-    // At the end of the dock with a push waiting: load the crate onto the boat.
-    if (this.shipPending && this.cartAt >= this.total - 0.05 && this.boatState === "docked") {
+    // At the end of the dock with a push waiting: load the crates onto the boat.
+    // (A push that only published the branch has no crates, so the boat doesn't wait for the cart.)
+    const cartArrived = this.shipping === 0 || this.cartAt >= this.total - 0.05;
+    if (this.shipPending && cartArrived && this.boatState === "docked") {
       this.shipPending = false;
-      this.cartCrate.visible = false;
-      this.boatCargo = Math.min(3, this.boatCargo + 1);
+      this.boatCargo = this.shipping;
       this.boatCrates.forEach((c, i) => (c.visible = i < this.boatCargo));
       this.boatState = "sailing";
       this.boatTimer = 0;
     }
-    if (!this.shipPending && this.status === "none" && this.cartAt < 0.05) this.cartCrate.visible = false;
 
-    // Barrier: open for a cleared crate, or to let the cart come back.
-    const wantOpen = this.status === "cleared" || this.shipPending || (goal === "start" && this.cartAt > gateDistance - 0.5);
-    this.barrierOpen += ((wantOpen ? 1 : 0) - this.barrierOpen) * Math.min(1, dt * 3);
+    // Crates that haven't passed the gate ride the cart up to it. Once the cart has gone
+    // on to the dock, they wait at the gate on a pallet, until the cart comes back for them.
+    const passed = this.cartAt > gate + 0.05;
+    const onPallet = this.shipPending || passed ? this.load.atGate : 0;
+    const onCart = this.shipPending ? this.shipping : this.load.atDock + (passed ? 0 : this.load.atGate);
+    arrange(this.cartCrates, onCart);
+    arrange(this.gateCrates, onPallet, PALLET_DROP);
+    this.gateStack.visible = onPallet > 0;
+
+    // Barrier: open to let the cart through to the dock, or to let it come back. It closes
+    // behind the cart, so a later check stops the next crate.
+    const goingOn = goal === "end" && this.cartAt <= gate + 0.8;
+    const comingBack = target < this.cartAt - 0.01 && this.cartAt > gate - 0.5;
+    this.barrierOpen += ((goingOn || comingBack ? 1 : 0) - this.barrierOpen) * Math.min(1, dt * 3);
     this.barrier.rotation.z = this.barrierOpen * 1.35;
 
-    // Gate lights: cyan sweep while scanning, blinking red for a leak, green when clear.
-    const lampColor = this.status === "blocked" ? P.red : this.status === "cleared" ? P.health[0] : P.glow;
+    // Gate lights: cyan sweep while scanning, blinking red when a crate is stopped, green when clear.
+    const light = this.load.gate;
+    const lampColor = light === "stopped" ? P.red : light === "clear" ? P.health[0] : P.glow;
     this.lamp.material.color.set(lampColor);
     this.lamp.material.emissive.set(lampColor);
     this.scanner.material.emissive.set(lampColor);
     const blink = Math.sin(t * 9) > 0 ? 1 : 0.2;
-    this.lamp.material.emissiveIntensity = this.status === "blocked" ? 3 * blink : this.status === "scanning" ? 1.5 + Math.sin(t * 7) : 0.7;
-    this.scanner.material.emissiveIntensity = this.status === "scanning" ? 2 + Math.sin(t * 14) : this.status === "blocked" ? 2 * blink : 0.5;
+    this.lamp.material.emissiveIntensity = light === "stopped" ? 3 * blink : light === "scanning" ? 1.5 + Math.sin(t * 7) : 0.7;
+    this.scanner.material.emissiveIntensity = light === "scanning" ? 2 + Math.sin(t * 14) : light === "stopped" ? 2 * blink : 0.5;
     this.beam.material.color.set(lampColor);
-    this.beam.material.opacity = this.status === "scanning" ? 0.16 + Math.sin(t * 10) * 0.06 : this.status === "blocked" ? 0.22 * blink : 0;
+    this.beam.material.opacity = light === "scanning" ? 0.16 + Math.sin(t * 10) * 0.06 : light === "stopped" ? 0.22 * blink : 0;
     this.beam.rotation.y = t * 2;
-    this.alarm.intensity = this.status === "blocked" ? 9 * blink : 0;
+    this.alarm.intensity = light === "stopped" ? 9 * blink : 0;
 
     // Boat: bob at the dock, sail away on push, then a fresh boat glides in.
     const dock = HARBOR.boat;
