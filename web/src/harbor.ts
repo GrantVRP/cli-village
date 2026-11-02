@@ -42,6 +42,8 @@ const CART_SPOTS: [number, number, number][][] = [
 ];
 /** Crates waiting at the gate without the cart sit on a pallet, this much lower than on the cart. */
 const PALLET_DROP = 0.34;
+/** How far the pallet stands to the side of the rails. */
+const PALLET_SIDE = 1.45;
 
 /** Show `n` of these crates, arranged like on the cart. */
 function arrange(crates: THREE.Group[], n: number, drop = 0): void {
@@ -83,6 +85,8 @@ export class Harbor {
   private boatTimer = 0;
   private boatCargo = 0;
   private barrierOpen = 0;
+  /** Frames left to jump straight to where things should be, after the page caught up. */
+  private snapFrames = 0;
 
   constructor() {
     this.group.name = "harbor";
@@ -148,7 +152,10 @@ export class Harbor {
       this.gateStack.add(crate);
       this.gateCrates.push(crate);
     }
+    // It stands beside the rails, so the cart can always get past it.
     this.place(this.gateStack, this.gateDistance);
+    const along = this.route[2]!.clone().sub(this.route[1]!).normalize();
+    this.gateStack.position.add(new THREE.Vector3(-along.z, 0, along.x).multiplyScalar(PALLET_SIDE));
     this.gateStack.visible = false;
     this.group.add(this.gateStack);
 
@@ -249,9 +256,20 @@ export class Harbor {
     this.place(this.cart, distance);
   }
 
-  /** Follow the village state: where the crates are, and how many pushes happened. */
-  sync(load: HarborLoad, pushes: number, lastPush?: LastPush): void {
+  /**
+   * Follow the village state: where the crates are, and how many pushes happened.
+   * `fresh`: the page just caught up with everything so far (it opened, or reconnected).
+   * Pushes from before aren't new, so the boat stays, and the cart goes straight to its place.
+   */
+  sync(load: HarborLoad, pushes: number, lastPush?: LastPush, fresh = false): void {
     this.load = load;
+    if (fresh) {
+      this.pushes = pushes;
+      this.shipPending = false;
+      this.shipping = 0;
+      this.snapFrames = 3; // a few big steps: the cart may have to wait one for the barrier
+      return;
+    }
     if (pushes > this.pushes) {
       // A push sends its commits even when none were seen being saved (made outside CLI
       // Village, or a forced push). Pushes the boat hasn't taken yet add up.
@@ -271,6 +289,10 @@ export class Harbor {
   }
 
   update(dt: number, t: number): void {
+    if (this.snapFrames > 0) {
+      this.snapFrames--;
+      dt = 60;
+    }
     // Move the cart toward where it should be.
     const gate = this.gateDistance;
     const goal = this.goal();

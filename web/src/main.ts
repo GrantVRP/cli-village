@@ -112,6 +112,7 @@ function resize(): void {
   composer.setSize(width, height);
   bloom.resolution.set(width, height);
   overlay.labelRenderer.setSize(width, height);
+  overlay.measurePanel();
   rig.resize(width, height);
   tiltH.uniforms.h!.value = 3.2 / width;
   tiltV.uniforms.v!.value = 3.2 / height;
@@ -182,6 +183,8 @@ const source = connect(token, {
     // --compact hides the beginner explanations and key hints.
     document.body.classList.toggle("compact", view.compact);
     setStill(prefersStill || !view.animation);
+    // What happened before the page opened is shown as it is now, not played again.
+    village.resync();
   },
   onStatus: (message) => overlay.setConnection(message),
 });
@@ -207,6 +210,8 @@ renderer.setAnimationLoop((time) => {
   world.update(dt, t);
   village.update(dt, t);
   effects.update(dt, t);
+  // With a building's log open on the right, center the picture in the space that's left.
+  rig.setInset(overlay.panelInset);
   rig.update(dt);
   composer.render(dt);
   overlay.labelRenderer.render(scene, rig.camera);

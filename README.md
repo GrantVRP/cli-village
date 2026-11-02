@@ -190,11 +190,11 @@ $ cli-village commit -m "Add payments"
 - Each robot is an agent. When it starts a task it walks to that kind of building: secrets → VAULT, research → LIBRARY, code → WORKSHOP, tests → LAB, planning → TOWN HALL, commits and pushes → GITHUB HARBOR. Idle robots rest at HOME.
 - Busy buildings send up cyan rings. Problems glow red and get a ✖ on their label.
 - The glass column in the plaza shows the village's health: green → yellow → orange → red.
-- At the GITHUB HARBOR, each snapshot is a crate on a rail cart. The cart stops at the gate while it's scanned: a leak keeps it there under a red light, a clean scan lifts the barrier, and the cart waits at the dock (up to 3 crates drawn) until a push sails the boat away. A snapshot saved without a scan waits at the gate on a pallet until the check before the next push.
+- At the GITHUB HARBOR, each snapshot is a crate on a rail cart. The cart stops at the gate while it's scanned: a leak keeps it there under a red light, a clean scan lifts the barrier, and the cart waits at the dock (up to 3 crates drawn) until a push sails the boat away. A snapshot saved without a scan waits on a pallet beside the gate until the check before the next push.
 
   ![A real commit with a secret in it, stopped at the gate](docs/screenshots/village-harbor-stopped.jpg)
-- The camera drifts slowly and glides to wherever the most important thing is happening. The caption at the top says what that is (and the real command).
-- **Drag** to look around, **scroll** to zoom, **click** a building to see its log. Keys: `?` help, `n` night, `h` back to the whole village, `Esc` close.
+- The camera drifts slowly and glides to wherever the most important thing is happening, turning to show that building from the front. The caption at the top says what that is (and the real command).
+- **Drag** to look around, **scroll** to zoom, **click** a building to see it up close, with its log beside it. Keys: `?` help, `n` night, `h` back to the whole village, `Esc` close.
 - If your system asks for less motion (*reduce motion*), or you start it with `--no-animation`, the village stands still: robots appear where they're going, and the camera only moves when you click a building or press `h`.
 - With `--compact`, the caption drops the explanation line and the key hints are hidden.
 

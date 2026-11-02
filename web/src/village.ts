@@ -51,6 +51,7 @@ export class Village {
   private pinnedUntil = 0;
   /** Still mode (--no-animation or reduced motion): robots appear where they're going, and the camera only moves when you ask. */
   still = false;
+  private fresh = false;
   private readonly tmp = new THREE.Vector3();
 
   constructor(
@@ -85,10 +86,19 @@ export class Village {
     this.group.add(this.harbor.group, this.column.group);
   }
 
+  /** The page is about to catch up with everything that happened so far (it opened, or reconnected). */
+  resync(): void {
+    this.fresh = true;
+  }
+
   /** Called whenever the village state changes. */
   sync(state: VillageState): void {
     this.state = state;
     const now = Date.now();
+    // Catching up: put robots and the cart where they are now, instead of acting out the past.
+    const fresh = this.fresh;
+    this.fresh = false;
+    const snap = this.still || fresh;
 
     // Group robots by where they're going, so each gets its own spot.
     const byBuilding = new Map<Building, AgentState[]>();
@@ -116,7 +126,7 @@ export class Village {
       }
       const { robot } = info;
       const slotKey = `${agent.location}:${slot}:${group.length}`;
-      if (this.still && (robot.building !== agent.location || info.slotKey !== slotKey)) {
+      if (snap && (robot.building !== agent.location || info.slotKey !== slotKey)) {
         robot.place(dest, lookAt);
         robot.building = agent.location;
       } else if (robot.building !== agent.location) {
@@ -148,7 +158,7 @@ export class Village {
     }
 
     this.column.setHealth(state.health);
-    this.harbor.sync(harborLoad(state), state.stats.pushes, state.lastPush);
+    this.harbor.sync(harborLoad(state), state.stats.pushes, state.lastPush, fresh);
     const mode = document.body.dataset.mode ?? "";
     this.overlay.setStatus(state, mode);
     // Live, and nothing has happened yet: suggest something to try.
@@ -163,16 +173,22 @@ export class Village {
       if (state.stopped) this.rig.reset();
       else if (h.building && now >= this.pinnedUntil && !this.still) {
         const since = now - this.lastFocusAt;
-        const point = h.building === "harbor" ? HARBOR.gate : SPOTS[h.building].pos;
         if (h.level === "attention") {
-          this.rig.focus(point, 7000, 24);
+          this.focusOn(h.building, 7000, 24);
           this.lastFocusAt = now;
         } else if (h.level === "active" && since > 2500) {
-          this.rig.focus(point, 4200, 30);
+          this.focusOn(h.building, 4200, 30);
           this.lastFocusAt = now;
         }
       }
     }
+  }
+
+  /** Point the camera at a building's front. Tall ones (the Library, the Town Hall) need it further back to fit. */
+  private focusOn(id: Building, holdMs: number, radius: number): void {
+    const spot = SPOTS[id];
+    const point = id === "harbor" ? HARBOR.gate : spot.pos;
+    this.rig.focus(point, holdMs, Math.max(radius, spot.labelY * 3.3), spot.labelY * 0.33);
   }
 
   /** Back to the whole village (the h key). */
@@ -182,8 +198,7 @@ export class Village {
 
   /** Click on a building: glide to it and show its log. */
   select(id: Building): void {
-    const point = id === "harbor" ? HARBOR.gate : SPOTS[id].pos;
-    this.rig.focus(point, 12000, 24);
+    this.focusOn(id, 12000, 24);
     this.pinnedUntil = Date.now() + 12000;
     if (this.state) this.overlay.openPanel(id, this.state);
   }

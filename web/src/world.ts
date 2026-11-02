@@ -23,34 +23,33 @@ export interface World {
 
 const rng = makeRandom(7);
 
-function ground(): THREE.Mesh {
-  const size = 120;
-  const geo = new THREE.PlaneGeometry(size, size, 80, 80).rotateX(-Math.PI / 2).toNonIndexed();
-  const pos = geo.getAttribute("position");
-  const heights = new Map<string, number>();
-  const heightAt = (x: number, z: number) => {
-    const key = `${x.toFixed(2)},${z.toFixed(2)}`;
-    const cached = heights.get(key);
-    if (cached !== undefined) return cached;
-    const fromRiver = Math.abs(z - RIVER_Z);
-    let y = (rng() - 0.5) * 0.08;
-    if (fromRiver < RIVER_HALF + 0.4) y = -0.95; // river bed
-    else if (fromRiver < RIVER_HALF + 1.4) y = -0.25 + (rng() - 0.5) * 0.1; // banks
-    if (z < -30) y += Math.min(2.5, (-30 - z) * 0.12) + Math.sin(x * 0.3) * 0.3; // gentle hills behind
-    if (Math.hypot(x, z) < 24 && z > -19) y = Math.min(y, 0) * 0.3; // keep the village flat
-    heights.set(key, y);
-    return y;
-  };
-  for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
+/** The fine ground around the village is this big. Coarser land goes on past it, out into the fog. */
+const GROUND_SIZE = 120;
+const FAR_SIZE = 320;
+/** How far the tree line and the river run to each side (well into the fog). */
+const SIDE_REACH = 84;
 
+/** The lie of the land: the river bed and its banks, and gentle hills behind. */
+function landHeight(x: number, z: number, wobble: () => number): number {
+  const fromRiver = Math.abs(z - RIVER_Z);
+  let y = wobble() * 0.08;
+  if (fromRiver < RIVER_HALF + 0.4) y = -0.95; // river bed
+  else if (fromRiver < RIVER_HALF + 1.4) y = -0.25 + wobble() * 0.1; // banks
+  if (z < -30) y += Math.min(2.5, (-30 - z) * 0.12) + Math.sin(x * 0.3) * 0.3; // gentle hills behind
+  return y;
+}
+
+/** Ground made of flat-colored triangles: river bed, sandy banks, and two greens with a little jitter. */
+function groundMesh(geo: THREE.BufferGeometry, name: string, random = rng): THREE.Mesh {
+  const pos = geo.getAttribute("position");
   const colors = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i += 3) {
     const y = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
     if (y < -0.6) c.set(0x6f6a55);
     else if (y < -0.12) c.set(P.sand);
-    else c.set(rng() < 0.5 ? P.grass : P.grass2);
-    c.offsetHSL(0, 0, (rng() - 0.5) * 0.05);
+    else c.set(random() < 0.5 ? P.grass : P.grass2);
+    c.offsetHSL(0, 0, (random() - 0.5) * 0.05);
     for (let k = 0; k < 3; k++) colors.set([c.r, c.g, c.b], (i + k) * 3);
   }
   geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -58,8 +57,53 @@ function ground(): THREE.Mesh {
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, materials.matte);
   mesh.receiveShadow = true;
-  mesh.name = "ground";
+  mesh.name = name;
   return mesh;
+}
+
+function ground(): THREE.Mesh {
+  const geo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE, 80, 80).rotateX(-Math.PI / 2).toNonIndexed();
+  const pos = geo.getAttribute("position");
+  const heights = new Map<string, number>();
+  const heightAt = (x: number, z: number) => {
+    const key = `${x.toFixed(2)},${z.toFixed(2)}`;
+    const cached = heights.get(key);
+    if (cached !== undefined) return cached;
+    let y = landHeight(x, z, () => rng() - 0.5);
+    if (Math.hypot(x, z) < 24 && z > -19) y = Math.min(y, 0) * 0.3; // keep the village flat
+    heights.set(key, y);
+    return y;
+  };
+  for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
+  return groundMesh(geo, "ground");
+}
+
+/**
+ * Coarser land all around the fine ground, so its edge never comes into view.
+ * It sits a little lower and tucks under the fine ground's edge, so the two never fight.
+ */
+function farGround(): THREE.Mesh {
+  const cell = 5;
+  const cells = FAR_SIZE / cell;
+  const hole = GROUND_SIZE / 2 - cell; // overlap the fine ground by one cell
+  const corner = (x: number, z: number) => new THREE.Vector3(x, landHeight(x, z, () => 0) - 0.12, z);
+  const points: number[] = [];
+  for (let i = 0; i < cells; i++) {
+    for (let j = 0; j < cells; j++) {
+      const x0 = -FAR_SIZE / 2 + i * cell;
+      const z0 = -FAR_SIZE / 2 + j * cell;
+      if (Math.abs(x0 + cell / 2) < hole && Math.abs(z0 + cell / 2) < hole) continue;
+      const a = corner(x0, z0);
+      const b = corner(x0, z0 + cell);
+      const c = corner(x0 + cell, z0 + cell);
+      const d = corner(x0 + cell, z0);
+      for (const p of [a, b, c, a, c, d]) points.push(p.x, p.y, p.z);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+  // With its own random numbers, so the village's colors and trees don't depend on it.
+  return groundMesh(geo, "far-ground", makeRandom(31));
 }
 
 function plaza(b: ModelBuilder): void {
@@ -142,26 +186,35 @@ function paths(b: ModelBuilder): void {
   for (let i = 0; i < route.length - 1; i++) railSegment(b, route[i]!, route[i + 1]!, true);
 }
 
-function tree(b: ModelBuilder, x: number, z: number, scale: number, leaf: number, y = 0): void {
+function tree(b: ModelBuilder, x: number, z: number, scale: number, leaf: number, y = 0, random = rng): void {
   const trunkH = 1.3 * scale;
   b.add(new THREE.CylinderGeometry(0.13 * scale, 0.2 * scale, trunkH, 6), P.trunk, { at: [x, y + trunkH / 2, z] });
-  const blobs = 3 + Math.floor(rng() * 2);
+  const blobs = 3 + Math.floor(random() * 2);
   for (let i = 0; i < blobs; i++) {
-    const r = (0.75 + rng() * 0.45) * scale;
+    const r = (0.75 + random() * 0.45) * scale;
     b.add(new THREE.IcosahedronGeometry(r, 1), leaf, {
-      at: [x + (rng() - 0.5) * 0.9 * scale, y + trunkH + r * 0.6 + (i === 0 ? 0.35 * scale : rng() * 0.7 * scale), z + (rng() - 0.5) * 0.9 * scale],
+      at: [x + (random() - 0.5) * 0.9 * scale, y + trunkH + r * 0.6 + (i === 0 ? 0.35 * scale : random() * 0.7 * scale), z + (random() - 0.5) * 0.9 * scale],
       jitter: 0.08,
     });
   }
 }
 
+function treeLineTree(b: ModelBuilder, x: number, row: number, random: () => number): void {
+  const z = RIVER_Z - RIVER_HALF - 3.2 - row * 3.4 - random() * 1.5;
+  const hill = z < -30 ? Math.min(2.5, (-30 - z) * 0.12) : 0;
+  tree(b, x, z, 1.1 + random() * 0.7 + row * 0.15, pick(P.leaf, random), hill - 0.1, random);
+}
+
 function trees(b: ModelBuilder): void {
-  // The tree line beyond the river.
+  // The tree line beyond the river. It goes on past the sides (out into the fog), with
+  // its own random numbers there, so the trees by the village don't depend on how far it goes.
+  const sides = makeRandom(43);
   for (let row = 0; row < 3; row++) {
-    for (let x = -54; x < 54; x += 2.6 + rng() * 1.6) {
-      const z = RIVER_Z - RIVER_HALF - 3.2 - row * 3.4 - rng() * 1.5;
-      const hill = z < -30 ? Math.min(2.5, (-30 - z) * 0.12) : 0;
-      tree(b, x, z, 1.1 + rng() * 0.7 + row * 0.15, pick(P.leaf, rng), hill - 0.1);
+    for (let x = -54; x < 54; x += 2.6 + rng() * 1.6) treeLineTree(b, x, row, rng);
+  }
+  for (let row = 0; row < 3; row++) {
+    for (const dir of [-1, 1]) {
+      for (let x = 56; x < SIDE_REACH; x += 2.6 + sides() * 1.6) treeLineTree(b, x * dir, row, sides);
     }
   }
   // A few around the village, plus one orange autumn tree.
@@ -171,7 +224,8 @@ function trees(b: ModelBuilder): void {
     [24, 4, 1.1], [-16, 18.5, 0.9], [16.5, 19, 1.0], [7.5, -18.5, 1.0],
   ];
   for (const [x, z, s] of around) tree(b, x, z, s, pick(P.leaf, rng));
-  tree(b, -19.5, -14, 1.55, P.autumn);
+  // Off to the side of the Library, so it doesn't hide the dome.
+  tree(b, -24, -12.5, 1.55, P.autumn);
   // Bushes.
   for (let i = 0; i < 26; i++) {
     const a = rng() * Math.PI * 2;
@@ -184,7 +238,7 @@ function trees(b: ModelBuilder): void {
 }
 
 function river(): { mesh: THREE.Mesh; update: (t: number) => void } {
-  const geo = new THREE.PlaneGeometry(130, RIVER_HALF * 2 + 1.0, 90, 7).rotateX(-Math.PI / 2);
+  const geo = new THREE.PlaneGeometry(SIDE_REACH * 2 + 40, RIVER_HALF * 2 + 1.0, 150, 7).rotateX(-Math.PI / 2);
   const material = new THREE.MeshStandardMaterial({
     color: P.river,
     flatShading: true,
@@ -213,13 +267,22 @@ function river(): { mesh: THREE.Mesh; update: (t: number) => void } {
 }
 
 function riverBanks(b: ModelBuilder): void {
+  const rock = (x: number, side: number, random: () => number) =>
+    b.add(new THREE.IcosahedronGeometry(0.22 + random() * 0.3, 0), pick([P.stone, P.stoneDark, 0x8f8a7c], random), {
+      at: [x, -0.25, RIVER_Z + side * (RIVER_HALF + 0.3 + random() * 0.5)],
+      jitter: 0.08,
+    });
   for (const side of [1, -1]) {
     for (let x = -50; x < 50; x += 0.9 + rng() * 1.2) {
       if (side === 1 && Math.abs(x - HARBOR.dockStart.x) < 1.8) continue;
-      b.add(new THREE.IcosahedronGeometry(0.22 + rng() * 0.3, 0), pick([P.stone, P.stoneDark, 0x8f8a7c], rng), {
-        at: [x, -0.25, RIVER_Z + side * (RIVER_HALF + 0.3 + rng() * 0.5)],
-        jitter: 0.08,
-      });
+      rock(x, side, rng);
+    }
+  }
+  // On past the sides, with their own random numbers (see the tree line).
+  const sides = makeRandom(44);
+  for (const side of [1, -1]) {
+    for (const dir of [-1, 1]) {
+      for (let x = 51; x < SIDE_REACH; x += 0.9 + sides() * 1.2) rock(x * dir, side, sides);
     }
   }
 }
@@ -325,7 +388,7 @@ function props(b: ModelBuilder): void {
 export function createWorld(): World {
   const group = new THREE.Group();
   group.name = "world";
-  group.add(ground());
+  group.add(ground(), farGround());
 
   const b = new ModelBuilder();
   plaza(b);

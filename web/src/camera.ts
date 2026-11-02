@@ -17,6 +17,10 @@ interface View {
 
 const HOME: View = { target: new THREE.Vector3(0, 0, -3), radius: 72, polar: 0.86, azimuth: 0 };
 const USER_PAUSE_MS = 9000;
+/** How far round to turn toward a building's front when visiting it (1 = straight on). */
+const FRONT_TURN = 0.75;
+/** The picture is drawn this much taller than the window and shifted down, to leave room for the caption. */
+const CAPTION_ROOM = 1.16;
 
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
@@ -28,6 +32,10 @@ export class CameraRig {
   private dragging = false;
   private orbitClock = 0;
   private stillMode = false;
+  private size = { width: 0, height: 0 };
+  /** Pixels kept free on the right: wanted, and right now (it glides; -1 = not set yet). */
+  private insetWanted = 0;
+  private insetNow = -1;
 
   constructor(dom: HTMLElement, still: boolean) {
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.5, 400);
@@ -62,11 +70,13 @@ export class CameraRig {
   }
 
   /** Glide toward a spot for a while, then come back out. (In still mode: cut to it and stay.) */
-  focus(point: THREE.Vector3, holdMs: number, radius = 30): void {
+  focus(point: THREE.Vector3, holdMs: number, radius = 30, height = 2): void {
     const dir = point.clone().setY(0);
-    // Look at the spot from the plaza side, so the building's front is visible.
-    const azimuth = dir.lengthSq() > 1 ? Math.atan2(dir.x, dir.z) * 0.35 : this.current.azimuth;
-    this.focusView = { target: point.clone().setY(1.2), radius, polar: 0.82, azimuth };
+    // Every building faces the plaza, so look at it from the plaza side to see its front.
+    // Turning most (not all) of the way keeps a little of the overview's angle.
+    const azimuth = dir.lengthSq() > 1 ? Math.atan2(-dir.x, -dir.z) * FRONT_TURN : this.current.azimuth;
+    // Aim partway up the building, so its top and name tag stay clear of the caption.
+    this.focusView = { target: point.clone().setY(height), radius, polar: 0.82, azimuth };
     this.focusUntil = performance.now() + holdMs;
     if (this.stillMode) this.cut(this.focusView);
   }
@@ -88,10 +98,29 @@ export class CameraRig {
   }
 
   resize(width: number, height: number): void {
-    this.camera.aspect = width / height;
-    // Shift the picture down a little, so the caption at the top doesn't cover the buildings.
-    this.camera.setViewOffset(width, height * 1.16, 0, 0, width, height);
-    this.camera.updateProjectionMatrix();
+    this.size = { width, height };
+    this.insetNow = -1; // set the view offset again
+    this.applyInset(0);
+  }
+
+  /** Keep this many pixels on the right free (for the log panel), so what the camera looks at is centered in the rest. */
+  setInset(pixels: number): void {
+    this.insetWanted = pixels;
+  }
+
+  private applyInset(dt: number): void {
+    const { width, height } = this.size;
+    if (!width || !height) return;
+    const before = this.insetNow;
+    const k = this.stillMode || before < 0 ? 1 : 1 - Math.exp(-dt * 6);
+    this.insetNow = Math.max(0, before) + (this.insetWanted - Math.max(0, before)) * k;
+    if (Math.abs(this.insetWanted - this.insetNow) < 0.5) this.insetNow = this.insetWanted;
+    if (this.insetNow === before) return;
+    // Render the right part of a wider picture: its center moves left, into the free space.
+    // It's also a little taller and shifted down, so the caption at the top doesn't cover the buildings.
+    // (setViewOffset sets the camera's aspect to the bigger picture's, so nothing is stretched.)
+    const inset = this.insetNow;
+    this.camera.setViewOffset(width + inset, height * CAPTION_ROOM, inset, 0, width, height);
   }
 
   update(dt: number): void {
@@ -100,10 +129,14 @@ export class CameraRig {
       // The user is in charge. Remember where they left the camera.
       this.controls.update();
       this.readBack();
+      this.applyInset(dt);
       return;
     }
     // Still mode: the camera never moves by itself. It stays where you left it.
-    if (this.stillMode) return;
+    if (this.stillMode) {
+      this.applyInset(dt);
+      return;
+    }
 
     if (!this.stillMode) this.orbitClock += dt;
     const wanted: View =
@@ -120,11 +153,11 @@ export class CameraRig {
     this.current.target.lerp(wanted.target, k);
     this.current.radius += (wanted.radius - this.current.radius) * k;
     this.current.polar += (wanted.polar - this.current.polar) * k;
-    let dAz = wanted.azimuth - this.current.azimuth;
-    while (dAz > Math.PI) dAz -= Math.PI * 2;
-    while (dAz < -Math.PI) dAz += Math.PI * 2;
-    this.current.azimuth += dAz * k;
+    // No wrapping around: going from one side of the village to the other, the camera
+    // swings round the front, never round the back over the river.
+    this.current.azimuth += (wanted.azimuth - this.current.azimuth) * k;
     this.apply(this.current);
+    this.applyInset(dt);
   }
 
   private apply(view: View): void {
