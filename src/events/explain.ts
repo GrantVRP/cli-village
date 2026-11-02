@@ -93,5 +93,19 @@ export const GLOSSARY: readonly { word: string; meaning: string }[] = [
   { word: "secret scan", meaning: "checks no secret slipped into a commit" },
 ];
 
+/** What a live view suggests before anything has happened. */
+export interface WaitingHint {
+  subtitle: string;
+  command: string;
+  explain: string;
+}
+
+/** The suggestion both views show in live mode, until the first work arrives. */
+export const WAITING: WaitingHint = {
+  subtitle: "Waiting for work. In another terminal, try:",
+  command: 'cli-village status · test · commit -m "..." · push',
+  explain: "AI agents can report their work too: cli-village emit (docs/EVENTS.md)",
+};
+
 /** The expert flags, for the ? help, so they're easy to find. */
 export const EXPERT_FLAGS = "--compact, --quiet, --json, --no-animation";

@@ -11,15 +11,10 @@ import { startHub } from "../hub/server.js";
 import { bold, cyan, dim } from "../lib/style.js";
 import type { Ui } from "../lib/ui.js";
 import { attachLogView } from "../views/log.js";
-import type { WaitingHint } from "../views/terminal/App.js";
 import { runTerminalView, wantsLiveView } from "../views/terminal/index.js";
+import { WAITING } from "../events/explain.js";
 
-/** What the terminal view suggests before anything has happened. */
-export const WAITING: WaitingHint = {
-  subtitle: "Waiting for work. In another terminal, try:",
-  command: 'cli-village status · test · commit -m "..." · push',
-  explain: "AI agents can report their work too: cli-village emit (docs/EVENTS.md)",
-};
+export { WAITING };
 
 export type Joined =
   | { ok: true; role: "host" | "follower"; path: string; ended?: Promise<void>; close: () => Promise<void> }

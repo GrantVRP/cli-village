@@ -30,7 +30,7 @@
         <div id="caption-title" class="caption-title">Waiting for the village…</div>
         <div id="caption-subtitle" class="caption-subtitle"></div>
         <div id="caption-command" class="caption-command" hidden>
-          <span class="caption-command-label">Real command:</span>
+          <span id="caption-command-label" class="caption-command-label">Real command:</span>
           <code id="caption-command-text"></code>
         </div>
         <!-- The beginner explainer: what that command means. Hidden with --compact. -->
@@ -46,6 +46,8 @@
       <h2 id="panel-title"></h2>
       <p id="panel-help" class="panel-help"></p>
       <p id="panel-status" class="panel-status"></p>
+      <!-- The harbor's crates: what's at the gate, what's waiting, or the last boat. -->
+      <p id="panel-note" class="panel-note" hidden></p>
       <ol id="panel-log" class="panel-log"></ol>
     </aside>
 
