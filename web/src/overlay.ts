@@ -31,6 +31,7 @@ export class Overlay {
   private readonly labels = new Map<Building, { el: HTMLElement; icon: HTMLElement; mode: LabelMode }>();
   private readonly bubbles = new Map<string, { el: HTMLElement; text: HTMLElement; value: string; mode: BubbleMode }>();
   private panelBuilding: Building | null = null;
+  private panelCovers = 0;
   private captionKey = "";
   private captionTitle = "";
 
@@ -147,11 +148,26 @@ export class Overlay {
     this.panelBuilding = id;
     $("#panel").hidden = false;
     this.updatePanel(state);
+    this.measurePanel();
   }
 
   closePanel(): void {
     this.panelBuilding = null;
     $("#panel").hidden = true;
+    this.measurePanel();
+  }
+
+  /** How much of the window's right side the open panel covers, in pixels. */
+  get panelInset(): number {
+    return this.panelCovers;
+  }
+
+  /** Measured when the panel opens or closes, or the window changes size (not every frame). */
+  measurePanel(): void {
+    const panel = $("#panel");
+    const covers = panel.hidden ? 0 : innerWidth - panel.getBoundingClientRect().left;
+    // On a narrow screen the panel covers most of it, so there's no room to move the picture into.
+    this.panelCovers = covers > 0 && covers < innerWidth * 0.45 ? covers : 0;
   }
 
   get openBuilding(): Building | null {

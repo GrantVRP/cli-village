@@ -72,7 +72,7 @@ Every event has a `type` and an `agent` (a short name: letters, numbers, spaces,
 
 At the harbor, a `scan` task can come before or after its `commit`. Scan first (as `cli-village commit` does): the gate packs a crate for your changes, and the `commit` fills it in. Commit first: the crate waits at the gate for the next scan. A failed scan stops the crate at the gate under a red light, a passed one lets it through to the dock, and `push` sails the boat with every saved crate.
 
-The scan's `command` says what it checks. `infisical scan git-changes …` checks your changes before they're saved, so it never moves a crate that's already saved. `infisical scan --log-opts=…` checks what a push would send: the saved crates that haven't passed the gate yet (or, if there are none, the snapshots made outside CLI Village). A scan with no command checks saved crates waiting at the gate, or else your changes. A `commit` started by a task whose command has `--amend` replaces the newest crate instead of adding one.
+The scan's `command` says what it checks. `infisical scan git-changes …` checks your changes before they're saved, so it never moves a crate that's already saved. `infisical scan --log-opts=…` checks what a push would send: the saved crates that haven't passed the gate yet (or, if there are none, the snapshots made outside CLI Village). A scan with no command checks saved crates waiting at the gate, or else your changes. A `commit` started by a task whose command has `--amend` replaces the newest crate instead of adding one. If the gate had stopped that crate, the harbor keeps its problem until a scan passes, and pushing the redone crate without a scan gives the same warning as pushing a stopped one.
 
 ### Kinds of work and their buildings
 
