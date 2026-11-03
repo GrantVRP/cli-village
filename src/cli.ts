@@ -7,6 +7,7 @@ import { runDemoCommand } from "./commands/demo.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runCommit, runPush, runStatus } from "./commands/git.js";
 import { runOpenCommand } from "./commands/open.js";
+import { runAppCommand } from "./commands/app.js";
 import { runWithSecrets } from "./commands/run.js";
 import { runSecretsDiff, runSecretsExport, runSecretsFetch } from "./commands/secrets.js";
 import { runTests } from "./commands/test.js";
@@ -101,6 +102,7 @@ Examples:
   cli-village --demo                 watch pretend robots act out a workday
   cli-village --demo --once          play the demo once, then stop
   cli-village open --demo            the demo in the 3D village, in your browser
+  cli-village app                    village, terminal and tools in one window
   cli-village doctor                 check that your tools are ready
   cli-village secrets fetch          your secrets' names (values stay hidden)
   cli-village secrets diff dev prod  compare two environments by key name
@@ -142,6 +144,17 @@ withOutputFlags(
     .option("--no-open", "don't open a browser, just print the address"),
 ).action(async (options: { demo?: boolean; speed?: number; port?: number; open: boolean }, cmd: Command) => {
   process.exitCode = await runOpenCommand({ ...options, version: pkg.version }, uiOf(cmd));
+});
+
+withOutputFlags(
+  program
+    .command("app")
+    .description("open the desktop app: the 3D village, a terminal and the tools in one window")
+    .option("--demo", "show pretend robots (nothing real runs)")
+    .option("--once", "with --demo: play one round, then stop")
+    .option("--speed <n>", "with --demo: play faster or slower (2 = twice as fast)", parseSpeed),
+).action(async (options: { demo?: boolean; once?: boolean; speed?: number }, cmd: Command) => {
+  process.exitCode = await runAppCommand({ ...options, version: pkg.version }, uiOf(cmd));
 });
 
 // Options that pick which secrets. Infisical decides the defaults (e.g. the

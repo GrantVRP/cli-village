@@ -16,6 +16,10 @@ concurrency:
 permissions:
   contents: read
 
+# The tests never open the desktop app, so skip Electron's 100 MB download.
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
 jobs:
   test:
     name: ${{ matrix.os }} · Node ${{ matrix.node }}
