@@ -18,9 +18,15 @@ import { Overlay } from "./overlay.js";
 import { P } from "./palette.js";
 import { Village } from "./village.js";
 import { createWorld, railGlow } from "./world.js";
+import { BUILDINGS, type Building } from "../../src/events/types.js";
 import "./style.css";
 
-const token = new URLSearchParams(location.search).get("token") ?? "";
+const params = new URLSearchParams(location.search);
+const token = params.get("token") ?? "";
+// Inside the desktop app: the app draws the bars, panels and logs itself, so this page
+// shows only the village and its caption, and hands building clicks to the app.
+const embedded = params.get("embed") === "1";
+document.body.classList.toggle("embed", embedded);
 // Still mode: nothing moves on its own. On when your system asks for reduced
 // motion, or when the terminal was started with --no-animation.
 const prefersStill = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -122,8 +128,9 @@ resize();
 
 // --- Day and night ------------------------------------------------------------------
 
-let nightTarget = 0;
-let night = 0;
+// The desktop app opens at dusk (?night=1).
+let nightTarget = params.get("night") === "1" ? 1 : 0;
+let night = nightTarget;
 function applyNight(k: number): void {
   (scene.background as THREE.Color).copy(DAY_SKY).lerp(NIGHT_SKY, k);
   (scene.fog as THREE.Fog).color.copy(scene.background as THREE.Color);
@@ -157,6 +164,25 @@ addEventListener("keydown", (e) => {
     rig.reset();
   }
 });
+
+// --- Inside the desktop app: messages to and from the window around us ------------------
+
+if (embedded) {
+  overlay.toggleSide(false);
+  overlay.onSelect = (id) => parent.postMessage({ type: "cli-village", action: "selected", building: id }, location.origin);
+  addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string }>) => {
+    // Only the page around us, from our own server, may steer the village.
+    if (e.origin !== location.origin || e.source !== parent) return;
+    const m = e.data;
+    if (!m || m.type !== "cli-village") return;
+    if (m.action === "night") nightTarget = 1;
+    else if (m.action === "day") nightTarget = 0;
+    else if (m.action === "home") {
+      village.unpin();
+      rig.reset();
+    } else if (m.action === "focus" && (BUILDINGS as readonly string[]).includes(m.building ?? "")) village.select(m.building as Building);
+  });
+}
 
 const raycaster = new THREE.Raycaster();
 let downAt: { x: number; y: number } | null = null;

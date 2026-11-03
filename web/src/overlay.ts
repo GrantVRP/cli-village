@@ -6,45 +6,22 @@
 import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import type * as THREE from "three";
 import { EXPERT_FLAGS, GLOSSARY } from "../../src/events/explain.js";
-import {
-  describeHarbor,
-  isWalking,
-  type AgentState,
-  type AgentStatus,
-  type Headline,
-  type HarborSummary,
-  type LogEntry,
-  type VillageState,
-} from "../../src/events/state.js";
+import { describeHarbor, type Headline, type VillageState } from "../../src/events/state.js";
 import { BUILDING_HELP, BUILDING_NAMES, type Building } from "../../src/events/types.js";
+import { el, followBottom, HARBOR_ICONS, harborLine, plural, renderLog, robotRow, sortedRobots } from "./lists.js";
 
 export type LabelMode = "idle" | "active" | "problem";
 export type BubbleMode = "primary" | "secondary" | "hidden";
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 
-function el(tag: string, className?: string, text?: string): HTMLElement {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-const clock = (ts: number) => new Date(ts).toTimeString().slice(0, 8);
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-const ICONS = { start: "▶", move: "·", progress: "…", done: "✔", fail: "✖", commit: "■", push: "▲" } as const;
-const HARBOR_ICONS: Record<HarborSummary["icon"], string> = { scan: "…", stop: "✖", crate: "■", boat: "▲" };
-const ROBOT_ICONS: Record<AgentStatus, string> = { working: "▶", failed: "✖", walking: "·", idle: "○" };
-/** Problems first, then robots at work, then the ones walking or resting (same as the terminal). */
-const ROBOT_ORDER: Record<AgentStatus, number> = { failed: 0, working: 1, walking: 2, idle: 3 };
-/** How many log lines the side panel keeps. */
-const LOG_LINES = 60;
 /** Below this width the side panel floats over the picture instead of beside it. */
 const NARROW = 900;
 
 export class Overlay {
   readonly labelRenderer = new CSS2DRenderer();
+  /** Set by the desktop app: it shows building logs itself, so a click is handed to it instead of opening the panel. */
+  onSelect: ((id: Building) => void) | null = null;
   private readonly labels = new Map<Building, { el: HTMLElement; icon: HTMLElement; mode: LabelMode }>();
   private readonly bubbles = new Map<string, { el: HTMLElement; text: HTMLElement; value: string; mode: BubbleMode }>();
   private panelBuilding: Building | null = null;
@@ -65,24 +42,9 @@ export class Overlay {
     $("#details-toggle").addEventListener("click", () => this.toggleDetails());
     this.buildHelp();
     this.applySide();
-    for (const list of [$("#activity-log"), $("#panel-log")]) this.followBottom(list);
+    for (const list of [$("#activity-log"), $("#panel-log")]) followBottom(list);
     // "walking" wears off by the clock, not by an event, so the robots list ticks on its own.
     setInterval(() => this.state && this.renderRobots(this.state), 1000);
-  }
-
-  /**
-   * A log follows its newest line until you scroll up, and follows again once you scroll
-   * back down. Only your scrolling decides: the list getting shorter (because the robots
-   * list above it grew) must not stop it following.
-   */
-  private followBottom(list: HTMLElement): void {
-    list.dataset.follow = "1";
-    list.addEventListener("scroll", () => {
-      list.dataset.follow = list.scrollHeight - list.scrollTop - list.clientHeight < 24 ? "1" : "0";
-    });
-    new ResizeObserver(() => {
-      if (list.dataset.follow === "1") list.scrollTop = list.scrollHeight;
-    }).observe(list);
   }
 
   // --- Labels -------------------------------------------------------------------
@@ -218,6 +180,10 @@ export class Overlay {
   // --- Side panel: a building's log ------------------------------------------------------
 
   openPanel(id: Building, state: VillageState): void {
+    if (this.onSelect) {
+      this.onSelect(id);
+      return;
+    }
     this.panelBuilding = id;
     $("#side-overview").hidden = true;
     $("#panel").hidden = false;
@@ -243,7 +209,7 @@ export class Overlay {
     if (this.panelBuilding) this.renderBuilding(state, this.panelBuilding);
     else {
       this.renderRobots(state);
-      this.renderActivity(state);
+      renderLog($("#activity-log"), state.log, this.details, "Nothing yet.");
     }
   }
 
@@ -257,44 +223,10 @@ export class Overlay {
 
   private renderRobots(state: VillageState): void {
     const now = Date.now();
-    const agents = Object.values(state.agents).sort(
-      (a, b) => ROBOT_ORDER[a.status] - ROBOT_ORDER[b.status] || a.name.localeCompare(b.name),
-    );
+    const agents = sortedRobots(state);
     $("#robots-count").textContent = agents.length ? String(agents.length) : "";
-    $("#robots-list").replaceChildren(
-      ...(agents.length ? agents.map((agent) => this.robotRow(agent, now)) : [el("li", "empty", "No robots yet.")]),
-    );
-    const harbor = describeHarbor(state);
-    const line = $("#harbor-line");
-    line.hidden = !harbor;
-    if (harbor) {
-      line.className = `harbor-line ${harbor.level}`;
-      line.replaceChildren(el("span", "icon", HARBOR_ICONS[harbor.icon]), el("span", "name", "Harbor"), el("span", "text", harbor.text));
-    }
-  }
-
-  private robotRow(agent: AgentState, now: number): HTMLElement {
-    const walking = isWalking(agent, now);
-    const status: AgentStatus = walking ? "walking" : agent.status === "walking" ? "idle" : agent.status;
-    const place = walking ? `→ ${BUILDING_NAMES[agent.location]}` : BUILDING_NAMES[agent.location];
-    const activity =
-      status === "failed"
-        ? `problem: ${agent.task?.message ?? agent.say ?? "something went wrong"}`
-        : status === "working"
-          ? (agent.say ?? agent.task?.title ?? "working")
-          : walking
-            ? "walking"
-            : agent.location === "home"
-              ? "resting"
-              : (agent.say ?? "idle");
-    const li = el("li", status);
-    li.append(el("span", "icon", ROBOT_ICONS[status]), el("span", "name", agent.name), el("span", "place", place), el("span", "activity", activity));
-    li.title = `${agent.name} · ${place} · ${activity}`;
-    return li;
-  }
-
-  private renderActivity(state: VillageState): void {
-    this.renderLog($("#activity-log"), state.log, "Nothing yet.");
+    $("#robots-list").replaceChildren(...(agents.length ? agents.map((agent) => robotRow(agent, now)) : [el("li", "empty", "No robots yet.")]));
+    harborLine($("#harbor-line"), state);
   }
 
   private renderBuilding(state: VillageState, id: Building): void {
@@ -314,20 +246,7 @@ export class Overlay {
     note.hidden = !harbor;
     note.className = `panel-note ${harbor?.level ?? ""}`;
     note.textContent = harbor ? `${HARBOR_ICONS[harbor.icon]} ${harbor.text}` : "";
-    this.renderLog($("#panel-log"), b.log, "Nothing has happened here yet.");
-  }
-
-  /** Oldest at the top, newest at the bottom (like the terminal). Keeps following the bottom unless you scrolled up. */
-  private renderLog(list: HTMLElement, log: LogEntry[], empty: string): void {
-    const entries = (this.details ? log : log.filter((e) => e.emphasis !== "tertiary")).slice(-LOG_LINES);
-    list.replaceChildren(...(entries.length ? entries.map((entry) => this.logItem(entry)) : [el("li", "empty", empty)]));
-    if (list.dataset.follow !== "0") list.scrollTop = list.scrollHeight;
-  }
-
-  private logItem(entry: LogEntry): HTMLElement {
-    const li = el("li", `${entry.emphasis} ${entry.type}`);
-    li.append(el("time", undefined, clock(entry.ts)), el("span", "icon", ICONS[entry.type]), el("span", "text", entry.text));
-    return li;
+    renderLog($("#panel-log"), b.log, this.details, "Nothing has happened here yet.");
   }
 
   // --- Help ---------------------------------------------------------------------------
