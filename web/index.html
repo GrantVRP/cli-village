@@ -10,17 +10,28 @@
   <body>
     <div id="app"></div>
 
-    <!-- Status bar: mode, robots, problems, health. -->
+    <!-- Top bar: mode, robots, problems, health. Same zones as the terminal view. -->
     <header id="status" class="status" aria-live="polite">
-      <span class="brand">CLI VILLAGE</span>
-      <span id="status-mode" class="mode"></span>
-      <span class="sep">·</span>
-      <span id="status-robots"></span>
-      <span class="sep">·</span>
-      <span id="status-problems" class="problems"></span>
-      <span class="sep">·</span>
-      <span>health <span id="status-health-bar" class="bar"></span> <span id="status-health-text"></span></span>
-      <button id="help-button" class="help-button" type="button" title="What am I looking at? (?)">?</button>
+      <span class="brand">CLI Village</span>
+      <span id="status-mode" class="chip chip-accent"></span>
+      <span class="stat"><span id="status-robots"></span></span>
+      <span class="sep" aria-hidden="true"></span>
+      <span id="status-problems" class="stat problems"></span>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="stat health">
+        <span class="eyebrow">health</span>
+        <span id="status-health-bar" class="meter" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i>
+        </span>
+        <span id="status-health-text"></span>
+      </span>
+      <span class="spacer"></span>
+      <button id="side-toggle" class="button" type="button" title="Show or hide the log (l)" aria-pressed="true">
+        <span class="button-icon" aria-hidden="true">☰</span> Log
+      </button>
+      <button id="help-button" class="button" type="button" title="What am I looking at? (?)">
+        <span class="button-icon" aria-hidden="true">?</span> Help
+      </button>
     </header>
 
     <!-- The one key message. -->
@@ -30,7 +41,7 @@
         <div id="caption-title" class="caption-title">Waiting for the village…</div>
         <div id="caption-subtitle" class="caption-subtitle"></div>
         <div id="caption-command" class="caption-command" hidden>
-          <span id="caption-command-label" class="caption-command-label">Real command:</span>
+          <span id="caption-command-label" class="caption-command-label">Real command</span>
           <code id="caption-command-text"></code>
         </div>
         <!-- The beginner explainer: what that command means. Hidden with --compact. -->
@@ -40,15 +51,36 @@
 
     <div id="connection" class="connection" hidden></div>
 
-    <!-- A building's log, opened by clicking it. -->
-    <aside id="panel" class="panel" hidden>
-      <button id="panel-close" class="close" type="button" aria-label="Close">×</button>
-      <h2 id="panel-title"></h2>
-      <p id="panel-help" class="panel-help"></p>
-      <p id="panel-status" class="panel-status"></p>
-      <!-- The harbor's crates: what's at the gate, what's waiting, or the last boat. -->
-      <p id="panel-note" class="panel-note" hidden></p>
-      <ol id="panel-log" class="panel-log"></ol>
+    <!-- Side panel: the robots and the log, like the terminal view's two columns.
+         Click a building and its own log takes over the panel. -->
+    <aside id="side" class="side" aria-label="Robots and log">
+      <div id="side-overview" class="side-overview">
+        <section class="side-section">
+          <h3 class="eyebrow">Robots <span id="robots-count" class="count"></span></h3>
+          <ul id="robots-list" class="robots"></ul>
+          <div id="harbor-line" class="harbor-line" hidden></div>
+        </section>
+        <section class="side-section grow">
+          <h3 class="eyebrow">
+            What's happening
+            <button id="details-toggle" class="chip chip-button" type="button" title="More or less detail (d)" aria-pressed="false">
+              summary
+            </button>
+          </h3>
+          <ol id="activity-log" class="log"></ol>
+        </section>
+      </div>
+
+      <!-- A building's log, opened by clicking it. -->
+      <div id="panel" class="side-building" hidden>
+        <button id="panel-close" class="back" type="button">← Back to all robots</button>
+        <h2 id="panel-title" class="building-title"></h2>
+        <p id="panel-help" class="panel-help"></p>
+        <p id="panel-status" class="panel-status"></p>
+        <!-- The harbor's crates: what's at the gate, what's waiting, or the last boat. -->
+        <p id="panel-note" class="panel-note" hidden></p>
+        <ol id="panel-log" class="log"></ol>
+      </div>
     </aside>
 
     <!-- Help: what everything means. -->
@@ -60,20 +92,32 @@
           Each robot is an agent (a helper program). When it starts a task, it walks to the building for that kind of
           work. The glowing column in the plaza shows how healthy the village is.
         </p>
+        <h3 class="eyebrow">Buildings</h3>
         <div id="help-buildings" class="help-buildings"></div>
-        <h3>Words you'll see</h3>
+        <h3 class="eyebrow">Words you'll see</h3>
         <div id="help-words" class="help-words"></div>
-        <p class="help-keys">
-          <kbd>drag</kbd> look around · <kbd>scroll</kbd> zoom · <kbd>click</kbd> a building to see its log ·
-          <kbd>n</kbd> night · <kbd>h</kbd> back to the whole village · <kbd>?</kbd> this help · <kbd>Esc</kbd> close
-        </p>
+        <h3 class="eyebrow">Keys</h3>
+        <div class="help-keys">
+          <div class="help-row"><b><kbd>drag</kbd> <kbd>scroll</kbd></b><span>look around, zoom</span></div>
+          <div class="help-row"><b><kbd>click</kbd></b><span>a building: see its log</span></div>
+          <div class="help-row"><b><kbd>l</kbd></b><span>show or hide the robots and the log</span></div>
+          <div class="help-row"><b><kbd>d</kbd></b><span>more or less detail in the log</span></div>
+          <div class="help-row"><b><kbd>n</kbd></b><span>night and day</span></div>
+          <div class="help-row"><b><kbd>h</kbd></b><span>back to the whole village</span></div>
+          <div class="help-row"><b><kbd>?</kbd> <kbd>Esc</kbd></b><span>this help, close</span></div>
+        </div>
         <p class="help-safe">Secret values never appear here: only key names and counts.</p>
         <p id="help-experts" class="help-experts"></p>
       </div>
     </div>
 
     <footer class="hints">
-      <kbd>?</kbd> help · <kbd>n</kbd> night · <kbd>h</kbd> home view · click a building for its log
+      <span><kbd>?</kbd> help</span>
+      <span><kbd>l</kbd> log</span>
+      <span><kbd>d</kbd> detail</span>
+      <span><kbd>n</kbd> night</span>
+      <span><kbd>h</kbd> home view</span>
+      <span class="hint-text">click a building for its log · drag to look around · scroll to zoom</span>
     </footer>
 
     <script type="module" src="./src/main.ts"></script>

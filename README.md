@@ -194,7 +194,8 @@ $ cli-village commit -m "Add payments"
 
   ![A real commit with a secret in it, stopped at the gate](docs/screenshots/village-harbor-stopped.jpg)
 - The camera drifts slowly and glides to wherever the most important thing is happening, turning to show that building from the front. The caption at the top says what that is (and the real command).
-- **Drag** to look around, **scroll** to zoom, **click** a building to see it up close, with its log beside it. Keys: `?` help, `n` night, `h` back to the whole village, `Esc` close.
+- The page has the same zones as the terminal view: a status bar on top, the one key message, a side panel with the robots and the "What's happening" log, and key hints at the bottom. Its look follows Infisical's own app: dark panels, thin borders, one lime accent.
+- **Drag** to look around, **scroll** to zoom, **click** a building to see it up close, with its own log in the side panel. Keys: `?` help, `l` show or hide the side panel, `d` more or less detail in the log, `n` night, `h` back to the whole village, `Esc` close.
 - If your system asks for less motion (*reduce motion*), or you start it with `--no-animation`, the village stands still: robots appear where they're going, and the camera only moves when you click a building or press `h`.
 - With `--compact`, the caption drops the explanation line and the key hints are hidden.
 
