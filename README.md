@@ -212,13 +212,15 @@ cli-village app          # the village, a terminal and the tools in one window
 cli-village app --demo   # the same, with pretend robots
 ```
 
-![The desktop app: the village at dusk, a building's log as a tab, and a terminal](docs/screenshots/app-live.png)
+![The desktop app: the village at dusk, the Guide on the right, and a terminal](docs/screenshots/app-live.png)
 
 A window laid out like VS Code, so nothing has to open in your browser:
 
-- **Activity bar** on the left: Village, Secrets, Git, Tests, Research, Agents and Help. Each opens a side bar with that tool's buttons and the matching building's log. The Secrets tool lists key names and compares environments; the Git tool commits and pushes; values never appear.
-- **The village** in the middle, at dusk by default (`n` for day). Click a building and its log opens as a tab beside the village.
-- **A real terminal** at the bottom (PowerShell on Windows, your shell elsewhere). Run `cli-village test`, `commit`, `push` or anything else there, and the village reacts, because the app hosts the village's socket. The Output tab shows the whole log; Problems lists what needs attention.
+- **Title bar** with the usual menus (File, Edit, Selection, View, Go, Run, Terminal, Help), Back and Forward, a command box in the middle, the layout toggles and the window buttons. Every menu item does something: Run holds every CLI Village command, View holds the lighting and the layout, Go moves between tabs and buildings. `Alt` opens the menus, as in VS Code.
+- **Welcome** opens first, with the three things a new village needs: check your tools, link your secrets, watch a workday. The **Guide** on the right keeps those steps in view, ticks them off as you go, and explains whichever tool you're in. Close it with `Ctrl+Alt+B`.
+- **Activity bar** on the left: Village, Secrets, Git, Tests, Research, Agents and Help. Each opens a side bar with that tool's steps and buttons and the matching building's log. The Secrets tool lists key names and compares environments; the Git tool commits and pushes; values never appear. Help has collapsible sections for the buildings, the keys and the words.
+- **The village** in the middle, at dusk by default. Click a building and its log opens as a tab beside the village. The window's colours follow the village's light: indigo at night, warm charcoal by day, a lantern amber for the accent. View › Lighting picks day, dusk, night, or a ten-minute cycle.
+- **A real terminal** at the bottom (PowerShell on Windows, your shell elsewhere). Run `cli-village test`, `commit`, `push` or anything else there, and the village reacts, because the app hosts the village's socket. The Output tab shows the whole log; Problems lists what needs attention. `Ctrl+F` finds a word in a log.
 - **A command palette** on `Ctrl+Shift+P` with every command: each line says what it does in plain English and shows the real command it types into the terminal. `Ctrl+J` hides the panel, `Ctrl+B` the side bar.
 
 The app runs on [Electron](https://www.electronjs.org/), the same base as VS Code, and [node-pty](https://github.com/microsoft/node-pty) for the terminal. Both are installed by `npm install` in this folder. The window can't reach Node.js or other websites: it only talks to the main process through a tiny bridge, and the village server still listens on this computer only, behind the session's token.
@@ -263,6 +265,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 11. 3D village polish: buildings from the front, no edge of the world, harbor fixes
 - [x] 12. Web UI in Infisical's style, with the terminal view's layout
 - [x] 13. The desktop app: village, terminal and tools in one window (Electron)
+- [x] 14. The app grows a VS Code title bar and menus, a Welcome page and a Guide, and colours that follow the village's light
 
 ## License
 

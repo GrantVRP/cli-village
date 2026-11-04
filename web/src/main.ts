@@ -128,9 +128,15 @@ resize();
 
 // --- Day and night ------------------------------------------------------------------
 
-// The desktop app opens at dusk (?night=1).
-let nightTarget = params.get("night") === "1" ? 1 : 0;
+// 0 is day, 1 is night; anything between is dusk. The desktop app opens at dusk (?night=0.85).
+const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+let nightTarget = clamp01(Number(params.get("night") ?? 0));
 let night = nightTarget;
+/** A full day and night, in seconds, when the cycle is on (0 = off). */
+let cycleLength = 0;
+let cycleStart = 0;
+/** The light level the window around us last heard about. */
+let reportedNight = -1;
 function applyNight(k: number): void {
   (scene.background as THREE.Color).copy(DAY_SKY).lerp(NIGHT_SKY, k);
   (scene.fog as THREE.Fog).color.copy(scene.background as THREE.Color);
@@ -142,6 +148,11 @@ function applyNight(k: number): void {
   railGlow.emissiveIntensity = 0.9 + k * 1.4;
   effects.night = k;
   document.body.classList.toggle("night", k > 0.5);
+  // The desktop app's colours follow the village's light.
+  if (embedded && Math.abs(k - reportedNight) > 0.004) {
+    reportedNight = k;
+    parent.postMessage({ type: "cli-village", action: "light", night: k }, location.origin);
+  }
 }
 
 // --- Keys and clicks ----------------------------------------------------------------
@@ -155,7 +166,10 @@ addEventListener("keydown", (e) => {
       overlay.closePanel();
       village.unpin();
     }
-  } else if (e.key === "n" || e.key === "N") nightTarget = nightTarget ? 0 : 1;
+  } else if (e.key === "n" || e.key === "N") {
+    cycleLength = 0;
+    nightTarget = nightTarget > 0.5 ? 0 : 1;
+  }
   else if (e.key === "l" || e.key === "L") overlay.toggleSide();
   else if (e.key === "d" || e.key === "D") overlay.toggleDetails();
   else if (e.key === "h" || e.key === "H") {
@@ -170,17 +184,22 @@ addEventListener("keydown", (e) => {
 if (embedded) {
   overlay.toggleSide(false);
   overlay.onSelect = (id) => parent.postMessage({ type: "cli-village", action: "selected", building: id }, location.origin);
-  addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string }>) => {
+  addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number; seconds?: number }>) => {
     // Only the page around us, from our own server, may steer the village.
     if (e.origin !== location.origin || e.source !== parent) return;
     const m = e.data;
     if (!m || m.type !== "cli-village") return;
-    if (m.action === "night") nightTarget = 1;
-    else if (m.action === "day") nightTarget = 0;
-    else if (m.action === "home") {
+    if (m.action === "night" || m.action === "day" || m.action === "light") {
+      cycleLength = 0;
+      nightTarget = m.action === "light" ? clamp01(Number(m.night)) : m.action === "night" ? 1 : 0;
+    } else if (m.action === "cycle") {
+      // A whole day and night, over and over, starting from the current light.
+      cycleLength = Math.max(10, Number(m.seconds) || 600);
+      cycleStart = performance.now() / 1000 - (Math.acos(1 - 2 * night) / (2 * Math.PI)) * cycleLength;
+    } else if (m.action === "home") {
       village.unpin();
       rig.reset();
-    } else if (m.action === "focus" && (BUILDINGS as readonly string[]).includes(m.building ?? "")) village.select(m.building as Building);
+    } else if (m.action === "focus" && (BUILDINGS as readonly string[]).includes(m.building ?? "")) village.look(m.building as Building);
   });
 }
 
@@ -228,6 +247,7 @@ renderer.setAnimationLoop((time) => {
   const dt = Math.min(timer.getDelta(), 0.1);
   // In still mode the clock stops, so nothing bobs, sways or pulses, and changes happen at once.
   const t = still ? STILL_TIME : timer.getElapsed();
+  if (cycleLength) nightTarget = 0.5 - 0.5 * Math.cos(((performance.now() / 1000 - cycleStart) / cycleLength) * 2 * Math.PI);
   night += (nightTarget - night) * (still ? 1 : Math.min(1, dt * 1.6));
   applyNight(night);
   // When the run has stopped, the village dims a little.

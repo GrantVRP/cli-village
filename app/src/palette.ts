@@ -65,6 +65,12 @@ export class Palette {
     this.pending = null;
   }
 
+  /** Ask for the value a command needs right away (the menus use this), or just run it. */
+  prompt(command: Command): void {
+    this.open();
+    this.pick(command);
+  }
+
   private onKey(e: KeyboardEvent): void {
     if (e.key === "Escape") {
       e.preventDefault();
