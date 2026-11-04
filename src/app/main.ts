@@ -10,8 +10,8 @@
 // preload.cjs. It can't open other sites or windows. The server still binds to
 // 127.0.0.1 with a per-session token. Secret values never pass through here.
 
-import { app, BrowserWindow, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
-import { spawnSync } from "node:child_process";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,9 @@ export interface AppInfo {
   mode: string;
   version: string;
   cwd: string;
+  /** win32, darwin or linux: the window draws its own title bar except on macOS. */
+  platform: string;
+  maximized: boolean;
   /** How to run CLI Village in the terminal: `cli-village` if installed, else `node …/cli.js`. */
   cli: string;
   branch: string | null;
@@ -53,6 +56,13 @@ function run(cmd: string, cmdArgs: string[]): string | null {
   const result = spawnSync(cmd, cmdArgs, { cwd, encoding: "utf8", windowsHide: true, timeout: 5000 });
   return result.status === 0 ? result.stdout.trim() : null;
 }
+
+/** The web pages the Help menu may open in the system browser, and nothing else. */
+const LINKS: Record<string, string> = {
+  repo: "https://github.com/GrantVRP/cli-village",
+  issues: "https://github.com/GrantVRP/cli-village/issues/new",
+  infisical: "https://infisical.com/docs/cli/overview",
+};
 
 function cliCommand(): string {
   const found = run(process.platform === "win32" ? "where" : "which", ["cli-village"]);
@@ -101,13 +111,18 @@ app.whenReady().then(async () => {
     return;
   }
 
+  const mac = process.platform === "darwin";
+  // The page draws its own menus; Electron's default menu (and its shortcuts) would get in the way.
+  if (!mac) Menu.setApplicationMenu(null);
   const win = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 980,
     minHeight: 620,
     title: "CLI Village",
-    backgroundColor: "#0b0b0d",
+    backgroundColor: "#1a1b2b",
+    // The page draws the title bar (menus, window buttons) itself, like VS Code does.
+    ...(mac ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 12, y: 12 } } : { frame: false }),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -126,6 +141,13 @@ app.whenReady().then(async () => {
   win.once("ready-to-show", () => win.show());
   win.on("closed", () => void shutdown());
   const fromWindow = (e: IpcMainEvent | IpcMainInvokeEvent) => e.sender === win.webContents;
+  const tell = (channel: string, ...payload: unknown[]) => {
+    if (!win.isDestroyed()) win.webContents.send(channel, ...payload);
+  };
+  win.on("maximize", () => tell("window:state", { maximized: true, fullScreen: win.isFullScreen() }));
+  win.on("unmaximize", () => tell("window:state", { maximized: false, fullScreen: win.isFullScreen() }));
+  win.on("enter-full-screen", () => tell("window:state", { maximized: win.isMaximized(), fullScreen: true }));
+  win.on("leave-full-screen", () => tell("window:state", { maximized: win.isMaximized(), fullScreen: false }));
 
   // --- The bridge (see preload.cjs) --------------------------------------------------------------
 
@@ -135,6 +157,8 @@ app.whenReady().then(async () => {
       mode,
       version: pkg.version,
       cwd,
+      platform: process.platform,
+      maximized: win.isMaximized(),
       cli: cliCommand(),
       branch: run("git", ["rev-parse", "--abbrev-ref", "HEAD"]),
       infisical: infisicalStatus(),
@@ -164,8 +188,55 @@ app.whenReady().then(async () => {
   ipcMain.on("pty:write", (e, data: unknown) => {
     if (fromWindow(e) && typeof data === "string") term?.write(data);
   });
+  ipcMain.on("pty:kill", (e) => {
+    if (!fromWindow(e)) return;
+    term?.kill();
+    term = null;
+  });
   ipcMain.on("pty:resize", (e, cols: unknown, rows: unknown) => {
     if (fromWindow(e) && typeof cols === "number" && typeof rows === "number") term?.resize(Math.max(2, Math.floor(cols)), Math.max(1, Math.floor(rows)));
+  });
+
+  // --- The title bar's buttons and menus ----------------------------------------------------------
+
+  ipcMain.on("window:control", (e, action: unknown) => {
+    if (!fromWindow(e)) return;
+    if (action === "minimize") win.minimize();
+    else if (action === "maximize") win.isMaximized() ? win.unmaximize() : win.maximize();
+    else if (action === "close") win.close();
+    else if (action === "fullscreen") win.setFullScreen(!win.isFullScreen());
+    else if (action === "zoom-in") win.webContents.setZoomLevel(Math.min(5, win.webContents.getZoomLevel() + 0.5));
+    else if (action === "zoom-out") win.webContents.setZoomLevel(Math.max(-3, win.webContents.getZoomLevel() - 0.5));
+    else if (action === "zoom-reset") win.webContents.setZoomLevel(0);
+    else if (action === "devtools") win.webContents.toggleDevTools();
+    else if (action === "reload") win.webContents.reload();
+  });
+
+  // Edit menu: the usual actions, on whatever has the focus (the terminal, a text box).
+  const EDIT = ["undo", "redo", "cut", "copy", "paste", "selectAll"] as const;
+  ipcMain.on("edit:do", (e, action: unknown) => {
+    if (!fromWindow(e) || !EDIT.includes(action as (typeof EDIT)[number])) return;
+    win.webContents[action as (typeof EDIT)[number]]();
+  });
+
+  // File › Open Folder: a second CLI Village opens in that folder (a village per project).
+  ipcMain.handle("app:open-folder", async (e): Promise<string | null> => {
+    if (!fromWindow(e)) return null;
+    const picked = await dialog.showOpenDialog(win, { title: "Open a project folder", properties: ["openDirectory"] });
+    const folder = picked.filePaths[0];
+    if (picked.canceled || !folder) return null;
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    delete env.CLI_VILLAGE_SCREENSHOT;
+    const child = spawn(process.execPath, process.argv.slice(1).filter((a) => !a.startsWith("--remote-debugging")), { cwd: folder, detached: true, stdio: "ignore", env });
+    child.unref();
+    return folder;
+  });
+
+  // Help menu: a few known web pages open in the system browser (never an arbitrary URL).
+  ipcMain.on("app:open-link", (e, name: unknown) => {
+    const url = typeof name === "string" ? LINKS[name] : undefined;
+    if (fromWindow(e) && url) void shell.openExternal(url);
   });
 
   // Play one round of the demo in the open village (also in live mode: pretend robots, nothing real runs).

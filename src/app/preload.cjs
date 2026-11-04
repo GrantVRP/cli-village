@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("cliVillage", {
     create: (cols, rows) => ipcRenderer.invoke("pty:create", cols, rows),
     write: (data) => ipcRenderer.send("pty:write", data),
     resize: (cols, rows) => ipcRenderer.send("pty:resize", cols, rows),
+    kill: () => ipcRenderer.send("pty:kill"),
     onData: (listener) => {
       const handler = (_event, data) => listener(data);
       ipcRenderer.on("pty:data", handler);
@@ -24,4 +25,17 @@ contextBridge.exposeInMainWorld("cliVillage", {
   },
   /** Play one round of the demo in the open village. */
   playDemo: () => ipcRenderer.invoke("demo:play"),
+  /** The title bar's window buttons and the View menu: minimize, maximize, close, fullscreen, zoom-in/out/reset, reload, devtools. */
+  window: (action) => ipcRenderer.send("window:control", action),
+  onWindowState: (listener) => {
+    const handler = (_event, state) => listener(state);
+    ipcRenderer.on("window:state", handler);
+    return () => ipcRenderer.off("window:state", handler);
+  },
+  /** The Edit menu: undo, redo, cut, copy, paste, selectAll on whatever has the focus. */
+  edit: (action) => ipcRenderer.send("edit:do", action),
+  /** File › Open Folder: asks for a folder and opens a CLI Village window there. */
+  openFolder: () => ipcRenderer.invoke("app:open-folder"),
+  /** Help menu links, by name (repo, issues, infisical). */
+  openLink: (name) => ipcRenderer.send("app:open-link", name),
 });

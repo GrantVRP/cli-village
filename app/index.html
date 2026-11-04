@@ -8,6 +8,53 @@
     <link rel="icon" href="data:," />
   </head>
   <body>
+    <!-- Title bar: the menus, the command box in the middle, the layout and window buttons. -->
+    <header class="titlebar" id="titlebar">
+      <div class="tb-left">
+        <span class="tb-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10v10h13V10" /><path d="M10 20v-6h4v6" /></svg>
+        </span>
+        <nav class="menubar" id="menubar" aria-label="Menu"></nav>
+      </div>
+      <div class="tb-center">
+        <button class="tb-nav" id="nav-back" title="Back (Alt+Left)" disabled>
+          <svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5" /></svg>
+        </button>
+        <button class="tb-nav" id="nav-forward" title="Forward (Alt+Right)" disabled>
+          <svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" /></svg>
+        </button>
+        <button class="tb-search" id="tb-search" title="Search for a command (Ctrl+Shift+P)">
+          <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" /><path d="m10.2 10.2 3.3 3.3" /></svg>
+          <span id="tb-search-text">CLI Village</span>
+        </button>
+      </div>
+      <div class="tb-right">
+        <button class="tb-icon on" data-layout="sidebar" title="Toggle Primary Side Bar (Ctrl+B)">
+          <svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path class="fill" d="M1.5 4a1.5 1.5 0 0 1 1.5-1.5h3v11H3A1.5 1.5 0 0 1 1.5 12z" /></svg>
+        </button>
+        <button class="tb-icon on" data-layout="panel" title="Toggle Panel (Ctrl+J)">
+          <svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path class="fill" d="M1.5 9.5h13V12a1.5 1.5 0 0 1-1.5 1.5H3A1.5 1.5 0 0 1 1.5 12z" /></svg>
+        </button>
+        <button class="tb-icon on" data-layout="guide" title="Toggle Secondary Side Bar: the Guide (Ctrl+Alt+B)">
+          <svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path class="fill" d="M10 2.5h3A1.5 1.5 0 0 1 14.5 4v8a1.5 1.5 0 0 1-1.5 1.5h-3z" /></svg>
+        </button>
+        <button class="tb-icon" id="layout-button" title="Customize Layout">
+          <svg viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" /><rect x="9" y="1.5" width="5.5" height="5.5" rx="1" /><rect x="1.5" y="9" width="5.5" height="5.5" rx="1" /><rect x="9" y="9" width="5.5" height="5.5" rx="1" /></svg>
+        </button>
+        <span class="tb-gap"></span>
+        <button class="tb-win" data-win="minimize" title="Minimize">
+          <svg viewBox="0 0 10 10"><path d="M0 5h10" /></svg>
+        </button>
+        <button class="tb-win" data-win="maximize" id="win-maximize" title="Maximize">
+          <svg class="when-normal" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" /></svg>
+          <svg class="when-maximized" viewBox="0 0 10 10"><path d="M2.5 2.5V.5h7v7h-2" /><rect x="0.5" y="2.5" width="7" height="7" /></svg>
+        </button>
+        <button class="tb-win close" data-win="close" title="Close">
+          <svg viewBox="0 0 10 10"><path d="m0 0 10 10M10 0 0 10" /></svg>
+        </button>
+      </div>
+    </header>
+
     <div class="shell">
       <!-- Activity bar: which tool the side bar shows. -->
       <nav class="activitybar" id="activity" aria-label="Tools">
@@ -17,7 +64,7 @@
         <button class="activity-item" data-view="secrets" title="Secrets (the Vault)">
           <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="4.5" /><path d="M12.5 12H21" /><path d="M18 12v3.5" /><path d="M15 12v2.5" /></svg>
         </button>
-        <button class="activity-item" data-view="git" title="Git (the Harbor)">
+        <button class="activity-item" data-view="git" title="Git (the Harbor) · Ctrl+Shift+G">
           <svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.5" /><circle cx="6" cy="19" r="2.5" /><circle cx="18" cy="8" r="2.5" /><path d="M6 7.5v9" /><path d="M18 10.5c0 4-12 2.5-12 6.5" /></svg>
         </button>
         <button class="activity-item" data-view="tests" title="Tests (the Lab)">
@@ -40,15 +87,25 @@
 
       <!-- Side bar: the chosen tool. -->
       <aside class="sidebar" id="sidebar">
-        <header class="sidebar-head"><span id="sidebar-title" class="eyebrow"></span></header>
+        <header class="sidebar-head">
+          <span id="sidebar-title" class="sidebar-title"></span>
+          <span id="sidebar-sub" class="sidebar-sub"></span>
+        </header>
         <div id="sidebar-body" class="sidebar-body"></div>
       </aside>
 
       <main class="editor">
         <div class="tabs" id="tabs" role="tablist"></div>
+        <div class="findbar" id="findbar" hidden>
+          <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" /><path d="m10.2 10.2 3.3 3.3" /></svg>
+          <input id="find-input" class="input" placeholder="Find in the log" spellcheck="false" />
+          <span id="find-count" class="find-count"></span>
+          <button class="tab-close" id="find-close" title="Close (Esc)">×</button>
+        </div>
         <div class="editor-body">
           <iframe id="village" class="village" title="The village"></iframe>
           <div id="doc" class="doc" hidden></div>
+          <div id="welcome" class="welcome" hidden></div>
         </div>
 
         <!-- Bottom panel: the terminal, the whole log, and open problems. -->
@@ -59,6 +116,7 @@
             <button class="panel-tab" data-panel="output">Output</button>
             <button class="panel-tab" data-panel="problems">Problems <span id="problems-count" class="count"></span></button>
             <span class="spacer"></span>
+            <button class="panel-tab tool" id="panel-max" title="Maximize or restore the panel">⌃</button>
             <button class="panel-tab tool" id="panel-hide" title="Hide the panel (Ctrl+J)">⌄</button>
           </div>
           <div class="panel-body">
@@ -68,25 +126,37 @@
           </div>
         </section>
       </main>
+
+      <!-- Secondary side bar: the Guide, for whoever is new here. -->
+      <aside class="guide" id="guide">
+        <header class="sidebar-head">
+          <span class="sidebar-title">Guide</span>
+          <span class="spacer"></span>
+          <button class="tab-close" id="guide-close" title="Hide the Guide (Ctrl+Alt+B)">×</button>
+        </header>
+        <div id="guide-body" class="sidebar-body"></div>
+      </aside>
     </div>
 
     <footer class="statusbar" id="statusbar">
-      <span id="status-mode" class="chip chip-accent"></span>
-      <span id="status-hub" class="status-item"></span>
-      <span id="status-branch" class="status-item"></span>
-      <span id="status-infisical" class="status-item"></span>
+      <button id="status-mode" class="status-item chip chip-accent" title="Live: real commands. Demo: pretend robots."></button>
+      <button id="status-hub" class="status-item" title="The village's socket on this computer"></button>
+      <button id="status-branch" class="status-item" title="Git branch · click for the Harbor"></button>
+      <button id="status-infisical" class="status-item" title="Infisical · click for the Vault"></button>
       <span class="spacer"></span>
-      <span id="status-robots" class="status-item"></span>
-      <span id="status-problems" class="status-item"></span>
-      <span class="status-item health">
+      <button id="status-robots" class="status-item" title="Robots · click for the village"></button>
+      <button id="status-problems" class="status-item" title="Problems · click to see them"></button>
+      <button class="status-item health" id="status-health" title="How healthy the village is">
         <span class="eyebrow">health</span>
         <span id="status-health-bar" class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
         <span id="status-health-text"></span>
-      </span>
-      <span class="status-item dim"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd> commands</span>
+      </button>
+      <button id="status-light" class="status-item" title="The village's light · click to change"></button>
     </footer>
 
     <div id="palette" class="palette" hidden></div>
+    <div id="layout-menu" class="layout-menu" hidden></div>
+    <div id="about" class="dialog-backdrop" hidden></div>
 
     <script type="module" src="./src/main.ts"></script>
   </body>
