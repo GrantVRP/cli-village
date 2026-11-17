@@ -14,6 +14,7 @@ const COMMANDS: readonly (readonly [RegExp, string])[] = [
   [/^infisical\s+export\b.*--output-file/, "Infisical writes your secrets into that file. It has to stay out of git."],
   [/^infisical\s+export\b/, "Asks Infisical for one environment's secrets. You only see the names."],
   [/^infisical\s+run\b/, "Starts the program with your secrets set as environment variables."],
+  [/^infisical\s+scan\b.*--log-opts/, "Checks the snapshots a push would send for passwords or keys."],
   [/^infisical\s+scan\b/, "Checks your changes for passwords or keys that shouldn't be shared."],
   [/^infisical\s+login\b/, "Signs you in to Infisical (in your browser)."],
   [/^infisical\s+init\b/, "Links this folder to a project in Infisical."],
