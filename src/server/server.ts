@@ -40,10 +40,14 @@ export interface VillageServerOptions {
   port?: number;
   /** Folder with the built page. Defaults to dist/web next to this file. */
   webRoot?: string;
+  /** Folder with the built desktop-app page. When set, it's served at /app/ (same token). */
+  appRoot?: string;
 }
 
 export interface VillageServer {
   url: string;
+  /** The desktop app's page, when `appRoot` was given. */
+  appUrl?: string;
   port: number;
   close(): Promise<void>;
 }
@@ -76,11 +80,12 @@ function securityHeaders(port: number): Record<string, string> {
       `connect-src 'self' ws://${HOST}:${port} ws://localhost:${port}`,
       "img-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
-      "frame-ancestors 'none'",
+      // Only our own pages may frame ours: the desktop app's page shows the village in a frame.
+      "frame-ancestors 'self'",
     ].join("; "),
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    "X-Frame-Options": "DENY",
+    "X-Frame-Options": "SAMEORIGIN",
     "Cache-Control": "no-store",
   };
 }
@@ -100,6 +105,10 @@ export async function startVillageServer(options: VillageServerOptions): Promise
   if (!existsSync(indexFile)) {
     throw new Error("The 3D village isn't built yet. Run `npm run build` first.");
   }
+  const appRoot = options.appRoot ? path.resolve(options.appRoot) : null;
+  if (appRoot && !existsSync(path.join(appRoot, "index.html"))) {
+    throw new Error("The desktop app isn't built yet. Run `npm run build` first.");
+  }
 
   const token = randomBytes(24).toString("base64url");
   let port = options.port ?? 0;
@@ -117,26 +126,30 @@ export async function startVillageServer(options: VillageServerOptions): Promise
     }
     const url = new URL(req.url ?? "/", `http://${HOST}:${port}`);
 
-    // The page itself needs the session token.
-    if (url.pathname === "/" || url.pathname === "/index.html") {
+    // The pages themselves need the session token: the village at /, the desktop app at /app/.
+    const isVillagePage = url.pathname === "/" || url.pathname === "/index.html";
+    const isAppPage = appRoot !== null && (url.pathname === "/app" || url.pathname === "/app/" || url.pathname === "/app/index.html");
+    if (isVillagePage || isAppPage) {
       if (!sameSecret(url.searchParams.get("token"), token)) {
         page(res, 401, "This village needs its secret link", "Open the full address printed in your terminal (it ends with <code>?token=…</code>).", port);
         return;
       }
       res.writeHead(200, { ...securityHeaders(port), "Content-Type": CONTENT_TYPES[".html"]! });
-      createReadStream(indexFile).pipe(res);
+      createReadStream(isAppPage ? path.join(appRoot!, "index.html") : indexFile).pipe(res);
       return;
     }
 
     // Built files (scripts, styles) are the same for everyone, so they don't need the token.
+    const inApp = appRoot !== null && url.pathname.startsWith("/app/");
+    const root = inApp ? appRoot! : webRoot;
     let file: string;
     try {
-      file = path.resolve(webRoot, `.${decodeURIComponent(url.pathname)}`);
+      file = path.resolve(root, `.${decodeURIComponent(inApp ? url.pathname.slice("/app".length) : url.pathname)}`);
     } catch {
       res.writeHead(400, securityHeaders(port)).end("Bad request");
       return;
     }
-    const inside = file.startsWith(webRoot + path.sep);
+    const inside = file.startsWith(root + path.sep);
     if (!inside || !existsSync(file) || !statSync(file).isFile()) {
       res.writeHead(404, securityHeaders(port)).end("Not found");
       return;
@@ -194,6 +207,7 @@ export async function startVillageServer(options: VillageServerOptions): Promise
 
   return {
     url: `http://${HOST}:${port}/?token=${token}`,
+    appUrl: appRoot ? `http://${HOST}:${port}/app/?token=${token}` : undefined,
     port,
     close: () =>
       new Promise<void>((resolve) => {
