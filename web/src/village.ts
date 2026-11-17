@@ -198,9 +198,14 @@ export class Village {
 
   /** Click on a building: glide to it and show its log. */
   select(id: Building): void {
+    this.look(id);
+    if (this.state) this.overlay.openPanel(id, this.state);
+  }
+
+  /** Glide to a building and stay a while, without opening its log. */
+  look(id: Building): void {
     this.focusOn(id, 12000, 24);
     this.pinnedUntil = Date.now() + 12000;
-    if (this.state) this.overlay.openPanel(id, this.state);
   }
 
   /** Which building (if any) is under the mouse. */

@@ -1,16 +1,45 @@
 // The real terminal at the bottom of the app: xterm.js in the window, a shell
 // (PowerShell, or your $SHELL) in the main process, joined by the bridge.
+// Its colours follow the village's light, like the rest of the window.
 
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 
 export interface AppTerminal {
   /** Type a command into the shell and press Enter. */
   run(command: string): void;
   focus(): void;
+  hasFocus(): boolean;
   fit(): void;
+  /** Wipe the screen and the scrollback (the shell keeps running). */
+  clear(): void;
+  /** A fresh shell, in place of the current one. */
+  restart(): void;
+  /** Stop the shell. Enter starts a new one. */
+  kill(): void;
+  setTheme(theme: Partial<ITheme>): void;
 }
+
+/** The colours that don't change with the light: readable, not neon. */
+const PALETTE: ITheme = {
+  black: "#20222f",
+  red: "#e06b66",
+  green: "#8fc98a",
+  yellow: "#e0b878",
+  blue: "#8d9bff",
+  magenta: "#c08fe0",
+  cyan: "#7fc4d6",
+  white: "#d8d8dc",
+  brightBlack: "#636790",
+  brightRed: "#ff8a85",
+  brightGreen: "#a9e0a2",
+  brightYellow: "#f0cf96",
+  brightBlue: "#aab5ff",
+  brightMagenta: "#d9b0f0",
+  brightCyan: "#a0dcea",
+  brightWhite: "#ffffff",
+};
 
 /** `isAppKey` says whether the app wants a key (like Ctrl+Shift+P) before the shell sees it. */
 export function createTerminal(host: HTMLElement, isAppKey: (e: KeyboardEvent) => boolean): AppTerminal {
@@ -21,29 +50,7 @@ export function createTerminal(host: HTMLElement, isAppKey: (e: KeyboardEvent) =
     lineHeight: 1.25,
     cursorBlink: true,
     scrollback: 5000,
-    theme: {
-      background: "#0b0b0d",
-      foreground: "#e6e6ea",
-      cursor: "#dbf530",
-      cursorAccent: "#0b0b0d",
-      selectionBackground: "rgba(219, 245, 48, 0.25)",
-      black: "#1d1d22",
-      red: "#f05a5a",
-      green: "#7cf06a",
-      yellow: "#ffd58a",
-      blue: "#8d9bff",
-      magenta: "#c58cff",
-      cyan: "#6fe3ff",
-      white: "#d8d8dc",
-      brightBlack: "#5a5a66",
-      brightRed: "#ff7b7b",
-      brightGreen: "#9cff8c",
-      brightYellow: "#ffe3a8",
-      brightBlue: "#aab5ff",
-      brightMagenta: "#d9adff",
-      brightCyan: "#9af0ff",
-      brightWhite: "#ffffff",
-    },
+    theme: { ...PALETTE, background: "#121426", foreground: "#dadcec", cursor: "#e0b878", cursorAccent: "#121426", selectionBackground: "rgba(224, 184, 120, 0.3)" },
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
@@ -89,6 +96,13 @@ export function createTerminal(host: HTMLElement, isAppKey: (e: KeyboardEvent) =
       term.focus();
     },
     focus: () => term.focus(),
+    hasFocus: () => host.contains(document.activeElement),
     fit: safeFit,
+    clear: () => term.clear(),
+    restart: () => void start(),
+    kill: () => bridge.pty.kill(),
+    setTheme: (theme) => {
+      term.options.theme = { ...PALETTE, ...term.options.theme, ...theme };
+    },
   };
 }
