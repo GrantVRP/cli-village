@@ -836,6 +836,10 @@ body.compact .hints {
 body.embed {
   --top: 0px;
   --bottom: 0px;
+  /* The app's accent is a lantern, not Infisical's lime: the caption matches the window around it. */
+  --accent: #dfb677;
+  --accent-10: rgba(223, 182, 119, 0.12);
+  --accent-25: rgba(223, 182, 119, 0.3);
 }
 body.embed .status,
 body.embed .side,
