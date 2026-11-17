@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>CLI Village</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <div class="shell">
+      <!-- Activity bar: which tool the side bar shows. -->
+      <nav class="activitybar" id="activity" aria-label="Tools">
+        <button class="activity-item on" data-view="village" title="Village (robots and buildings)">
+          <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10v10h13V10" /><path d="M10 20v-6h4v6" /></svg>
+        </button>
+        <button class="activity-item" data-view="secrets" title="Secrets (the Vault)">
+          <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="4.5" /><path d="M12.5 12H21" /><path d="M18 12v3.5" /><path d="M15 12v2.5" /></svg>
+        </button>
+        <button class="activity-item" data-view="git" title="Git (the Harbor)">
+          <svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.5" /><circle cx="6" cy="19" r="2.5" /><circle cx="18" cy="8" r="2.5" /><path d="M6 7.5v9" /><path d="M18 10.5c0 4-12 2.5-12 6.5" /></svg>
+        </button>
+        <button class="activity-item" data-view="tests" title="Tests (the Lab)">
+          <svg viewBox="0 0 24 24"><path d="M9.5 3h5" /><path d="M10.5 3v6L5 19a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 19l-5.5-10V3" /><path d="M7.5 15h9" /></svg>
+        </button>
+        <button class="activity-item" data-view="research" title="Research (the Library)">
+          <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" /><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20" /><path d="M9 8h7" /></svg>
+        </button>
+        <button class="activity-item" data-view="agents" title="Agents (the Town Hall)">
+          <svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="2" /><path d="M12 4v4" /><circle cx="12" cy="3" r="1" /><circle cx="9.5" cy="13" r="1" /><circle cx="14.5" cy="13" r="1" /><path d="M9.5 16.5h5" /></svg>
+        </button>
+        <span class="activity-spacer"></span>
+        <button class="activity-item" data-view="help" title="Help: what am I looking at?">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7" /><circle cx="12" cy="17" r=".6" /></svg>
+        </button>
+        <button class="activity-item" id="palette-button" title="All commands (Ctrl+Shift+P)">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h10" /></svg>
+        </button>
+      </nav>
+
+      <!-- Side bar: the chosen tool. -->
+      <aside class="sidebar" id="sidebar">
+        <header class="sidebar-head"><span id="sidebar-title" class="eyebrow"></span></header>
+        <div id="sidebar-body" class="sidebar-body"></div>
+      </aside>
+
+      <main class="editor">
+        <div class="tabs" id="tabs" role="tablist"></div>
+        <div class="editor-body">
+          <iframe id="village" class="village" title="The village"></iframe>
+          <div id="doc" class="doc" hidden></div>
+        </div>
+
+        <!-- Bottom panel: the terminal, the whole log, and open problems. -->
+        <section class="panel" id="panel">
+          <div class="panel-grip" id="panel-grip" title="Drag to resize"></div>
+          <div class="panel-tabs">
+            <button class="panel-tab on" data-panel="terminal">Terminal</button>
+            <button class="panel-tab" data-panel="output">Output</button>
+            <button class="panel-tab" data-panel="problems">Problems <span id="problems-count" class="count"></span></button>
+            <span class="spacer"></span>
+            <button class="panel-tab tool" id="panel-hide" title="Hide the panel (Ctrl+J)">⌄</button>
+          </div>
+          <div class="panel-body">
+            <div id="terminal" class="terminal"></div>
+            <ol id="output" class="log" hidden></ol>
+            <div id="problems" class="problems" hidden></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="statusbar" id="statusbar">
+      <span id="status-mode" class="chip chip-accent"></span>
+      <span id="status-hub" class="status-item"></span>
+      <span id="status-branch" class="status-item"></span>
+      <span id="status-infisical" class="status-item"></span>
+      <span class="spacer"></span>
+      <span id="status-robots" class="status-item"></span>
+      <span id="status-problems" class="status-item"></span>
+      <span class="status-item health">
+        <span class="eyebrow">health</span>
+        <span id="status-health-bar" class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <span id="status-health-text"></span>
+      </span>
+      <span class="status-item dim"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd> commands</span>
+    </footer>
+
+    <div id="palette" class="palette" hidden></div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

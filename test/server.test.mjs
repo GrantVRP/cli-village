@@ -103,3 +103,57 @@ describe("village server", () => {
     await server.close();
   });
 });
+
+// The desktop app's page lives on the same server, at /app/, behind the same token.
+describe("desktop app page", () => {
+  async function villageWithApp() {
+    const dir = tempDir();
+    const webRoot = path.join(dir, "web");
+    const appRoot = path.join(dir, "app");
+    mkdirSync(path.join(webRoot, "assets"), { recursive: true });
+    mkdirSync(path.join(appRoot, "assets"), { recursive: true });
+    writeFileSync(path.join(webRoot, "index.html"), "<!doctype html><title>village</title>");
+    writeFileSync(path.join(appRoot, "index.html"), "<!doctype html><title>app</title>");
+    writeFileSync(path.join(appRoot, "assets", "app.js"), "console.log('app')");
+    writeFileSync(path.join(dir, "outside.txt"), "private");
+    const bus = new EventBus();
+    const server = await startVillageServer({ bus, mode: "live", version: "test", webRoot, appRoot });
+    servers.push(server);
+    const page = new URL(server.url);
+    return { server, token: page.searchParams.get("token"), base: `http://${page.host}` };
+  }
+
+  it("serves the app page and its files, only with the token", async () => {
+    const { server, token, base } = await villageWithApp();
+    assert.equal(server.appUrl, `${base}/app/?token=${token}`);
+    const ok = await get(server.appUrl);
+    assert.equal(ok.status, 200);
+    assert.match(ok.body, /<title>app<\/title>/);
+    // Our own pages may frame each other (the app shows the village in a frame), nobody else's may.
+    assert.match(ok.headers["content-security-policy"], /frame-ancestors 'self'/);
+    assert.equal(ok.headers["x-frame-options"], "SAMEORIGIN");
+    const noToken = await get(`${base}/app/`);
+    assert.equal(noToken.status, 401);
+    const asset = await get(`${base}/app/assets/app.js`);
+    assert.equal(asset.status, 200);
+    assert.equal(asset.body, "console.log('app')");
+    // Files outside the app's folder stay private, even through /app/.
+    const outside = await get(`${base}/app/../outside.txt`);
+    assert.notEqual(outside.status, 200);
+    const encoded = await get(`${base}/app/..%2Foutside.txt`);
+    assert.notEqual(encoded.status, 200);
+  });
+
+  it("has no /app/ without an app folder", async () => {
+    const dir = tempDir();
+    const webRoot = path.join(dir, "web");
+    mkdirSync(webRoot, { recursive: true });
+    writeFileSync(path.join(webRoot, "index.html"), "<!doctype html><title>village</title>");
+    const server = await startVillageServer({ bus: new EventBus(), mode: "live", version: "test", webRoot });
+    servers.push(server);
+    assert.equal(server.appUrl, undefined);
+    const page = new URL(server.url);
+    const res = await get(`http://${page.host}/app/?token=${page.searchParams.get("token")}`);
+    assert.equal(res.status, 404);
+  });
+});

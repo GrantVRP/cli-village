@@ -831,6 +831,18 @@ body.compact .hints {
   }
 }
 
+/* --- Inside the desktop app: only the village and its caption ---------------------------------- */
+
+body.embed {
+  --top: 0px;
+  --bottom: 0px;
+}
+body.embed .status,
+body.embed .side,
+body.embed .hints {
+  display: none;
+}
+
 /* --- Stopped and reduced motion ---------------------------------------------------------------- */
 
 body.stopped .caption {
