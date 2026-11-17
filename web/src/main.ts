@@ -149,6 +149,8 @@ addEventListener("keydown", (e) => {
       village.unpin();
     }
   } else if (e.key === "n" || e.key === "N") nightTarget = nightTarget ? 0 : 1;
+  else if (e.key === "l" || e.key === "L") overlay.toggleSide();
+  else if (e.key === "d" || e.key === "D") overlay.toggleDetails();
   else if (e.key === "h" || e.key === "H") {
     overlay.closePanel();
     village.unpin();
