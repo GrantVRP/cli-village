@@ -422,8 +422,26 @@ describe("village state", () => {
       let state = play(fix);
       assert.deepEqual(state.crates.map((c) => [c.sha, c.status]), [["c7d8e9f", "packed"]]);
       assert.equal(describeHarbor(state).text, "1 crate waiting, not scanned yet");
+      // Redone isn't fixed yet: only a scan that passes can say the secret is gone.
+      assert.match(state.buildings.harbor.problem?.message ?? "", /next scan checks/);
+      assert.equal(state.stats.fixed, 0);
+      assert.doesNotMatch(state.headline.title, /^Fixed/);
       state = play([...fix, scan("u2", UNSENT), done("u2")]);
       assert.deepEqual(statuses(state), ["cleared"]);
+      assert.equal(state.buildings.harbor.problem, undefined);
+      assert.equal(state.stats.fixed, 1);
+      assert.match(state.headline.title, /^Fixed/);
+      // Still there when checked again: stopped again.
+      state = play([...fix, scan("u2", UNSENT), fail("u2")]);
+      assert.deepEqual(statuses(state), ["blocked"]);
+      assert.equal(state.buildings.harbor.problem?.message, LEAK);
+      // Pushed without that check (--skip-scan): it might still have the secret, so it's a warning.
+      state = play([...fix, push()]);
+      assert.match(state.headline.title, /possible secret/);
+      // A normal snapshot amended (nothing was stopped) needs no extra check.
+      state = play([...saved(), job("m2", "git commit --amend --no-edit"), amended, done("m2")]);
+      assert.equal(state.buildings.harbor.problem, undefined);
+      assert.equal(state.crates[0].recheck, undefined);
     });
 
     it("two scans at once each move only their own crate", () => {
@@ -450,7 +468,9 @@ describe("explainer", () => {
   it("explains real commands in one short line", () => {
     assert.match(explain.explainCommand("git commit -m x"), /snapshot/);
     assert.match(explain.explainCommand("git commit --amend --no-edit"), /Redoes/);
-    assert.match(explain.explainCommand('infisical scan "--log-opts=HEAD --not --remotes" --redact'), /passwords or keys/);
+    // The check before a push looks at snapshots; the one before a commit looks at your changes.
+    assert.match(explain.explainCommand('infisical scan "--log-opts=HEAD --not --remotes" --redact'), /snapshots a push would send/);
+    assert.match(explain.explainCommand("infisical scan git-changes --staged --redact"), /your changes/);
     assert.match(explain.explainCommand("cargo test"), /tests/);
     assert.equal(explain.explainCommand("rm -rf /"), undefined);
     assert.equal(explain.commitCommand('say "hi" $HOME'), 'git commit -m "say \\"hi\\" \\$HOME"');

@@ -90,6 +90,8 @@ export interface Crate {
   scan?: string;
   /** What the gate found, while the crate is stopped there. */
   reason?: string;
+  /** Redone (`git commit --amend`) after the gate stopped it: not fixed until a scan passes. */
+  recheck?: true;
 }
 
 /** The last time the boat sailed. */
@@ -330,7 +332,7 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
         next.crates = state.crates.filter((c) => !(c.draft === "changes" && c.status !== "scanning"));
       }
       // A success here fixes the earlier problem. At the harbor, a crate stopped at the
-      // gate (or one sent anyway) stays the problem until a scan passes.
+      // gate (or one redone or sent anyway since) stays the problem until a scan passes.
       const stillStopped = building === "harbor" ? harborTrouble(next) : undefined;
       const fixed = logged.buildings[building].problem !== undefined && !stillStopped;
       next.buildings = setBuilding(logged.buildings, building, (b) => ({
@@ -499,8 +501,8 @@ function startScan(crates: Crate[], running: Record<string, TaskState>, task: Ta
 /** A scan ended: what it checked passes the gate (`reason` null) or is stopped there. */
 function finishScan(crates: Crate[], task: TaskState, reason: string | null, seq: number): Crate[] {
   const mine = (c: Crate) => c.scan === task.id && c.status === "scanning";
-  if (reason === null) return crates.map((c) => (mine(c) ? { ...c, status: "cleared", scan: undefined } : c));
-  if (crates.some(mine)) return crates.map((c) => (mine(c) ? { ...c, status: "blocked", scan: undefined, reason } : c));
+  if (reason === null) return crates.map((c) => (mine(c) ? { ...c, status: "cleared", scan: undefined, recheck: undefined } : c));
+  if (crates.some(mine)) return crates.map((c) => (mine(c) ? { ...c, status: "blocked", scan: undefined, reason, recheck: undefined } : c));
   // A check before a push found something, but every crate here had passed: it's in
   // snapshots CLI Village didn't see being made.
   const outside = crates.findLastIndex((c) => c.draft === "snapshots" && onTheWay(c));
@@ -512,8 +514,13 @@ function finishScan(crates: Crate[], task: TaskState, reason: string | null, seq
 function packCommit(crates: Crate[], crate: Crate, amend: boolean): Crate[] {
   if (amend) {
     // The newest snapshot was rewritten: its crate gets the new one, to be checked again.
+    // If the gate had stopped it, it isn't fixed until that check passes.
     const newest = crates.findLastIndex(isSaved);
-    if (newest >= 0) return crates.map((c, i) => (i === newest ? crate : c)).filter((c) => !(isChanges(c) && c.status !== "scanning"));
+    if (newest >= 0) {
+      const old = crates[newest]!;
+      const redone: Crate = old.status === "blocked" || old.recheck ? { ...crate, recheck: true } : crate;
+      return crates.map((c, i) => (i === newest ? redone : c)).filter((c) => !(isChanges(c) && c.status !== "scanning"));
+    }
   }
   const changes = crates.findLastIndex((c) => isChanges(c) && (c.status === "cleared" || c.status === "blocked"));
   if (changes >= 0) {
@@ -533,14 +540,18 @@ function shipCrates(crates: Crate[]): { crates: Crate[]; count: number; flagged:
   return {
     crates: crates.map((c) => (isSaved(c) ? { ...c, status: "shipped", scan: undefined } : c)),
     count: sailing.length,
-    flagged: sailing.some((c) => c.status === "blocked"),
+    flagged: sailing.some((c) => c.status === "blocked" || c.recheck),
   };
 }
 
-/** What still needs attention at the harbor: a crate stopped at the gate, or one that was sent anyway. */
+const RECHECK = "The snapshot was redone. The next scan checks that the secret is gone.";
+
+/** What still needs attention at the harbor: a crate stopped at the gate, one redone but not checked yet, or one that was sent anyway. */
 function harborTrouble(state: Pick<VillageState, "crates" | "harborWarning">): string | undefined {
   const stopped = state.crates.findLast((c) => onTheWay(c) && c.status === "blocked");
-  return stopped ? (stopped.reason ?? "A crate is stopped at the gate") : state.harborWarning;
+  if (stopped) return stopped.reason ?? "A crate is stopped at the gate";
+  if (state.crates.some((c) => onTheWay(c) && c.recheck)) return RECHECK;
+  return state.harborWarning;
 }
 
 /** Where the crates are, for drawing the harbor. */
