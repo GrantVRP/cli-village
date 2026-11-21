@@ -118,7 +118,15 @@ describe("desktop app", () => {
     cdp?.close();
     if (app && app.exitCode === null && app.signalCode === null) app.kill();
     await exited;
-    for (const folder of folders) rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    // The terminal's shell can hold its folder for a moment after the app has gone (Windows).
+    // A temp folder left behind isn't a failure of the app, so it's only reported.
+    for (const folder of folders) {
+      try {
+        rmSync(folder, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+      } catch (err) {
+        console.warn(`Couldn't remove ${folder}: ${err.message}`);
+      }
+    }
   });
 
   it("draws the village, and stops drawing while another tab covers it", async (t) => {
@@ -243,7 +251,12 @@ describe("desktop app", () => {
 
   it("closes cleanly from its close button", async () => {
     if (process.platform === "darwin") await cdp.eval(`window.cliVillage.window("close")`); // macOS draws its own buttons
-    else await cdp.clickOn("the close button", `() => document.querySelector('.tb-win[data-win="close"]')`);
+    else {
+      // The window may close before it confirms the click: that's the click working.
+      await cdp.clickOn("the close button", `() => document.querySelector('.tb-win[data-win="close"]')`).catch((err) => {
+        if (!/window closed/.test(err.message)) throw err;
+      });
+    }
     const { code, stderr } = await exited;
     assert.equal(code, 0, stderr);
     await assert.rejects(fetch(`http://127.0.0.1:${port}/json/version`), "the debugging port is closed");
