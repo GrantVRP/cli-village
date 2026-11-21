@@ -16,7 +16,8 @@ export const theme = {
   /** Working, like the cyan rings over a busy building in the 3D village. */
   active: color("cyan"),
   good: color("green"),
-  /** Clay, not yellow: a warning never looks like the gold of a building's name. */
+  /** Clay, so a warning doesn't look like the gold of a building's name. (On terminals with
+   *  only 16 colours both become yellow; the icon and the words still tell them apart.) */
   warn: color(STATUS.warning),
   bad: color("red"),
   /** Building names: the lantern gold of the desktop app. */
