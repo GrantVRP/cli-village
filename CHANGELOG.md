@@ -6,6 +6,19 @@ What changed in CLI Village, newest first. Each step was built and merged as its
 
 Nothing is on npm yet: install it from a copy of this repository (see the README).
 
+### Graphics (November 2026)
+
+- **Step 20:** a new renderer for the 3D village, same village and colours. See [docs/RENDERING.md](docs/RENDERING.md).
+  - Soft shadows that sharpen where things touch the ground (PCSS), and shading in corners and creases (ambient occlusion, top quality only).
+  - One table drives the light over the day: the sun's height and colour, the sky, the haze, the exposure and the lamps.
+  - A sky with clouds and stars; haze in the distance and mist low over the ground.
+  - A real depth of field focused on what the camera looks at (it replaces the old blur bands).
+  - A river with waves, sun glints and foam along its banks; trees and bushes that sway in the wind; lamplight on the ground after dark.
+  - A film-style finish: colour grade, a soft vignette and fine grain.
+  - Graphics quality fits the computer (Low, Medium, High) and steps down if the picture gets slow. Choose it yourself in View › Graphics Quality, or with `&quality=` in the page's address.
+  - Tests: the renderer's logic is tested without a graphics card, and the app test draws every quality tier.
+  - The look is kept: dusk stays cool and dim, and the cyan rails and the green column glow as brightly as before. Before-and-after pictures are in docs/RENDERING.md.
+
 ### Checked and tested (November 2026)
 
 - **Step 18:** `npm run test:app` opens the real desktop app and uses it with real clicks and typing. It runs on Windows in CI. On CI's small screen it found two bugs, now fixed:

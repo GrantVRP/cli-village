@@ -66,7 +66,8 @@ export class Column {
     // Glass.
     const glass = new THREE.Mesh(
       new THREE.CylinderGeometry(0.58, 0.58, this.height, 16, 1, true),
-      new THREE.MeshStandardMaterial({ color: 0xd8f6f4, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false }),
+      // (Reflects only a little sky, so the glow inside reads clearly.)
+      new THREE.MeshStandardMaterial({ color: 0xd8f6f4, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 0.3 }),
     );
     glass.position.y = this.base + this.height / 2;
     this.group.add(glass);
@@ -94,9 +95,10 @@ export class Column {
     const level = 0.18 + this.shown * 0.82;
     this.fill.scale.y = this.height * level * (1 + Math.sin(t * 2.4) * 0.015);
     const color = healthColor(this.shown);
-    this.fill.material.color.copy(color);
+    // A dark surface and a bright glow, so sunlight doesn't wash the colour out.
+    this.fill.material.color.copy(color).multiplyScalar(0.3);
     this.fill.material.emissive.copy(color);
-    this.fill.material.emissiveIntensity = 1.4 + Math.sin(t * 2) * 0.2 + (1 - this.shown) * Math.max(0, Math.sin(t * 6)) * 0.8;
+    this.fill.material.emissiveIntensity = 2.2 + Math.sin(t * 2) * 0.25 + (1 - this.shown) * Math.max(0, Math.sin(t * 6)) * 0.8;
     this.light.color.copy(color);
     this.light.intensity = 5 + Math.sin(t * 2) * 0.6;
   }

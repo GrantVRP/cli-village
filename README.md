@@ -206,6 +206,15 @@ $ cli-village commit -m "Add payments"
 
 Everything is built from simple shapes in code (no image textures) with [three.js](https://threejs.org/). The page loads nothing from the internet.
 
+**How it's drawn.** The village is lit like a miniature on a table:
+- a sun that moves with the time of day: soft shadows that sharpen where things touch the ground, long and orange at dusk, a pale moon at night;
+- a sky with clouds and stars, haze in the distance and mist low over the ground;
+- a river with waves, sun glints and foam along its banks, and trees that sway in the wind;
+- lamps that light the ground around them after dark;
+- a real depth of field (the tilt-shift look), focused on whatever the camera looks at.
+
+It picks how much of this your computer can draw, and steps down by itself if the picture gets slow. To choose yourself: View › Graphics Quality in the desktop app, or add `&quality=low`, `medium` or `high` to the page's address. In still mode the wind, water and clouds stand still too. [docs/RENDERING.md](docs/RENDERING.md) explains how each effect works.
+
 ## The desktop app
 
 ```sh
@@ -217,7 +226,7 @@ cli-village app --demo   # the same, with pretend robots
 
 A window laid out like VS Code, so nothing has to open in your browser:
 
-- **Title bar** with the usual menus (File, Edit, Selection, View, Go, Run, Terminal, Help), Back and Forward, a command box in the middle, the layout toggles and the window buttons. Every menu item does something: Run holds every CLI Village command, View holds the lighting and the layout, Go moves between tabs and buildings. `Alt` opens the menus, as in VS Code.
+- **Title bar** with the usual menus (File, Edit, Selection, View, Go, Run, Terminal, Help), Back and Forward, a command box in the middle, the layout toggles and the window buttons. Every menu item does something: Run holds every CLI Village command, View holds the lighting and the layout, Go moves between tabs and buildings. View › Graphics Quality picks how much the village draws. `Alt` opens the menus, as in VS Code.
 - **Welcome** opens first, with the three things a new village needs: check your tools, link your secrets, watch a workday. The **Guide** on the right keeps those steps in view, ticks them off as you go, and explains whichever tool you're in. Close it with `Ctrl+Alt+B`.
 - **Activity bar** on the left: Village, Secrets, Git, Tests, Research, Agents and Help. Each opens a side bar with that tool's steps and buttons and the matching building's log. The Secrets tool lists key names and compares environments; the Git tool commits and pushes; values never appear. Help has collapsible sections for the buildings, the keys and the words.
 - **The village** in the middle, at dusk by default. Click a building and its log opens as a tab beside the village. The window's colours follow the village's light: indigo at night, warm charcoal by day, a lantern amber for the accent. View › Lighting picks day, dusk, night, or a ten-minute cycle.
@@ -249,12 +258,12 @@ Found a way to break one of these? Please report it privately, as [SECURITY.md](
 
 ```bash
 npm test         # builds, then runs every test in test/
-npm run test:app # opens the desktop app for about 15 seconds and uses it: clicks, menus, the terminal
+npm run test:app # opens the desktop app for about 30 seconds and uses it: clicks, menus, the terminal
 ```
 
-The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you don't need an Infisical account. They cover the privacy guard, every command, the secret-scan gate, the local socket and the 3D server's security, and they check every output for leaked secret values. GitHub Actions runs them on Linux, macOS and Windows with Node.js 22 and 24 for every pull request.
+The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you don't need an Infisical account. They cover the privacy guard, every command, the secret-scan gate, the local socket and the 3D server's security, and they check every output for leaked secret values. `test/render.test.mjs` checks the renderer's logic without a graphics card: the light over the day never jumps, the quality tiers, and that the soft-shadow shader still fits the three.js version in use. GitHub Actions runs them on Linux, macOS and Windows with Node.js 22 and 24 for every pull request.
 
-`npm run test:app` opens the real desktop app (as a demo, with its own temporary settings) and uses it the way a person would: real mouse clicks on the tabs and menus, typing in the terminal (also after Terminal › New Terminal), the demo's robots, and a clean close. It also checks that the 3D village draws while you can see it and rests while another tab covers it, that every menu and title bar button can be clicked, also in the smallest window, that a slow click on a tab works while robots are busy, and that the window logs no errors. It covers the village inside the app; the browser page (`cli-village open`) shares that code but isn't opened by a test. GitHub Actions runs it on Windows. The first run downloads Electron (about 100 MB).
+`npm run test:app` opens the real desktop app (as a demo, with its own temporary settings) and uses it the way a person would: real mouse clicks on the tabs and menus, typing in the terminal (also after Terminal › New Terminal), the demo's robots, and a clean close. It also checks that the 3D village draws while you can see it and rests while another tab covers it, that every menu and title bar button can be clicked, also in the smallest window, that a slow click on a tab works while robots are busy, that the village draws at every graphics quality (so every shader is compiled, even on machines without a graphics card), and that the window logs no errors. `CLI_VILLAGE_TEST_NO_GPU=1 npm run test:app` draws without the graphics card, like CI's machines. It covers the village inside the app; the browser page (`cli-village open`) shares that code but isn't opened by a test. GitHub Actions runs it on Windows. The first run downloads Electron (about 100 MB).
 
 ## Roadmap
 
@@ -277,6 +286,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 17. Checked against the real Infisical CLI: every flag exists, the scan answers as expected, and the test stand-in now writes reports and errors the way the real one does (its report file holds the secret, so the tests prove it's never shown)
 - [x] 18. Desktop app tests (`npm run test:app`): the real app, driven with real clicks and typing, on Windows in CI; the Git commands keep `$` and backticks in your message; fixes it found: in a narrow window the search box covered the Help menu, and in a busy village a click on a tab (or a building log's button) could do nothing
 - [x] 19. Cleanup: SECURITY.md (how to report a problem privately), CHANGELOG.md, and no debug `.map` files in the npm package
+- [x] 20. A new renderer for the village: soft contact-hardening shadows, a sky and light that follow the time of day, haze and ground mist, a real depth of field, a river shader, wind in the trees, lamplight on the ground, and graphics quality that fits the computer
 
 ## License
 
