@@ -58,10 +58,13 @@ export function createTerminal(host: HTMLElement, isAppKey: (e: KeyboardEvent) =
   term.attachCustomKeyEventHandler((e) => !isAppKey(e));
 
   let closed = false;
+  /** The size the shell was last told, so it's only told again when the size really changes. */
+  let sent = "";
   const start = async () => {
     closed = false;
     term.reset();
     safeFit();
+    sent = `${term.cols}x${term.rows}`;
     const shell = await bridge.pty.create(term.cols, term.rows);
     if (shell === null) term.writeln("\x1b[31mCouldn't start a shell.\x1b[0m");
   };
@@ -81,7 +84,13 @@ export function createTerminal(host: HTMLElement, isAppKey: (e: KeyboardEvent) =
   function safeFit(): void {
     if (host.clientWidth === 0 || host.clientHeight === 0) return;
     fit.fit();
-    if (term.cols > 1 && term.rows > 0) bridge.pty.resize(term.cols, term.rows);
+    // On Windows a resize makes the shell's side print the whole screen again, so only
+    // send one when the size really changed (Clear and showing the panel call this too).
+    const size = `${term.cols}x${term.rows}`;
+    if (term.cols > 1 && term.rows > 0 && size !== sent) {
+      sent = size;
+      bridge.pty.resize(term.cols, term.rows);
+    }
   }
   new ResizeObserver(safeFit).observe(host);
   void start();
@@ -98,7 +107,10 @@ export function createTerminal(host: HTMLElement, isAppKey: (e: KeyboardEvent) =
     focus: () => term.focus(),
     hasFocus: () => host.contains(document.activeElement),
     fit: safeFit,
-    clear: () => term.clear(),
+    clear: () => {
+      term.clear();
+      bridge.pty.clear();
+    },
     restart: () => void start(),
     kill: () => bridge.pty.kill(),
     setTheme: (theme) => {

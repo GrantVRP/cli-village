@@ -51,6 +51,8 @@ export class Village {
   private pinnedUntil = 0;
   /** Still mode (--no-animation or reduced motion): robots appear where they're going, and the camera only moves when you ask. */
   still = false;
+  /** What the caption suggests before any work arrives (the desktop app says where its terminal is). */
+  waitingHint = WAITING;
   private fresh = false;
   private readonly tmp = new THREE.Vector3();
 
@@ -163,7 +165,7 @@ export class Village {
     this.overlay.setStatus(state, mode);
     // Live, and nothing has happened yet: suggest something to try.
     const waiting = state.headline.seq === 0 && mode !== "" && mode !== "demo";
-    this.overlay.setCaption(waiting ? { ...state.headline, ...WAITING } : state.headline, waiting);
+    this.overlay.setCaption(waiting ? { ...state.headline, ...this.waitingHint } : state.headline, waiting);
     this.overlay.updatePanel(state);
 
     // Camera: visit where the key message is happening.

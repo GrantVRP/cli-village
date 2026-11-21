@@ -20,6 +20,8 @@ export interface Bridge {
     create(cols: number, rows: number): Promise<string | null>;
     write(data: string): void;
     resize(cols: number, rows: number): void;
+    /** Tell the shell's side the screen was cleared (on Windows it would otherwise reprint it). */
+    clear(): void;
     kill(): void;
     onData(listener: (data: string) => void): () => void;
     onExit(listener: (code: number) => void): () => void;

@@ -8,7 +8,7 @@ CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https:
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days. All 9 build steps are done, but it hasn't been tried with a real Infisical account yet. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`) or a 3D village (`cli-village open`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`).
+**Status:** early days. All the build steps below are done, and the desktop app has been tested by hand on Windows, but CLI Village hasn't been tried with a real Infisical account yet. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`), a 3D village in your browser (`cli-village open`) or the desktop app (`cli-village app`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`, `app --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
@@ -50,6 +50,7 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | `cli-village open` | Opens the 3D village in your browser, showing real work (like `cli-village`, but in 3D). The terminal keeps its own view. Add `--no-open` to just print the address, or `--port 4317` to pick the port. |
 | `cli-village emit '<json>'` | For AI agents and scripts: tells the open village what you're doing. `emit -` reads one event per line from stdin. See [docs/EVENTS.md](docs/EVENTS.md). |
 | `cli-village open --demo` | Opens the 3D village in your browser and plays the demo there (the terminal keeps its own view). Add `--no-open` to just print the address, `--port 4317` to pick the port, or `--speed 2`. |
+| `cli-village app` | The desktop app: the village, a real terminal and the tools in one window (see [The desktop app](#the-desktop-app)). Add `--demo` for pretend robots. For now it runs from this project's folder, after `npm install`. |
 
 ## Learning as you go (or not)
 
@@ -266,6 +267,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 12. Web UI in Infisical's style, with the terminal view's layout
 - [x] 13. The desktop app: village, terminal and tools in one window (Electron)
 - [x] 14. The app grows a VS Code title bar and menus, a Welcome page and a Guide, and colours that follow the village's light
+- [x] 15. Fixes from testing the desktop app: menu items work with the mouse, the app's keys work after you click the village, the terminal keeps working after Terminal › New, Clear really clears on Windows, and smaller fixes
 
 ## License
 
