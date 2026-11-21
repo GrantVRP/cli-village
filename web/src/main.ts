@@ -15,7 +15,6 @@ import { createWorld, railGlow } from "./world.js";
 import { WAITING } from "../../src/events/explain.js";
 import { BUILDINGS, type Building } from "../../src/events/types.js";
 import { CSS_NAMES, shadeAt, type Shade } from "../../src/views/colors.js";
-import "./style.css";
 
 const params = new URLSearchParams(location.search);
 const token = params.get("token") ?? "";

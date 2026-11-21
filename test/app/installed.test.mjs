@@ -60,7 +60,9 @@ describe("the installed desktop app", { skip: program ? false : "set CLI_VILLAGE
     delete env.NODE_TEST_CONTEXT;
     delete env.NODE_OPTIONS;
     const args = [`--remote-debugging-port=${port}`, `--user-data-dir=${settings}`];
-    if (process.platform === "linux" && process.env.CI) args.push("--no-sandbox");
+    // CI's Linux machines have no graphics card, and Chromium won't draw 3D in software there
+    // unless asked; nor can they give Chromium its sandbox. (Test machines only.)
+    if (process.platform === "linux" && process.env.CI) args.push("--no-sandbox", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist");
     // From its own folder, as a shortcut or the Start menu starts it.
     app = spawn(program, args, { cwd: path.dirname(program), env, stdio: ["ignore", "ignore", "pipe"] });
     app.stderr.on("data", (d) => (stderr += d));

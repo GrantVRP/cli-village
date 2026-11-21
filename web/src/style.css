@@ -889,3 +889,10 @@ body.still *::after {
 body[data-mode="demo"] .log .demo-tag {
   display: none;
 }
+
+/* No WebGL 2 (see start.ts): only the message shows. The rest needs the 3D view's code. */
+html[data-webgl="none"] .status > :not(.brand),
+html[data-webgl="none"] .side,
+html[data-webgl="none"] .hints {
+  display: none;
+}

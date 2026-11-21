@@ -47,6 +47,8 @@ extraResources:
 
 # node-pty brings its own binaries; nothing is compiled while packaging.
 npmRebuild: false
+# Sets the executable bit on node-pty's spawn-helper and the terminal's cli-village, before signing.
+afterPack: scripts/after-pack.cjs
 # Only English text in Electron's own dialogs: the app's text is English anyway.
 electronLanguages: [en-US]
 
