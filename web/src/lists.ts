@@ -65,7 +65,9 @@ export function harborLine(node: HTMLElement, state: VillageState): void {
 
 export function logItem(entry: LogEntry): HTMLElement {
   const li = el("li", `${entry.emphasis} ${entry.type}`);
-  li.append(el("time", undefined, clock(entry.ts)), el("span", "icon", ICONS[entry.type]), el("span", "text", entry.text));
+  const text = el("span", "text", entry.text);
+  if (entry.demo) text.append(" ", el("span", "demo-tag", "demo"));
+  li.append(el("time", undefined, clock(entry.ts)), el("span", "icon", ICONS[entry.type]), text);
   return li;
 }
 

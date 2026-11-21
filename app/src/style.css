@@ -1514,3 +1514,15 @@ body.mac .layout-box {
 .terminal .xterm .xterm-viewport {
   background-color: var(--bg) !important;
 }
+
+/* A line from the demo's pretend robots, in a live village. (In a demo, everything is pretend.) */
+.log .demo-tag {
+  padding: 0 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  font: 10px var(--mono);
+  color: var(--dim);
+}
+body[data-mode="demo"] .log .demo-tag {
+  display: none;
+}

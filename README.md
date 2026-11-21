@@ -268,6 +268,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 13. The desktop app: village, terminal and tools in one window (Electron)
 - [x] 14. The app grows a VS Code title bar and menus, a Welcome page and a Guide, and colours that follow the village's light
 - [x] 15. Fixes from testing the desktop app: menu items work with the mouse, the app's keys work after you click the village, the terminal keeps working after Terminal › New, Clear really clears on Windows, and smaller fixes
+- [x] 16. Leftovers from testing: a commit refused for lack of a scanner shows at the harbor, the demo's pretend robots are marked "demo" in a live village, the village stops drawing behind other tabs, and `cli-village app` hides a harmless Windows error when it closes
 
 ## License
 

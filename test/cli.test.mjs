@@ -385,6 +385,7 @@ describe("the GITHUB HARBOR (status, commit, push)", () => {
     const missing = run(["commit", "-m", "x"], { cwd: work, env: { PATH: bare } });
     assert.equal(missing.code, 1);
     assert.match(missing.stdout, /needs the Infisical CLI/);
+    assert.match(missing.stdout, /Checkpoint: scanning for secrets/, "the robot goes to the gate, so the village shows the refusal too");
     const broken = run(["commit", "-m", "x", "--compact"], { cwd: work, env: { FAKE_MODE: "scanerror" } });
     assert.equal(broken.code, 1);
     assert.match(broken.stdout, /couldn't run/);
