@@ -33,7 +33,7 @@ export interface Bridge {
   onWindowState(listener: (state: { maximized: boolean; fullScreen: boolean }) => void): () => void;
   edit(action: EditAction): void;
   openFolder(): Promise<string | null>;
-  openLink(name: "repo" | "issues" | "infisical"): void;
+  openLink(name: "repo" | "issues" | "infisical" | "releases"): void;
 }
 
 export type WindowAction = "minimize" | "maximize" | "close" | "fullscreen" | "zoom-in" | "zoom-out" | "zoom-reset" | "reload" | "devtools";
