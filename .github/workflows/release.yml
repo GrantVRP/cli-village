@@ -90,14 +90,7 @@ jobs:
           test=(node --test --test-reporter=spec --test-timeout=300000 test/app/installed.test.mjs)
           # Linux runners have no screen: a virtual one (Xvfb).
           if [ "$RUNNER_OS" = Linux ]; then test=(xvfb-run -a "${test[@]}"); fi
-          export CLI_VILLAGE_TEST_INSTALLED_APP="$app"
-          if ! "${test[@]}"; then
-            # A hosted runner is sometimes many times slower than usual for a whole job (seen on
-            # Windows: 11 s to draw a frame that usually takes 0.15 s). One more try tells a slow
-            # machine from a broken app, and the warning keeps the first failure visible.
-            echo "::warning title=Installed-app test::It failed once on $RUNNER_OS, so it ran again. If this keeps happening, look at the first try's output above."
-            "${test[@]}"
-          fi
+          CLI_VILLAGE_TEST_INSTALLED_APP="$app" "${test[@]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-${{ runner.os }}

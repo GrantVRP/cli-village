@@ -43,6 +43,7 @@ The installers aren't signed with a paid certificate yet, so the first start sho
 
 - **Windows** says "Windows protected your PC". Choose **More info**, then **Run anyway**.
 - **macOS** says it can't check the app for malicious software. Open **System Settings › Privacy & Security**, scroll down to CLI Village and choose **Open Anyway**, then confirm.
+- **Linux:** on Ubuntu 24.04 and newer (and other systems that restrict "unprivileged user namespaces"), the AppImage can close at once with a sandbox error such as "The SUID sandbox helper binary was found, but is not configured correctly". Install the `.deb` instead. Don't start it with `--no-sandbox` or switch the restriction off: both weaken your computer's protection ([why](https://docs.appimage.org/user-guide/troubleshooting/electron-sandboxing.html)).
 
 Don't turn off these protections for your whole computer: allowing this one app is enough. If you'd rather not, check the download first (below), or use the command line from npm.
 
