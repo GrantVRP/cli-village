@@ -14,6 +14,7 @@ import { Village } from "./village.js";
 import { createWorld, railGlow } from "./world.js";
 import { WAITING } from "../../src/events/explain.js";
 import { BUILDINGS, type Building } from "../../src/events/types.js";
+import { CSS_NAMES, shadeAt, type Shade } from "../../src/views/colors.js";
 import "./style.css";
 
 const params = new URLSearchParams(location.search);
@@ -103,10 +104,14 @@ function applyNight(k: number): void {
   railGlow.emissiveIntensity = ((0.9 + light.lamps * 1.4) * 1.05) / light.exposure;
   effects.night = k;
   document.body.classList.toggle("night", k > 0.5);
-  // The desktop app's colours follow the village's light.
-  if (embedded && Math.abs(k - reportedNight) > 0.004) {
+  // The page's colours, and the desktop app's around it, follow the village's light.
+  if (Math.abs(k - reportedNight) > 0.004) {
     reportedNight = k;
-    parent.postMessage({ type: "cli-village", action: "light", night: k }, location.origin);
+    const root = document.documentElement.style;
+    const shade = shadeAt(k);
+    for (const key of Object.keys(shade) as (keyof Shade)[]) root.setProperty(`--${CSS_NAMES[key]}`, shade[key]);
+    for (const key of ["bg", "text", "accent"] as const) root.setProperty(`--${key}-rgb`, [1, 3, 5].map((i) => parseInt(shade[key].slice(i, i + 2), 16)).join(" "));
+    if (embedded) parent.postMessage({ type: "cli-village", action: "light", night: k }, location.origin);
   }
 }
 

@@ -6,6 +6,15 @@ What changed in CLI Village, newest first. Each step was built and merged as its
 
 Nothing is on npm yet: install it from a copy of this repository (see the README).
 
+### Look (November 2026)
+
+- **Step 21:** calmer colours with a clear order, in the desktop app, the browser page and the terminal view.
+  - One set of colours for all three (`src/views/colors.ts`): by day stone and wood, at night a slate blue that matches the village's sky. The indigo and Infisical's lime are gone.
+  - The work area (the village, logs, Welcome, the terminal) is lifted above the frame and side bars, and menus and dialogs float above it.
+  - One gold accent, only for focus, selection and the next thing to do: in the Guide and on Welcome, only the next step is gold.
+  - Every text colour passes WCAG AA on every surface at day, dusk and night, and a test checks it (`test/colors.test.mjs`). Keyboard focus shows a gold ring.
+  - "Working" is a quiet slate blue; warnings are clay, so they never look like a selection. The terminal's colours are muted to match.
+
 ### Graphics (November 2026)
 
 - **Step 20:** a new renderer for the 3D village, same village and colours. See [docs/RENDERING.md](docs/RENDERING.md).
