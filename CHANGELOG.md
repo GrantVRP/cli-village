@@ -15,7 +15,8 @@ Nothing is on npm or in a release yet: install it from a copy of this repository
   - An app icon in the village's colours.
   - A release workflow: on a version tag it builds and tests the installers, then drafts a GitHub release with SHA-256 checksums, an SBOM and a build-provenance attestation, and, after the owner approves, publishes to npm with trusted publishing (no stored token). On pull requests it builds the installers so a broken one shows up early.
   - Every GitHub Action is pinned to a commit, and Dependabot proposes updates after a week's cooldown.
-  - Fixes found by testing the packaged app: commands run by the app's own Electron read their arguments wrongly, and the app's crash-reporter pipe made Electron programs in its terminal print an error.
+  - Fixes found by testing the packaged app on all three systems: commands run by the app's own Electron read their arguments wrongly; the app's crash-reporter pipe made Electron programs in its terminal print an error; on macOS the terminal couldn't start a shell (a helper program lost its executable bit).
+  - A computer that can't draw 3D (WebGL 2) now says so plainly, instead of waiting forever for the village. Everything else still works.
 
 ### Look (November 2026)
 
