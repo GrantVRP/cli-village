@@ -5,12 +5,48 @@ import * as THREE from "three";
 import { BUILDINGS } from "../../src/events/types.js";
 import { glowMaterials } from "./buildings.js";
 import { HARBOR, PLAZA_R, CURB_R, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
-import { glowMesh, makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
+import { makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
+import type { Lighting } from "./render/timeline.js";
+import { createWater } from "./render/water.js";
+import { foliageMaterial, swayShadows, windUniforms } from "./render/wind.js";
 
-/** The faint cyan glow along the rails. Brighter at night. */
+/** Lamplight on the ground: a smooth radial falloff, added to the picture (no texture). */
+const lightPool = new THREE.ShaderMaterial({
+  uniforms: { color: { value: new THREE.Color(P.warmLight) }, strength: { value: 0 } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform vec3 color;
+    uniform float strength;
+    varying vec2 vUv;
+    void main() {
+      float r = length(vUv - 0.5) * 2.0;
+      // Inverse-square-like falloff, eased to exactly zero at the edge.
+      float light = (1.0 / (1.0 + 14.0 * r * r) - 0.0667) / 0.9333 * (1.0 - smoothstep(0.7, 1.0, r));
+      gl_FragColor = vec4(color * max(light, 0.0) * strength, 1.0);
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  polygonOffset: true,
+  polygonOffsetFactor: -2,
+  polygonOffsetUnits: -2,
+});
+
+/** Leaves and bushes: the usual matte look, swaying in the wind. */
+const foliage = foliageMaterial(materials.matte);
+
+/** The faint cyan glow along the rails. Brighter at night. Its look comes from the glow:
+ *  a dark surface, so a bright sun doesn't wash the cyan out to white. */
 export const railGlow = new THREE.MeshStandardMaterial({
-  color: P.glow,
+  color: new THREE.Color(P.glow).multiplyScalar(0.5),
   emissive: P.glow,
   emissiveIntensity: 0.9,
   flatShading: true,
@@ -19,6 +55,8 @@ export const railGlow = new THREE.MeshStandardMaterial({
 export interface World {
   group: THREE.Group;
   update(dt: number, t: number): void;
+  /** The sky the river reflects, and how bright the lamps' light pools are. */
+  setSky(light: Lighting): void;
 }
 
 const rng = makeRandom(7);
@@ -195,6 +233,7 @@ function tree(b: ModelBuilder, x: number, z: number, scale: number, leaf: number
     b.add(new THREE.IcosahedronGeometry(r, 1), leaf, {
       at: [x + (random() - 0.5) * 0.9 * scale, y + trunkH + r * 0.6 + (i === 0 ? 0.35 * scale : random() * 0.7 * scale), z + (random() - 0.5) * 0.9 * scale],
       jitter: 0.08,
+      material: foliage,
     });
   }
 }
@@ -233,37 +272,8 @@ function trees(b: ModelBuilder): void {
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
     if (z < RIVER_Z + RIVER_HALF + 2) continue;
-    b.add(new THREE.IcosahedronGeometry(0.45 + rng() * 0.35, 0), pick(P.leaf, rng), { at: [x, 0.3, z], jitter: 0.08 });
+    b.add(new THREE.IcosahedronGeometry(0.45 + rng() * 0.35, 0), pick(P.leaf, rng), { at: [x, 0.3, z], jitter: 0.08, material: foliage });
   }
-}
-
-function river(): { mesh: THREE.Mesh; update: (t: number) => void } {
-  const geo = new THREE.PlaneGeometry(SIDE_REACH * 2 + 40, RIVER_HALF * 2 + 1.0, 150, 7).rotateX(-Math.PI / 2);
-  const material = new THREE.MeshStandardMaterial({
-    color: P.river,
-    flatShading: true,
-    roughness: 0.25,
-    metalness: 0.1,
-    transparent: true,
-    opacity: 0.93,
-  });
-  const mesh = new THREE.Mesh(geo, material);
-  mesh.position.set(0, -0.32, RIVER_Z);
-  mesh.receiveShadow = true;
-  const pos = geo.getAttribute("position");
-  const base = Float32Array.from(pos.array as Float32Array);
-  return {
-    mesh,
-    update: (t) => {
-      for (let i = 0; i < pos.count; i++) {
-        const x = base[i * 3]!;
-        const z = base[i * 3 + 2]!;
-        pos.setY(i, Math.sin(x * 0.55 + t * 1.3) * 0.05 + Math.cos(z * 1.7 + x * 0.3 + t * 1.8) * 0.04);
-      }
-      pos.needsUpdate = true;
-      geo.computeVertexNormals();
-    },
-  };
 }
 
 function riverBanks(b: ModelBuilder): void {
@@ -398,24 +408,37 @@ export function createWorld(): World {
   trees(b);
   props(b);
   group.add(b.build("world-static"));
+  swayShadows(group, foliage);
 
-  const water = river();
+  // The river: waves, ripples, foam and the sky's reflection, all on the graphics card.
+  const water = createWater(SIDE_REACH * 2 + 40, RIVER_HALF * 2 + 1.0, P.river);
+  water.mesh.position.set(0, -0.32, RIVER_Z);
+  water.mesh.userData.noShadow = true;
   group.add(water.mesh);
 
-  // A soft glow under the lamps so they read as lights.
+  // A pool of warm light on the ground under each lamp: added on top of what's there,
+  // brightest under the lamp and fading out smoothly, stronger as it gets dark.
   for (const deg of [-119, -72, 29, 111, -168]) {
     const a = (deg * Math.PI) / 180;
-    const halo = glowMesh(new THREE.CircleGeometry(0.7, 12).rotateX(-Math.PI / 2), P.warmLight, 0.15);
-    (halo.material as THREE.MeshStandardMaterial).transparent = true;
-    (halo.material as THREE.MeshStandardMaterial).opacity = 0.25;
-    halo.position.set(Math.cos(a) * 9.0 + 0.42, 0.05, Math.sin(a) * 9.0);
-    halo.userData.lampHalo = true;
-    group.add(halo);
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6).rotateX(-Math.PI / 2), lightPool);
+    pool.position.set(Math.cos(a) * 9.0 + 0.42, 0.1, Math.sin(a) * 9.0);
+    pool.userData.noShadow = true;
+    pool.renderOrder = 1;
+    group.add(pool);
   }
 
   return {
     group,
-    update: (_dt, t) => water.update(t),
+    update: (_dt, t) => {
+      water.uniforms.time.value = t;
+      windUniforms.time.value = t;
+    },
+    setSky: (light) => {
+      water.uniforms.skyHorizon.value.set(light.horizon);
+      water.uniforms.skyZenith.value.set(light.zenith);
+      lightPool.uniforms.strength!.value = light.lamps * 0.55;
+      water.uniforms.skyReflect.value = 1 - light.lamps * 0.35;
+    },
   };
 }
 

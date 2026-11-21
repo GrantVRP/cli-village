@@ -88,6 +88,8 @@ describe("desktop app", () => {
     const args = [fileURLToPath(dist("app/main.js")), "--demo", "--speed", "4", `--remote-debugging-port=${port}`, `--user-data-dir=${settings}`];
     // Keep drawing even when other windows cover this one (Chromium pauses covered windows on Windows).
     args.push("--disable-features=CalculateNativeWinOcclusion", "--disable-backgrounding-occluded-windows");
+    // CLI_VILLAGE_TEST_NO_GPU=1 draws without the graphics card, like CI's machines do.
+    if (process.env.CLI_VILLAGE_TEST_NO_GPU) args.push("--disable-gpu");
     // CI's Linux machines can't give Chromium its sandbox; the window itself stays sandboxed as always.
     if (process.platform === "linux" && process.env.CI) args.push("--no-sandbox");
     app = spawn(electron, args, { cwd: work, env, stdio: ["ignore", "ignore", "pipe"] });
@@ -116,7 +118,15 @@ describe("desktop app", () => {
     cdp?.close();
     if (app && app.exitCode === null && app.signalCode === null) app.kill();
     await exited;
-    for (const folder of folders) rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    // The terminal's shell can hold its folder for a moment after the app has gone (Windows).
+    // A temp folder left behind isn't a failure of the app, so it's only reported.
+    for (const folder of folders) {
+      try {
+        rmSync(folder, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+      } catch (err) {
+        console.warn(`Couldn't remove ${folder}: ${err.message}`);
+      }
+    }
   });
 
   it("draws the village, and stops drawing while another tab covers it", async (t) => {
@@ -199,6 +209,38 @@ describe("desktop app", () => {
     await say("cv-second-shell");
   });
 
+  it("draws the village at every graphics quality, with no shader errors", async (t) => {
+    // CI's machines have no graphics card, so on its own the village picks the lowest tier
+    // there: choosing each tier by hand compiles and runs every shader at least once.
+    const village = `document.querySelector("#village").contentDocument?.documentElement`;
+    const quality = () => cdp.eval(`${village}?.dataset.quality ?? null`);
+    const choose = async (label) => {
+      await cdp.clickOn("the View menu", byText("#menubar .menu-title", "View"));
+      await cdp.clickOn("Graphics Quality", byText(".menu-list .menu-label", "Graphics Quality"));
+      await cdp.clickOn(label, byText(".menu-list .menu-label", label));
+    };
+    await cdp.clickOn("the Village tab", byText("#tabs .tab-name", "Village"));
+    t.diagnostic(`picked by itself: ${await quality()} quality on ${await cdp.eval(`${village}?.dataset.gpu`)}`);
+    for (const [tier, label] of [
+      ["high", "High (plus shading in corners, sharper shadows)"],
+      ["medium", "Medium (soft shadows, sky reflections)"],
+      ["low", "Low (fastest)"],
+    ]) {
+      await choose(label);
+      // Each change reloads the village and compiles its shaders, which takes a while without a
+      // graphics card (over a minute on a slow CI machine).
+      await cdp.until(`the village at ${tier} quality`, async () => (await quality()) === tier, 120_000);
+      await cdp.until(`the village drawing at ${tier} quality`, async () => (await drawsDuring(1000)) > 0, 120_000);
+      // How long a picture takes at this tier (the page averages it), for comparing tiers on CI.
+      // Only a report: a machine too slow to give one in time doesn't fail the test.
+      await new Promise((r) => setTimeout(r, 2000));
+      const ms = await cdp.until(`a frame time at ${tier} quality`, () => cdp.eval(`${village}?.dataset.frameMs ?? null`), 30_000).catch(() => null);
+      t.diagnostic(`${tier}: ${ms === null ? "no frame time within 30 s" : `${ms} ms a picture`}`);
+    }
+    await choose("Automatic (fits this computer)");
+    await cdp.until("the village picking its own quality again", async () => (await cdp.eval(`!document.querySelector("#village").contentWindow.location.search.includes("quality=")`)) && (await quality()) !== null, 60_000);
+  });
+
   it("plays the demo: robots walk into the village", async () => {
     await cdp.until("robots in the status bar", async () => {
       const text = await cdp.eval(`document.querySelector("#status-robots").textContent`);
@@ -212,9 +254,15 @@ describe("desktop app", () => {
 
   it("closes cleanly from its close button", async () => {
     if (process.platform === "darwin") await cdp.eval(`window.cliVillage.window("close")`); // macOS draws its own buttons
-    else await cdp.clickOn("the close button", `() => document.querySelector('.tb-win[data-win="close"]')`);
+    else {
+      // The window may close before it confirms the click: that's the click working.
+      await cdp.clickOn("the close button", `() => document.querySelector('.tb-win[data-win="close"]')`).catch((err) => {
+        if (!/window closed/.test(err.message)) throw err;
+      });
+    }
     const { code, stderr } = await exited;
-    assert.equal(code, 0, stderr);
+    assert.equal(code, 0, `exit code ${code}
+${stderr}`);
     await assert.rejects(fetch(`http://127.0.0.1:${port}/json/version`), "the debugging port is closed");
     assert.ok(readdirSync(folders[0]).length > 0, "the app kept its settings in the test's own folder");
   });
