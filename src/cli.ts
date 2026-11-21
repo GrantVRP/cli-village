@@ -18,6 +18,11 @@ import { canUseTerminalView } from "./views/terminal/index.js";
 import { flushForwarders } from "./hub/client.js";
 import { makeUi, type Ui, type UiFlags } from "./lib/ui.js";
 
+// In the desktop app's terminal, `cli-village` runs on the app's own Electron, told by
+// ELECTRON_RUN_AS_NODE to behave as plain Node.js. It's read at startup, so drop it here:
+// programs we start (git, infisical, your tests) must not inherit it.
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 // If whatever reads our output stops early (e.g. `cli-village --demo --json | head`),
 // exit quietly instead of crashing with a "broken pipe" error.
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
