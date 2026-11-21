@@ -49,6 +49,8 @@ const pipeline = new Pipeline(renderer, scene, rig.camera, {
   tier: tierFromQuery(params.get("quality")),
   debug: params.get("debug"),
   toneMapping: params.get("tonemap"),
+  // ?budget=1 makes every frame count as slow: for testing the automatic step-down.
+  budgetMs: Number(params.get("budget")) || undefined,
 });
 
 // --- The village -------------------------------------------------------------------
@@ -97,7 +99,8 @@ function applyNight(k: number): void {
   // The lamps come on as the light goes. (lamps: 0 at midday, 1 at night.)
   glowMaterials.window.emissiveIntensity = 0.04 + light.lamps * 1.9;
   glowMaterials.lantern.emissiveIntensity = 0.4 + light.lamps * 2.2;
-  railGlow.emissiveIntensity = 0.3 + light.lamps * 0.8;
+  // As bright as before the new renderer, after exposure: the cyan rails are the theme.
+  railGlow.emissiveIntensity = ((0.9 + light.lamps * 1.4) * 1.05) / light.exposure;
   effects.night = k;
   document.body.classList.toggle("night", k > 0.5);
   // The desktop app's colours follow the village's light.

@@ -24,6 +24,8 @@ import { lightingAt, sunDirection, type Lighting } from "./timeline.js";
 export interface PipelineOptions {
   /** A tier asked for in the page address: used as is, and never stepped down. */
   tier?: Tier | null;
+  /** Frame time (ms) above which frames count as slow (for testing the step-down; default 22). */
+  budgetMs?: number;
   /** Show one effect on its own: "fog", "dof" or "ao". */
   debug?: string | null;
   /** "aces" (the default: warm and saturated, like the village has always looked), "agx" or "neutral". */
@@ -35,8 +37,9 @@ const CENTER = new THREE.Vector3(0, 0, -3);
 /** The sun's apparent size in degrees, for the soft shadows. (The real sun is 0.53°; a bigger
  * one gives the softer shadows of a hazy day, which suit a miniature.) */
 const SUN_SIZE = 2.6;
-/** Rebuild the sky's reflection after the light changes this much. */
+/** Rebuild the sky's reflection after the light changes this much, and at most this often (ms). */
 const ENVIRONMENT_STEP = 0.02;
+const ENVIRONMENT_EVERY = 400;
 
 const TONE_MAPPING: Record<string, THREE.ToneMapping> = {
   aces: THREE.ACESFilmicToneMapping,
@@ -62,7 +65,12 @@ export class Pipeline {
   lighting: Lighting = lightingAt(0);
 
   private readonly skyScene = new THREE.Scene();
-  private readonly budget = new FrameBudget();
+  private readonly budget: FrameBudget;
+  /** Average frame time (ms), shown in the page's data-frame-ms for tests and diagnostics. */
+  private frameMs = 0;
+  private frames = 0;
+  /** True for the frame after work that isn't drawing (rebuilding the sky's reflection). */
+  private skipBudget = false;
   private readonly forced: boolean;
   private readonly debug: string;
   private composer: EffectComposer | null = null;
@@ -74,6 +82,7 @@ export class Pipeline {
   private environment: THREE.WebGLRenderTarget | null = null;
   /** The light level the sky's reflection was made for (-1: none yet). */
   private environmentFor = -1;
+  private environmentAt = -Infinity;
   private night = 0;
 
   constructor(
@@ -86,6 +95,9 @@ export class Pipeline {
     this.forced = Boolean(options.tier);
     this.tier = options.tier ?? tierForRenderer(this.gpu);
     this.debug = options.debug ?? "";
+    this.budget = new FrameBudget(options.budgetMs ?? 22);
+    // Time spent hidden says nothing about how fast the village draws.
+    document.addEventListener("visibilitychange", () => this.budget.reset());
     renderer.toneMapping = this.debug ? THREE.NoToneMapping : (TONE_MAPPING[options.toneMapping ?? ""] ?? THREE.ACESFilmicToneMapping);
     renderer.shadowMap.enabled = true;
     this.pmrem = new THREE.PMREMGenerator(renderer);
@@ -133,11 +145,14 @@ export class Pipeline {
     }
     if (!s.environment) this.setEnvironment(null);
     this.environmentFor = -1;
+    this.environmentAt = -Infinity;
     this.buildComposer();
     this.setLight(this.night);
   }
 
   private buildComposer(): void {
+    // (The composer frees only its own two targets: each pass frees its own.)
+    for (const pass of this.composer?.passes ?? []) pass.dispose();
     this.composer?.dispose();
     const s = SETTINGS[this.tier];
     const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
@@ -146,19 +161,25 @@ export class Pipeline {
     composer.addPass(scenePass);
     if (s.ambientOcclusion || this.debug === "ao") {
       const ao = new GTAOPass(this.scene, this.camera, 1, 1);
-      ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1, samples: 16 });
+      // Read the scene's own depth (normals come from it: exact for flat-shaded faces), so the
+      // occlusion follows the swaying trees and the scene isn't drawn a second time. (Set
+      // after construction: passing it to the constructor leaves GTAOPass without the target
+      // it sizes and frees later.)
+      ao.setGBuffer(scenePass.depthTexture);
+      ao.updateGtaoMaterial({ radius: 1.8, distanceExponent: 2, thickness: 1.5, scale: 1.25, samples: 16 });
       ao.updatePdMaterial({ radius: 6, samples: 16, rings: 2 });
-      ao.blendIntensity = 0.85;
+      ao.blendIntensity = 1;
       if (this.debug === "ao") ao.output = GTAOPass.OUTPUT.Denoise;
       composer.addPass(ao);
     }
     this.atmosphere = new AtmospherePass(this.camera, scenePass.depthTexture);
     this.atmosphere.uniforms.debug.value = this.debug === "fog" ? 1 : 0;
     composer.addPass(this.atmosphere);
-    this.dof = new DepthOfFieldPass(this.camera, scenePass.depthTexture, Math.max(12, s.bokehSamples));
+    this.dof = new DepthOfFieldPass(this.camera, scenePass.depthTexture, s.bokehSamples);
     this.dof.uniforms.debug.value = ({ dof: 1, "dof-blend": 2, "dof-coc": 3 } as Record<string, number>)[this.debug] ?? 0;
     composer.addPass(this.dof);
-    if (s.bloom > 0 && !this.debug) composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.42, 0.55, 1.0));
+    // Glow around anything brighter than white (the composer sizes it to half resolution).
+    if (s.bloom && !this.debug) composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.6, 0.9));
     composer.addPass(new OutputPass());
     this.finish = new FinishPass();
     // Debug views show their values as they are: no glow, tone mapping or grade on top.
@@ -223,19 +244,28 @@ export class Pipeline {
   /** Draw one frame. `focus` is the distance the lens focuses at; `t` drives clouds and grain. */
   render(dt: number, t: number, focus: number, exposure: number): void {
     if (!this.composer || !this.dof || !this.finish) return;
+    const ms = dt * 1000;
+    this.frameMs = this.frames++ === 0 ? ms : this.frameMs + (ms - this.frameMs) * 0.05;
+    if (this.frames % 30 === 0) document.documentElement.dataset.frameMs = this.frameMs.toFixed(1);
     // Too slow here? Step down a tier (unless the page address asked for one).
-    if (!this.forced && this.tier !== "low" && this.budget.add(dt * 1000)) {
+    const slow = !this.skipBudget && this.budget.add(ms);
+    this.skipBudget = false;
+    if (!this.forced && this.tier !== "low" && slow) {
       this.tier = lower(this.tier);
       this.budget.reset();
       this.applyTier();
       return;
     }
-    // The sky's reflection follows the time of day, rebuilt only when it changed enough.
-    if (SETTINGS[this.tier].environment && Math.abs(this.night - this.environmentFor) > ENVIRONMENT_STEP) {
+    // The sky's reflection follows the time of day: rebuilt when it changed enough, and not
+    // every frame while the light fades (pressing n, or the day-night cycle).
+    const now = performance.now();
+    if (SETTINGS[this.tier].environment && Math.abs(this.night - this.environmentFor) > ENVIRONMENT_STEP && now - this.environmentAt > ENVIRONMENT_EVERY) {
       this.environmentFor = this.night;
+      this.environmentAt = now;
       this.sky.uniforms.stars.value = 0; // no stars in the reflections
       this.setEnvironment(this.pmrem.fromScene(this.skyScene, 0.02, 0.1, 200));
       this.sky.uniforms.stars.value = this.lighting.stars;
+      this.skipBudget = true;
     }
     this.renderer.toneMappingExposure = this.lighting.exposure * exposure;
     this.sky.uniforms.time.value = t;

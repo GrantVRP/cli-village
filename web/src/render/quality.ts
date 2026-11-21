@@ -23,20 +23,18 @@ export interface TierSettings {
   shadowSamples: number;
   /** Screen-space ambient occlusion (GTAO). */
   ambientOcclusion: boolean;
-  /** Bloom around lights, at this fraction of the screen's resolution (0 = off). */
-  bloom: number;
-  /** Samples per pixel for the depth-of-field blur (0 = a cheap screen-band blur). */
+  /** Glow around lights (bloom). */
+  bloom: boolean;
+  /** Samples per pixel for the depth-of-field blur. */
   bokehSamples: number;
-  /** Sky reflections on water and brass (a prefiltered environment map). */
+  /** The sky as soft ambient light and in reflections on brass (a prefiltered environment map). */
   environment: boolean;
-  /** Real point lights in the lamps at night (the cheaper tiers fake the light pools). */
-  lampLights: boolean;
 }
 
 export const SETTINGS: Readonly<Record<Tier, TierSettings>> = {
-  low: { maxPixelRatio: 1, msaa: 0, shadowMap: 2048, shadowSamples: 0, ambientOcclusion: false, bloom: 0, bokehSamples: 0, environment: false, lampLights: false },
-  medium: { maxPixelRatio: 1.5, msaa: 4, shadowMap: 2048, shadowSamples: 12, ambientOcclusion: false, bloom: 0.5, bokehSamples: 24, environment: true, lampLights: false },
-  high: { maxPixelRatio: 2, msaa: 4, shadowMap: 4096, shadowSamples: 20, ambientOcclusion: true, bloom: 0.5, bokehSamples: 48, environment: true, lampLights: true },
+  low: { maxPixelRatio: 1, msaa: 0, shadowMap: 2048, shadowSamples: 0, ambientOcclusion: false, bloom: false, bokehSamples: 12, environment: false },
+  medium: { maxPixelRatio: 1.5, msaa: 4, shadowMap: 2048, shadowSamples: 12, ambientOcclusion: false, bloom: true, bokehSamples: 24, environment: true },
+  high: { maxPixelRatio: 2, msaa: 4, shadowMap: 4096, shadowSamples: 20, ambientOcclusion: true, bloom: true, bokehSamples: 48, environment: true },
 };
 
 /** Software renderers: no graphics card, every pixel is drawn by the processor. */

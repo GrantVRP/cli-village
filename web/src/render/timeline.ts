@@ -59,11 +59,13 @@ const KEYS: readonly Key[] = [
     fog: 0xe2d6c4, fogDensity: 0.85, exposure: 1.02, lamps: 0.12, stars: 0, cloudCover: 0.5, cloudColor: 0xfff1de, saturation: 1.05,
   },
   {
-    at: 0.85, // sunset: a low orange sun, long shadows, mist, the lamps coming on
-    sunElevation: 18, sunAzimuth: 86, sunColor: 0xffa365, sunIntensity: 2.4,
-    skyFill: 0x8f96ba, groundFill: 0x4b3e36, fillIntensity: 0.7,
-    zenith: 0x34466f, horizon: 0xf09a6a, sunGlow: 0xffb27a,
-    fog: 0x9c8fa6, fogDensity: 1.1, exposure: 1.1, lamps: 0.85, stars: 0.12, cloudCover: 0.55, cloudColor: 0xf3a98a, saturation: 1.0,
+    at: 0.85, // dusk (the app's default): a low warm sun under a cool blue sky, long shadows,
+    // the lamps and rails coming on. Kept cool overall, so the grass stays green and the
+    // cyan rails read, as in the village's original look.
+    sunElevation: 18, sunAzimuth: 86, sunColor: 0xffc796, sunIntensity: 1.35,
+    skyFill: 0x8c9cc4, groundFill: 0x3d4a32, fillIntensity: 0.75,
+    zenith: 0x2c3f66, horizon: 0xe2a47e, sunGlow: 0xffbe8a,
+    fog: 0x7f8ba4, fogDensity: 1.0, exposure: 1.2, lamps: 0.85, stars: 0.12, cloudCover: 0.55, cloudColor: 0xe8ab92, saturation: 1.05,
   },
   {
     at: 1, // night: a pale moon from the other side, the village lit by its lamps

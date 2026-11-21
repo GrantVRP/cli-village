@@ -221,6 +221,10 @@ describe("desktop app", () => {
       await choose(label);
       await cdp.until(`the village at ${tier} quality`, async () => (await quality()) === tier, 60_000);
       await cdp.until(`the village drawing at ${tier} quality`, async () => (await drawsDuring(1000)) > 0, 120_000);
+      // How long a picture takes at this tier (the page averages it), for comparing tiers on CI.
+      await new Promise((r) => setTimeout(r, 2000));
+      const ms = await cdp.until(`a frame time at ${tier} quality`, () => cdp.eval(`${village}?.dataset.frameMs ?? null`), 30_000);
+      t.diagnostic(`${tier}: ${ms} ms a picture`);
     }
     await choose("Automatic (fits this computer)");
     await cdp.until("the village picking its own quality again", async () => (await cdp.eval(`!document.querySelector("#village").contentWindow.location.search.includes("quality=")`)) && (await quality()) !== null, 60_000);

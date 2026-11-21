@@ -432,8 +432,10 @@ export class FinishPass extends Pass {
             c = mix(vec3(y), c, saturation);
             // Split toning, as an overlay: cool in the shadows, warm in the highlights.
             // (The tint is normalised to brightness 1, so it shifts hue without darkening.)
+            // Strong colours are left alone, so the cyan rails and the column keep their hue.
             vec3 tint = mix(shadowTint, highlightTint, smoothstep(0.15, 0.75, y));
-            c = mix(c, c * tint / max(luma(tint), 1e-4), splitAmount);
+            float chroma = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+            c = mix(c, c * tint / max(luma(tint), 1e-4), splitAmount * (1.0 - smoothstep(0.2, 0.6, chroma)));
             // Vignette: an ellipse that follows the window's shape, very soft.
             vec2 p = (vUv - 0.5) * vec2(resolution.x / resolution.y, 1.0);
             c *= 1.0 - vignette * smoothstep(0.35, 1.05, length(p));

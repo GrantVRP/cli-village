@@ -3,7 +3,8 @@
 // the shader (no textures), in linear light, so the tone mapping treats it like the scene.
 //
 // The same dome, rendered on its own into a small cube map and prefiltered, also becomes the
-// scene's environment light: the river and the brass reflect the sky that's really there.
+// scene's environment light: everything picks up the sky's colour as soft ambient light, and
+// the brass reflects it. (The river works out its own sky reflection, in water.ts.)
 
 import * as THREE from "three";
 
