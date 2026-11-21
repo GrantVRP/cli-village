@@ -8,7 +8,9 @@ Nothing is on npm yet: install it from a copy of this repository (see the README
 
 ### Checked and tested (November 2026)
 
-- **Step 18:** `npm run test:app` opens the real desktop app and uses it with real clicks and typing. It runs on Windows in CI.
+- **Step 18:** `npm run test:app` opens the real desktop app and uses it with real clicks and typing. It runs on Windows in CI. On CI's small screen it found two bugs, now fixed:
+  - in a narrow window, the search box covered the Help menu;
+  - in a busy village, a click on a tab could do nothing.
 - **Step 17:** checked against the real Infisical CLI (0.45.13). Every flag exists and the secret scan answers as expected. The test stand-in now writes its reports the way the real one does, with the secret inside, so the tests prove the secret is never shown.
 - **Step 16:**
   - A commit refused for lack of a scanner shows at the harbor.
