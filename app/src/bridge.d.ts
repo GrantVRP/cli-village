@@ -4,6 +4,8 @@ export interface AppInfo {
   mode: string;
   version: string;
   cwd: string;
+  /** False in your home folder (where the installed app starts from a shortcut): open a project. */
+  project: boolean;
   /** win32, darwin or linux: the window draws its own title bar except on macOS. */
   platform: string;
   maximized: boolean;

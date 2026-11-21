@@ -9,22 +9,35 @@
 // integration); it talks to this process only through the small bridge in
 // preload.cjs. It can't open other sites or windows. The server still binds to
 // 127.0.0.1 with a per-session token. Secret values never pass through here.
+//
+// Installed (from the installers, app.isPackaged), three things differ from a copy of
+// the repository: node-pty sits next to the app rather than in node_modules, the app
+// may be started from a shortcut rather than a project folder, and its terminal gets
+// the app's own `cli-village` command (resources/bin), run by the app's own Electron.
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as pty from "node-pty";
+import type * as Pty from "node-pty";
 import { joinVillage, type Joined } from "../commands/watch.js";
 import { runDemo } from "../demo/runner.js";
 import { EventBus } from "../events/bus.js";
 import { startVillageServer, type VillageServer } from "../server/server.js";
+import { DUSK, shadeAt } from "../views/colors.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(path.join(here, "../../package.json"), "utf8")) as { version: string };
+const installed = app.isPackaged;
 
-// --- Arguments: cli-village app [--demo] [--speed n] [--once] --------------------------------
+// node-pty is native code, so the installed app keeps it outside app.asar, next to it in
+// resources/node-pty (see electron-builder.yml). The npm package doesn't carry it at all.
+const pty = createRequire(import.meta.url)(installed ? path.join(process.resourcesPath, "node-pty") : "node-pty") as typeof Pty;
+
+// --- Arguments: cli-village app [--demo] [--speed n] [--once] [--folder=<dir>] ----------------
 
 const args = process.argv.slice(process.defaultApp ? 2 : 1);
 const demo = args.includes("--demo");
@@ -32,7 +45,36 @@ const once = args.includes("--once");
 const speedAt = args.indexOf("--speed");
 const speed = speedAt >= 0 ? Number(args[speedAt + 1]) || 1 : 1;
 const mode = demo ? "demo" : "live";
-const cwd = process.cwd();
+
+/**
+ * The project folder this window is for: --folder=<dir> (File › Open Folder passes it), else
+ * where it was started. A shortcut, the Start menu or Finder start the installed app in its
+ * own folder, the disk's root or Windows' system folder: not a project. Then it opens in your
+ * home folder, and the Guide's first step is to open a project.
+ */
+function startFolder(): string {
+  const picked = args.find((a) => a.startsWith("--folder="))?.slice("--folder=".length);
+  if (picked && isFolder(picked)) return path.resolve(picked);
+  const here = process.cwd();
+  const system = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+  const notAProject = [path.dirname(process.execPath), path.parse(here).root, system].some((p) => samePath(p, here));
+  return installed && notAProject ? homedir() : here;
+}
+function isFolder(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => path.resolve(p).replace(/[\\/]+$/, "");
+  return process.platform === "linux" ? norm(a) === norm(b) : norm(a).toLowerCase() === norm(b).toLowerCase();
+}
+const cwd = startFolder();
+process.chdir(cwd);
+/** Your home folder isn't a project: the Guide offers to open one. */
+const project = !samePath(cwd, homedir());
 
 // --- What the window may ask for ----------------------------------------------------------------
 
@@ -40,6 +82,8 @@ export interface AppInfo {
   mode: string;
   version: string;
   cwd: string;
+  /** False in your home folder (where the installed app starts from a shortcut): open a project. */
+  project: boolean;
   /** win32, darwin or linux: the window draws its own title bar except on macOS. */
   platform: string;
   maximized: boolean;
@@ -65,6 +109,8 @@ const LINKS: Record<string, string> = {
 };
 
 function cliCommand(): string {
+  // The installed app puts its own cli-village first on its terminal's PATH (see pty:create).
+  if (installed) return "cli-village";
   const found = run(process.platform === "win32" ? "where" : "which", ["cli-village"]);
   if (found) return "cli-village";
   return `node "${path.join(here, "../cli.js")}"`;
@@ -79,7 +125,7 @@ function infisicalStatus(): AppInfo["infisical"] {
 
 let server: VillageServer | null = null;
 let joined: Joined | null = null;
-let term: pty.IPty | null = null;
+let term: Pty.IPty | null = null;
 let demoRunning = false;
 const controller = new AbortController();
 
@@ -120,7 +166,8 @@ app.whenReady().then(async () => {
     minWidth: 980,
     minHeight: 620,
     title: "CLI Village",
-    backgroundColor: "#1a1b2b",
+    // The page's own background at dusk (src/views/colors.ts), so the first frame doesn't flash.
+    backgroundColor: shadeAt(DUSK).bg,
     // The page draws the title bar (menus, window buttons) itself, like VS Code does.
     ...(mac ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 12, y: 12 } } : { frame: false }),
     autoHideMenuBar: true,
@@ -157,6 +204,7 @@ app.whenReady().then(async () => {
       mode,
       version: pkg.version,
       cwd,
+      project,
       platform: process.platform,
       maximized: win.isMaximized(),
       cli: cliCommand(),
@@ -174,6 +222,17 @@ app.whenReady().then(async () => {
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
     env.CLI_VILLAGE_APP = "1";
+    // The app's crash reporter pipe: anything built on Electron in this terminal (like the
+    // app's own cli-village) would look for it and print an error. The shell doesn't need it.
+    delete env.CHROME_CRASHPAD_PIPE_NAME;
+    if (installed) {
+      // The app's own `cli-village` (resources/bin) runs the CLI inside app.asar on this
+      // Electron, as plain Node.js. It comes first, so it always matches the app's version.
+      const key = Object.keys(env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
+      env[key] = [path.join(process.resourcesPath, "bin"), env[key]].filter(Boolean).join(path.delimiter);
+      env.CLI_VILLAGE_ELECTRON = process.execPath;
+      env.CLI_VILLAGE_CLI = path.join(here, "../cli.js");
+    }
     term = pty.spawn(shell, shellArgs, { name: "xterm-256color", cols: cols || 80, rows: rows || 24, cwd, env });
     const current = term;
     // Only the current shell speaks to the window. A shell we replaced (Terminal › New) still
@@ -228,15 +287,25 @@ app.whenReady().then(async () => {
   });
 
   // File › Open Folder: a second CLI Village opens in that folder (a village per project).
+  // A window that has no project yet (your home folder) reopens in the folder instead.
   ipcMain.handle("app:open-folder", async (e): Promise<string | null> => {
     if (!fromWindow(e)) return null;
     const picked = await dialog.showOpenDialog(win, { title: "Open a project folder", properties: ["openDirectory"] });
     const folder = picked.filePaths[0];
     if (picked.canceled || !folder) return null;
+    // Never pass on a debugging port (tests use one), or the old folder.
+    const keep = process.argv.slice(1).filter((a) => !a.startsWith("--remote-debugging") && !a.startsWith("--folder="));
+    const nextArgs = [...keep, `--folder=${folder}`];
+    if (!project) {
+      // Electron starts the new one after this one has quit, and closed its socket.
+      app.relaunch({ args: nextArgs });
+      void shutdown();
+      return folder;
+    }
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
     delete env.CLI_VILLAGE_SCREENSHOT;
-    const child = spawn(process.execPath, process.argv.slice(1).filter((a) => !a.startsWith("--remote-debugging")), { cwd: folder, detached: true, stdio: "ignore", env });
+    const child = spawn(process.execPath, nextArgs, { cwd: folder, detached: true, stdio: "ignore", env });
     child.unref();
     return folder;
   });
