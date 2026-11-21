@@ -88,6 +88,8 @@ describe("desktop app", () => {
     const args = [fileURLToPath(dist("app/main.js")), "--demo", "--speed", "4", `--remote-debugging-port=${port}`, `--user-data-dir=${settings}`];
     // Keep drawing even when other windows cover this one (Chromium pauses covered windows on Windows).
     args.push("--disable-features=CalculateNativeWinOcclusion", "--disable-backgrounding-occluded-windows");
+    // CLI_VILLAGE_TEST_NO_GPU=1 draws without the graphics card, like CI's machines do.
+    if (process.env.CLI_VILLAGE_TEST_NO_GPU) args.push("--disable-gpu");
     // CI's Linux machines can't give Chromium its sandbox; the window itself stays sandboxed as always.
     if (process.platform === "linux" && process.env.CI) args.push("--no-sandbox");
     app = spawn(electron, args, { cwd: work, env, stdio: ["ignore", "ignore", "pipe"] });
@@ -197,6 +199,31 @@ describe("desktop app", () => {
     await cdp.clickOn("New Terminal", byText(".menu-list .menu-label", "New Terminal"));
     await cdp.until("a fresh terminal", async () => !(await cdp.eval(TERMINAL_LINES)).includes("cv-first-shell"));
     await say("cv-second-shell");
+  });
+
+  it("draws the village at every graphics quality, with no shader errors", async (t) => {
+    // CI's machines have no graphics card, so on its own the village picks the lowest tier
+    // there: choosing each tier by hand compiles and runs every shader at least once.
+    const village = `document.querySelector("#village").contentDocument?.documentElement`;
+    const quality = () => cdp.eval(`${village}?.dataset.quality ?? null`);
+    const choose = async (label) => {
+      await cdp.clickOn("the View menu", byText("#menubar .menu-title", "View"));
+      await cdp.clickOn("Graphics Quality", byText(".menu-list .menu-label", "Graphics Quality"));
+      await cdp.clickOn(label, byText(".menu-list .menu-label", label));
+    };
+    await cdp.clickOn("the Village tab", byText("#tabs .tab-name", "Village"));
+    t.diagnostic(`picked by itself: ${await quality()} quality on ${await cdp.eval(`${village}?.dataset.gpu`)}`);
+    for (const [tier, label] of [
+      ["high", "High (plus shading in corners, sharper shadows)"],
+      ["medium", "Medium (soft shadows, sky reflections)"],
+      ["low", "Low (fastest)"],
+    ]) {
+      await choose(label);
+      await cdp.until(`the village at ${tier} quality`, async () => (await quality()) === tier, 60_000);
+      await cdp.until(`the village drawing at ${tier} quality`, async () => (await drawsDuring(1000)) > 0, 120_000);
+    }
+    await choose("Automatic (fits this computer)");
+    await cdp.until("the village picking its own quality again", async () => (await cdp.eval(`!document.querySelector("#village").contentWindow.location.search.includes("quality=")`)) && (await quality()) !== null, 60_000);
   });
 
   it("plays the demo: robots walk into the village", async () => {

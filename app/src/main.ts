@@ -126,10 +126,30 @@ function setLighting(mode: Lighting): void {
   applyLight(light);
 }
 
+// How much the 3D village draws: "auto" lets it pick for this computer (and step down if
+// it runs slow); the others fix a tier. Changing it reloads the village.
+type Graphics = "auto" | "low" | "medium" | "high";
+const GRAPHICS: Graphics[] = ["auto", "low", "medium", "high"];
+const GRAPHICS_LABELS: Record<Graphics, string> = {
+  auto: "Automatic (fits this computer)",
+  low: "Low (fastest)",
+  medium: "Medium (soft shadows, sky reflections)",
+  high: "High (plus shading in corners, sharper shadows)",
+};
+let graphics: Graphics = GRAPHICS.includes(store.get("graphics") as Graphics) ? (store.get("graphics") as Graphics) : "auto";
+function setGraphics(mode: Graphics): void {
+  if (mode === graphics) return;
+  graphics = mode;
+  store.set("graphics", mode);
+  frame.src = villageAddress();
+}
+
 // --- The village, in a frame ---------------------------------------------------------------
 
 const frame = $<HTMLIFrameElement>("#village");
-frame.src = `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? 0.85 : LIGHT_LEVEL[lighting]}`;
+const villageAddress = () =>
+  `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? 0.85 : LIGHT_LEVEL[lighting]}${graphics === "auto" ? "" : `&quality=${graphics}`}`;
+frame.src = villageAddress();
 frame.addEventListener("load", () => {
   setLighting(lighting);
   tellVillage({ action: "visible", visible: activeTab === "village" });
@@ -882,6 +902,7 @@ const commands = (): Command[] => [
   { id: "test", title: "Tests: run my project's tests", detail: `${CLI} test`, keywords: "lab", run: () => runCli("test") },
   { id: "demo", title: "Village: play the demo (one round)", detail: "pretend robots act out a workday, nothing real runs", run: () => void bridge.playDemo() },
   ...LIGHTINGS.map((mode): Command => ({ id: `light-${mode}`, title: `View: lighting · ${LIGHTING_LABELS[mode]}${lighting === mode ? " ✓" : ""}`, keywords: "night day dusk cycle theme colours", run: () => setLighting(mode) })),
+  ...GRAPHICS.map((mode): Command => ({ id: `graphics-${mode}`, title: `View: graphics quality · ${GRAPHICS_LABELS[mode]}${graphics === mode ? " ✓" : ""}`, keywords: "performance slow fast shadows quality", run: () => setGraphics(mode) })),
   { id: "home", title: "View: the whole village", detail: "the camera goes back out", keywords: "camera home", run: () => { showTab("village"); tellVillage({ action: "home" }); } },
   ...BUILDING_ORDER.map((id): Command => ({ id: `focus-${id}`, title: `View: look at the ${BUILDING_NAMES[id]}`, detail: BUILDING_HELP[id], keywords: "camera building focus", run: () => focusBuilding(id) })),
   ...BUILDING_ORDER.map((id): Command => ({ id: `log-${id}`, title: `Log: open the ${BUILDING_NAMES[id]}'s log`, detail: "as a tab", keywords: "building log tab", run: () => openTab(id) })),
@@ -990,6 +1011,10 @@ const menus: Menu[] = [
       {
         label: "Lighting",
         items: () => LIGHTINGS.map((mode): MenuEntry => ({ label: LIGHTING_LABELS[mode], checked: () => lighting === mode, run: () => setLighting(mode) })),
+      },
+      {
+        label: "Graphics Quality",
+        items: () => GRAPHICS.map((mode): MenuEntry => ({ label: GRAPHICS_LABELS[mode], checked: () => graphics === mode, run: () => setGraphics(mode) })),
       },
       "-",
       { label: "Welcome", run: () => openTab("welcome") },
