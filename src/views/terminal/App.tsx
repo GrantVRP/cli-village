@@ -128,7 +128,7 @@ function StatusBar({ state, mode, url, width }: { state: VillageState; mode: str
       </Box>
       {url ? (
         <Text dimColor wrap="truncate-end">
-          3D village: <Text color={theme.accent}>{url}</Text>
+          3D village: <Text color={theme.active}>{url}</Text>
         </Text>
       ) : null}
     </Box>
@@ -137,7 +137,7 @@ function StatusBar({ state, mode, url, width }: { state: VillageState; mode: str
 
 function headlineStyle(headline: Headline) {
   if (headline.level === "attention") return { icon: icons.fail, color: theme.bad };
-  if (headline.level === "active") return { icon: icons.start, color: theme.accent };
+  if (headline.level === "active") return { icon: icons.start, color: theme.active };
   if (headline.seq === 0) return { icon: icons.idle, color: undefined };
   return { icon: icons.ok, color: theme.good };
 }
@@ -163,7 +163,7 @@ function KeyMessage({ state, width, compact, waiting }: { state: VillageState; w
     <Text key="command" wrap="truncate-end">
       {"  "}
       <Text dimColor>{icons.arrow} </Text>
-      <Text color={theme.accent}>{headline.command}</Text>
+      <Text color={theme.active}>{headline.command}</Text>
       {compact || idle ? null : <Text dimColor> (the real command)</Text>}
     </Text>
   ) : null;
@@ -220,7 +220,7 @@ function agentRow(agent: AgentState, now: number) {
   }
   if (agent.status === "working" && agent.task) {
     const pct = agent.task.percent !== undefined ? ` ${agent.task.percent}%` : "";
-    return { icon: icons.start, color: theme.accent, dim: false, place, activity: `${agent.task.title}${pct}` };
+    return { icon: icons.start, color: theme.active, dim: false, place, activity: `${agent.task.title}${pct}` };
   }
   if (walking) return { icon: icons.move, color: undefined, dim: true, place, activity: "walking" };
   const activity = agent.location === "home" ? "resting" : (agent.say ?? "idle");
@@ -286,7 +286,7 @@ function Robots({ state, now, width, fit, wide }: { state: VillageState; now: nu
 function HarborLine({ state, spaced }: { state: VillageState; spaced: boolean }) {
   const harbor = describeHarbor(state);
   if (!harbor) return null;
-  const color = harbor.level === "attention" ? theme.bad : harbor.level === "active" ? theme.accent : undefined;
+  const color = harbor.level === "attention" ? theme.bad : harbor.level === "active" ? theme.active : undefined;
   // The same colors as in the ? help: a crate is yellow, the boat green.
   const iconColor = color ?? (harbor.icon === "boat" ? theme.good : theme.warn);
   return (
@@ -342,7 +342,7 @@ function BuildingLog({ state, id, lines, details, width }: { state: VillageState
   const status = b.problem
     ? { icon: icons.fail, color: theme.bad, text: `Needs attention: ${b.problem.message}` }
     : b.working.length
-      ? { icon: icons.start, color: theme.accent, text: `Working here: ${b.working.join(", ")}` }
+      ? { icon: icons.start, color: theme.active, text: `Working here: ${b.working.join(", ")}` }
       : { icon: icons.idle, color: undefined, text: "Quiet right now" };
   const room = Math.max(1, lines - 1 - (harbor ? 1 : 0));
   const entries = (details ? b.log : b.log.filter((e) => e.emphasis !== "tertiary")).slice(-room);
@@ -376,7 +376,7 @@ const MEANING_WIDTH = Math.max(...GLOSSARY.map((g) => g.meaning.length)) + 2;
 
 const robotSymbols = (
   <>
-    <Text color={theme.accent}>{icons.start}</Text> working <Text color={theme.bad}>{icons.fail}</Text> problem{" "}
+    <Text color={theme.active}>{icons.start}</Text> working <Text color={theme.bad}>{icons.fail}</Text> problem{" "}
     <Text color={theme.good}>{icons.ok}</Text> done {icons.move} walking {icons.idle} resting
   </>
 );

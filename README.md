@@ -195,7 +195,7 @@ $ cli-village commit -m "Add payments"
 
   ![A real commit with a secret in it, stopped at the gate](docs/screenshots/village-harbor-stopped.jpg)
 - The camera drifts slowly and glides to wherever the most important thing is happening, turning to show that building from the front. The caption at the top says what that is (and the real command).
-- The page has the same zones as the terminal view: a status bar on top, the one key message, a side panel with the robots and the "What's happening" log, and key hints at the bottom. Its look follows Infisical's own app: dark panels, thin borders, one lime accent.
+- The page has the same zones as the terminal view: a status bar on top, the one key message, a side panel with the robots and the "What's happening" log, and key hints at the bottom. Its colours are the desktop app's: calm surfaces, cream text and one lantern-gold accent, and they follow the village's light too.
 - **Drag** to look around, **scroll** to zoom, **click** a building to see it up close, with its own log in the side panel. Keys: `?` help, `l` show or hide the side panel, `d` more or less detail in the log, `n` night, `h` back to the whole village, `Esc` close.
 - If your system asks for less motion (*reduce motion*), or you start it with `--no-animation`, the village stands still: robots appear where they're going, and the camera only moves when you click a building or press `h`.
 - With `--compact`, the caption drops the explanation line and the key hints are hidden.
@@ -207,7 +207,7 @@ $ cli-village commit -m "Add payments"
 Everything is built from simple shapes in code (no image textures) with [three.js](https://threejs.org/). The page loads nothing from the internet.
 
 **How it's drawn.** The village is lit like a miniature on a table:
-- a sun that moves with the time of day: soft shadows that sharpen where things touch the ground, long and orange at dusk, a pale moon at night;
+- a sun that moves with the time of day: soft shadows that sharpen where things touch the ground, long and golden at dusk, a pale moon at night;
 - a sky with clouds and stars, haze in the distance and mist low over the ground;
 - a river with waves, sun glints and foam along its banks, and trees that sway in the wind;
 - lamps that light the ground around them after dark;
@@ -229,7 +229,7 @@ A window laid out like VS Code, so nothing has to open in your browser:
 - **Title bar** with the usual menus (File, Edit, Selection, View, Go, Run, Terminal, Help), Back and Forward, a command box in the middle, the layout toggles and the window buttons. Every menu item does something: Run holds every CLI Village command, View holds the lighting and the layout, Go moves between tabs and buildings. View › Graphics Quality picks how much the village draws. `Alt` opens the menus, as in VS Code.
 - **Welcome** opens first, with the three things a new village needs: check your tools, link your secrets, watch a workday. The **Guide** on the right keeps those steps in view, ticks them off as you go, and explains whichever tool you're in. Close it with `Ctrl+Alt+B`.
 - **Activity bar** on the left: Village, Secrets, Git, Tests, Research, Agents and Help. Each opens a side bar with that tool's steps and buttons and the matching building's log. The Secrets tool lists key names and compares environments; the Git tool commits and pushes; values never appear. Help has collapsible sections for the buildings, the keys and the words.
-- **The village** in the middle, at dusk by default. Click a building and its log opens as a tab beside the village. The window's colours follow the village's light: indigo at night, warm charcoal by day, a lantern amber for the accent. View › Lighting picks day, dusk, night, or a ten-minute cycle.
+- **The village** in the middle, at dusk by default. Click a building and its log opens as a tab beside the village. The window's colours follow the village's light: stone and wood by day, a slate blue like the sky at night, with one lantern gold for focus, selection and the next thing to do. The work area is lifted above the frame and side bars, and every text colour passes WCAG AA at any light ([src/views/colors.ts](src/views/colors.ts), checked by `test/colors.test.mjs`). View › Lighting picks day, dusk, night, or a ten-minute cycle.
 - **A real terminal** at the bottom (PowerShell on Windows, your shell elsewhere). Run `cli-village test`, `commit`, `push` or anything else there, and the village reacts, because the app hosts the village's socket. The Output tab shows the whole log; Problems lists what needs attention. `Ctrl+F` finds a word in a log.
 - **A command palette** on `Ctrl+Shift+P` with every command: each line says what it does in plain English and shows the real command it types into the terminal. `Ctrl+J` hides the panel, `Ctrl+B` the side bar.
 
