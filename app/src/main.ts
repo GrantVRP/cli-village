@@ -158,6 +158,10 @@ const visited: Tab[] = ["village"];
 let visitedAt = 0;
 const docLog = el("ol", "log");
 followBottom(docLog);
+const docStatus = el("p", "doc-status");
+const docNote = el("p", "doc-note");
+/** Which building's log the page shows now. */
+let docFor: Building | null = null;
 
 function showTab(id: Tab, remember = true): void {
   if (id !== "village" && !openTabs.includes(id)) openTabs = [...openTabs, id];
@@ -191,27 +195,42 @@ function nextTab(step: 1 | -1): void {
   showTab(all[(at + step + all.length) % all.length]!);
 }
 
+/** Each open tab's element, kept while the tab is open. */
+const tabElements = new Map<Tab, HTMLElement>();
+let tabOrder = "";
+function makeTab(id: Tab): HTMLElement {
+  const tab = el("div", "tab");
+  tab.setAttribute("role", "tab");
+  const name = el("button", "tab-name", TAB_NAMES[id]);
+  name.addEventListener("click", () => showTab(id));
+  name.addEventListener("auxclick", (e) => e.button === 1 && id !== "village" && closeTab(id));
+  tab.append(name);
+  if (id !== "village") {
+    const close = el("button", "tab-close", "×");
+    close.title = "Close (Ctrl+W)";
+    close.addEventListener("click", () => closeTab(id));
+    tab.append(close);
+  }
+  tabElements.set(id, tab);
+  return tab;
+}
+
 function renderTabs(): void {
-  const tabs = $("#tabs");
-  const make = (id: Tab) => {
-    const tab = el("div", `tab${activeTab === id ? " on" : ""}`);
-    tab.setAttribute("role", "tab");
-    const name = el("button", "tab-name", TAB_NAMES[id]);
-    name.addEventListener("click", () => showTab(id));
-    name.addEventListener("auxclick", (e) => e.button === 1 && id !== "village" && closeTab(id));
-    tab.append(name);
-    if (id !== "village") {
-      const close = el("button", "tab-close", "×");
-      close.title = "Close (Ctrl+W)";
-      close.addEventListener("click", () => closeTab(id));
-      tab.append(close);
-    }
+  // Every robot's step calls this, so the tabs are only changed, not built again: a tab built
+  // again between pressing and releasing the mouse loses the click (in a busy village, often).
+  const ids: Tab[] = ["village", ...openTabs];
+  if (ids.join("|") !== tabOrder) {
+    tabOrder = ids.join("|");
+    for (const id of tabElements.keys()) if (!ids.includes(id)) tabElements.delete(id);
+    $("#tabs").replaceChildren(...ids.map((id) => tabElements.get(id) ?? makeTab(id)));
+  }
+  for (const id of ids) {
     const b = id !== "village" && id !== "welcome" && state ? state.buildings[id] : null;
-    if (b?.problem) tab.classList.add("problem");
-    else if (b?.working.length) tab.classList.add("active");
-    return tab;
-  };
-  tabs.replaceChildren(make("village"), ...openTabs.map(make));
+    const look = b?.problem ? " problem" : b?.working.length ? " active" : "";
+    const name = `tab${activeTab === id ? " on" : ""}${look}`;
+    const tab = tabElements.get(id)!;
+    if (tab.className !== name) tab.className = name;
+  }
   $<HTMLButtonElement>("#nav-back").disabled = visitedAt <= 0;
   $<HTMLButtonElement>("#nav-forward").disabled = visitedAt >= visited.length - 1;
 }
@@ -229,22 +248,27 @@ function renderDoc(): void {
   if (activeTab === "village" || activeTab === "welcome" || !state) return;
   const id = activeTab;
   const b = state.buildings[id];
-  const head = el("div", "doc-head");
-  const title = el("h2", "doc-title", BUILDING_NAMES[id]);
-  const focus = button("Show in the village", () => focusBuilding(id));
-  head.append(title, focus);
-  const status = el("p", b.problem ? "doc-status bad" : "doc-status");
-  status.textContent = b.problem
+  // Every robot's step calls this: build the page only when another building's log opens, then
+  // only change it. A button built again between pressing and releasing the mouse loses the click.
+  if (docFor !== id) {
+    docFor = id;
+    const head = el("div", "doc-head");
+    head.append(el("h2", "doc-title", BUILDING_NAMES[id]), button("Show in the village", () => focusBuilding(id)));
+    doc.replaceChildren(head, el("p", "doc-help", BUILDING_HELP[id]), docStatus, docNote, docLog);
+  }
+  docStatus.className = b.problem ? "doc-status bad" : "doc-status";
+  docStatus.textContent = b.problem
     ? `✖ Needs attention: ${b.problem.message}`
     : b.working.length
       ? `▶ Working here: ${b.working.join(", ")}`
       : "○ Quiet right now";
-  const parts: HTMLElement[] = [head, el("p", "doc-help", BUILDING_HELP[id]), status];
   const harbor = id === "harbor" ? describeHarbor(state) : null;
-  if (harbor) parts.push(el("p", `doc-note ${harbor.level}`, `${HARBOR_ICONS[harbor.icon]} ${harbor.text}`));
+  docNote.style.display = harbor ? "" : "none";
+  if (harbor) {
+    docNote.className = `doc-note ${harbor.level}`;
+    docNote.textContent = `${HARBOR_ICONS[harbor.icon]} ${harbor.text}`;
+  }
   renderLog(docLog, found(b.log), details, findText ? "Nothing in this log matches." : "Nothing has happened here yet.", 120);
-  parts.push(docLog);
-  doc.replaceChildren(...parts);
 }
 
 // --- Small pieces --------------------------------------------------------------------------------
@@ -737,10 +761,15 @@ grip.addEventListener("pointerdown", (down) => {
   grip.addEventListener("pointerup", up);
 });
 
+let problemsKey = "";
 function updatePanel(s: VillageState): void {
   renderLog(output, found(s.log), details, findText ? "Nothing in the log matches." : "Nothing yet. Run a command in the terminal, or play the demo.", 200);
   const problems = openProblems(s);
   $("#problems-count").textContent = problems.length ? String(problems.length) : "";
+  // Like the tabs: only build the list again when it changed, so its Open buttons keep their clicks.
+  const key = JSON.stringify(problems.map((b) => [b.id, b.problem!.agent, b.problem!.message]));
+  if (key === problemsKey) return;
+  problemsKey = key;
   $("#problems").replaceChildren(
     ...(problems.length
       ? problems.map((b) => {
@@ -814,10 +843,18 @@ function shellRun(command: string): void {
   terminal.run(command);
 }
 const runCli = (args: string) => shellRun(`${cliName()} ${args}`);
+/** Text as one argument the terminal's shell takes literally ($, ` and ! stay as they are). */
+function shellQuote(text: string): string {
+  const windows = (info?.platform ?? (navigator.userAgent.includes("Windows") ? "win32" : "")) === "win32";
+  // PowerShell: '…' is literal, and ' is written ''. But Windows PowerShell 5.1 splits an argument
+  // that has a double quote in it when it starts a program, so a double quote becomes '.
+  if (windows) return `'${text.replace(/"/g, "'").replace(/'/g, "''")}'`;
+  // bash and zsh: '…' is literal, and ' is written '\''.
+  return `'${text.replace(/'/g, "'\\''")}'`;
+}
 function commit(message: string, thenPush: boolean): void {
-  // Quotes would break the shell's quoting; the message doesn't need them.
-  const clean = message.replace(/["`$]/g, "'");
-  runCli(`commit${clean ? ` -m "${clean}"` : ""}${thenPush ? " --push" : ""}`);
+  const note = message.replace(/[\r\n]+/g, " ").trim();
+  runCli(`commit${note ? ` -m ${shellQuote(note)}` : ""}${thenPush ? " --push" : ""}`);
 }
 function newTerminal(): void {
   showPanel("terminal");
