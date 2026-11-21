@@ -16,10 +16,6 @@ concurrency:
 permissions:
   contents: read
 
-# The tests never open the desktop app, so skip Electron's 100 MB download.
-env:
-  ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-
 jobs:
   test:
     name: ${{ matrix.os }} · Node ${{ matrix.node }}
@@ -42,3 +38,19 @@ jobs:
       - run: npm run typecheck
       # Builds first (pretest), then runs every test in test/.
       - run: npm test
+
+  # Opens the real desktop app and clicks through it (npm run test:app). Windows first, where
+  # it has been tried by hand; Linux and macOS can follow. Electron (about 100 MB) downloads
+  # the first time the test asks for it, so only this job fetches it.
+  app:
+    name: Desktop app · windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:app
