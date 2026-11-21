@@ -18,6 +18,7 @@ import { Overlay } from "./overlay.js";
 import { P } from "./palette.js";
 import { Village } from "./village.js";
 import { createWorld, railGlow } from "./world.js";
+import { WAITING } from "../../src/events/explain.js";
 import { BUILDINGS, type Building } from "../../src/events/types.js";
 import "./style.css";
 
@@ -183,6 +184,8 @@ addEventListener("keydown", (e) => {
 
 if (embedded) {
   overlay.toggleSide(false);
+  // In the app, the terminal is right below the village, not somewhere else.
+  village.waitingHint = { ...WAITING, subtitle: "Waiting for work. In the terminal below, try:" };
   overlay.onSelect = (id) => parent.postMessage({ type: "cli-village", action: "selected", building: id }, location.origin);
   addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number; seconds?: number }>) => {
     // Only the page around us, from our own server, may steer the village.
@@ -261,6 +264,10 @@ renderer.setAnimationLoop((time) => {
   // With a building's log open on the right, center the picture in the space that's left.
   rig.setInset(overlay.panelInset);
   rig.update(dt);
+  // With no room (in the desktop app, while the bottom panel is maximized) the page has no
+  // height: keep the village up to date, but don't draw it. Drawing into nothing only fills
+  // the log with WebGL errors.
+  if (root.clientWidth === 0 || root.clientHeight === 0) return;
   composer.render(dt);
   overlay.labelRenderer.render(scene, rig.camera);
 });
