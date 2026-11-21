@@ -295,6 +295,20 @@ describe("village state", () => {
       assert.equal(describeHarbor(state).text, "Last boat: 1 commit to origin/main");
     });
 
+    it("the demo's pretend robots are marked, and their boat never hides your real one", () => {
+      const bus = new EventBus();
+      let state = createVillageState();
+      bus.subscribe((e) => (state = reduce(state, e)));
+      const pretend = { type: "push", agent: "Bolt", remote: "origin", branch: "demo", commits: 3 };
+      bus.emit(pretend, "demo");
+      assert.equal(describeHarbor(state).text, "Last boat (demo): 3 commits to origin/demo");
+      assert.equal(state.log.at(-1).demo, true);
+      for (const e of [...saved(), push()]) bus.emit(e);
+      assert.equal(state.log.at(-1).demo, undefined, "your own work isn't marked");
+      bus.emit(pretend, "demo");
+      assert.equal(describeHarbor(state).text, "Last boat: 1 commit to origin/main");
+    });
+
     it("a leak keeps the crate at the gate, and the harbor stays a problem until a scan passes", () => {
       let state = play([job("a1", "git add --all"), done("a1"), scan("s1"), fail("s1")]);
       assert.deepEqual(statuses(state), ["blocked"]);

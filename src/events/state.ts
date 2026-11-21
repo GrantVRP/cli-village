@@ -56,6 +56,8 @@ export interface LogEntry {
   building?: Building;
   text: string;
   emphasis: Emphasis;
+  /** From the demo's pretend robots: in a live village, the views mark it so it isn't taken for real work. */
+  demo?: boolean;
 }
 
 export interface BuildingState {
@@ -102,6 +104,8 @@ export interface LastPush {
   /** How many crates it took (0 when the push only published the branch). */
   crates: number;
   ts: number;
+  /** A pretend push, from the demo. */
+  demo?: boolean;
 }
 
 export type HeadlineLevel = "attention" | "active" | "calm";
@@ -237,6 +241,7 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
     building,
     text,
     emphasis,
+    ...(event.source === "demo" ? { demo: true } : {}),
   });
   const putAgent = (a: AgentState) => (next.agents = { ...state.agents, [a.name]: { ...a, updatedAt: event.ts } });
 
@@ -424,13 +429,18 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
       const what = n === 0 ? "the branch" : `${n} commit${n === 1 ? "" : "s"}`;
       const shipped = shipCrates(state.crates);
       next.crates = shipped.crates;
-      next.lastPush = {
-        remote: event.remote ?? "origin",
-        branch: event.branch ?? "main",
-        commits: n,
-        crates: shipped.count,
-        ts: event.ts,
-      };
+      // A pretend push never hides your real last one.
+      const pretend = event.source === "demo";
+      if (!pretend || !state.lastPush || state.lastPush.demo) {
+        next.lastPush = {
+          remote: event.remote ?? "origin",
+          branch: event.branch ?? "main",
+          commits: n,
+          crates: shipped.count,
+          ts: event.ts,
+          ...(pretend ? { demo: true } : {}),
+        };
+      }
       putAgent({ ...agent, say: "Bon voyage!" });
       const logged = withLog(state, entry(`${event.agent} pushed ${what} to ${target}`, shipped.flagged ? "primary" : "secondary", "harbor"));
       next.log = logged.log;
@@ -595,7 +605,7 @@ export function describeHarbor(state: VillageState): HarborSummary | null {
   const last = state.lastPush;
   if (last) {
     const what = last.commits ? `${last.commits} commit${last.commits === 1 ? "" : "s"}` : "the branch";
-    return { level: "calm", icon: "boat", text: `Last boat: ${what} to ${last.remote}/${last.branch}` };
+    return { level: "calm", icon: "boat", text: `Last boat${last.demo ? " (demo)" : ""}: ${what} to ${last.remote}/${last.branch}` };
   }
   return null;
 }

@@ -13,6 +13,7 @@ const { createFormatter } = await import(dist("views/log.js"));
 const { hubAddress } = await import(dist("hub/address.js"));
 const { EventBus } = await import(dist("events/bus.js"));
 const { VillageStore } = await import(dist("events/store.js"));
+const { noiseFilter } = await import(dist("commands/app.js"));
 const { demoRound } = await import(dist("demo/script.js"));
 const { App } = await import(dist("views/terminal/App.js"));
 const { BUILDING_NAMES } = await import(dist("events/types.js"));
@@ -282,5 +283,32 @@ describe("socket address", () => {
     assert.equal(hubAddress({ XDG_RUNTIME_DIR: "/run/user/1000" }, "linux").path, "/run/user/1000/cli-village/village.sock");
     assert.match(hubAddress({}, "darwin").path, /\.cli-village[\\/]village\.sock$/);
     assert.deepEqual(hubAddress({ CLI_VILLAGE_SOCKET: "/tmp/x/v.sock" }, "linux"), { path: "/tmp/x/v.sock", dir: "/tmp/x", chosen: true });
+  });
+});
+
+describe("desktop app output", () => {
+  it("drops node-pty's harmless helper trace and nothing else", () => {
+    const lines = [
+      "real problem before",
+      "[1116/232900.662:ERROR:third_party/crashpad/crashpad/util/win/registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)",
+      "D:/cli-village/node_modules/node-pty/lib/conpty_console_list_agent.js:13",
+      "var consoleProcessList = getConsoleProcessList(shellPid);",
+      "                         ^",
+      "",
+      "Error: AttachConsole failed",
+      "    at Object.<anonymous> (D:/cli-village/node_modules/node-pty/lib/conpty_console_list_agent.js:13:26)",
+      "    at node:internal/main/run_main_module:33:47",
+      "",
+      "Node.js v24.22.2",
+      "real problem after",
+    ];
+    const keep = noiseFilter();
+    assert.deepEqual(lines.filter(keep), ["real problem before", "real problem after"]);
+  });
+
+  it("never drops more than one trace's worth when the end is missing", () => {
+    const keep = noiseFilter();
+    const lines = ["x/conpty_console_list_agent.js:13", ...Array.from({ length: 30 }, (_, i) => `line ${i}`)];
+    assert.equal(lines.filter(keep).length, 10);
   });
 });

@@ -130,7 +130,10 @@ function setLighting(mode: Lighting): void {
 
 const frame = $<HTMLIFrameElement>("#village");
 frame.src = `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? 0.85 : LIGHT_LEVEL[lighting]}`;
-frame.addEventListener("load", () => setLighting(lighting));
+frame.addEventListener("load", () => {
+  setLighting(lighting);
+  tellVillage({ action: "visible", visible: activeTab === "village" });
+});
 const tellVillage = (message: Record<string, unknown>) => frame.contentWindow?.postMessage({ type: "cli-village", ...message }, location.origin);
 const focusBuilding = (id: Building) => {
   showTab("village");
@@ -216,7 +219,10 @@ function renderTabs(): void {
 function renderDoc(): void {
   const doc = $("#doc");
   const welcome = $("#welcome");
-  frame.classList.toggle("hidden", activeTab !== "village");
+  const hide = activeTab !== "village";
+  // Behind another tab the village keeps up with events but stops drawing (saves the graphics card).
+  if (hide !== frame.classList.contains("hidden")) tellVillage({ action: "visible", visible: !hide });
+  frame.classList.toggle("hidden", hide);
   welcome.hidden = activeTab !== "welcome";
   doc.hidden = activeTab === "village" || activeTab === "welcome";
   $("#findbar").hidden = !findOpen;
@@ -1170,6 +1176,7 @@ function updateStatus(s: VillageState): void {
 }
 
 function showInfo(i: AppInfo): void {
+  document.body.dataset.mode = i.mode;
   const hub = $("#status-hub");
   if (i.hub.role === "none") {
     hub.textContent = i.mode === "demo" ? "demo: nothing real runs" : `✖ ${i.hub.error}`;
