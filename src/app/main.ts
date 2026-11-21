@@ -17,7 +17,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -36,6 +36,18 @@ const installed = app.isPackaged;
 // node-pty is native code, so the installed app keeps it outside app.asar, next to it in
 // resources/node-pty (see electron-builder.yml). The npm package doesn't carry it at all.
 const pty = createRequire(import.meta.url)(installed ? path.join(process.resourcesPath, "node-pty") : "node-pty") as typeof Pty;
+// node-pty's prebuilt spawn-helper (macOS) can arrive without its executable bit, and then no
+// shell starts ("posix_spawnp failed"). The installers set it while packing
+// (scripts/after-pack.cjs); in a copy of the repository, set it here.
+if (!installed && process.platform === "darwin") {
+  const ptyFolder = path.dirname(createRequire(import.meta.url).resolve("node-pty/package.json"));
+  const helper = path.join(ptyFolder, "prebuilds", `darwin-${process.arch}`, "spawn-helper");
+  try {
+    if (existsSync(helper)) chmodSync(helper, 0o755);
+  } catch {
+    // Not ours to change: the terminal will say it couldn't start a shell.
+  }
+}
 
 // --- Arguments: cli-village app [--demo] [--speed n] [--once] [--folder=<dir>] ----------------
 
