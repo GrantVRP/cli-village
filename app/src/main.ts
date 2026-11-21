@@ -19,6 +19,7 @@ import type { AppInfo } from "./bridge.js";
 import { MenuBar, type Menu, type MenuEntry } from "./menu.js";
 import { Palette, type Command } from "./palette.js";
 import { createTerminal } from "./terminal.js";
+import { CSS_NAMES, DUSK, shadeAt, type Shade } from "../../src/views/colors.js";
 import "./style.css";
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -70,36 +71,28 @@ let findText = "";
 
 // --- Colours: the window follows the village's light -----------------------------------------
 //
-// Two sets of colours, day and night, mixed by how dark the village is (0..1). Day is a
-// warm charcoal with the village's ochre; night is the village's indigo with lantern amber.
-// Nothing neon: the accent is a lantern, not a sign.
+// Day and night colours (src/views/colors.ts), mixed by how dark the village is (0..1).
 
-type Shade = Record<"bg" | "bg2" | "bg3" | "line" | "line2" | "text" | "muted" | "dim" | "accent" | "bar" | "barLine" | "barText", string>;
-const DAY: Shade = { bg: "#201f1c", bg2: "#272623", bg3: "#2f2e2a", line: "#3a3834", line2: "#4a4741", text: "#ece6d8", muted: "#aaa496", dim: "#7b7568", accent: "#cfa65a", bar: "#2a2824", barLine: "#403d36", barText: "#cfc7b4" };
-const NIGHT: Shade = { bg: "#121426", bg2: "#171a2f", bg3: "#1f2239", line: "#2a2d48", line2: "#3b3f66", text: "#d9dbeb", muted: "#9c9fc0", dim: "#62668c", accent: "#dfb677", bar: "#1a1c33", barLine: "#363a5e", barText: "#b7bbd9" };
-const CSS_NAMES: Record<keyof Shade, string> = { bg: "bg", bg2: "bg-2", bg3: "bg-3", line: "line", line2: "line-2", text: "text", muted: "muted", dim: "dim", accent: "accent", bar: "bar", barLine: "bar-line", barText: "bar-text" };
-const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const mix = (a: string, b: string, k: number) => rgb(a).map((x, i) => Math.round(x + (rgb(b)[i]! - x) * k));
+const channels = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(" ");
 
-let light = 0.85;
+let light = DUSK;
 let lightPending: number | null = null;
 function applyLight(k: number): void {
   light = k;
   const root = document.documentElement.style;
-  const mixed = {} as Record<keyof Shade, string>;
-  for (const key of Object.keys(DAY) as (keyof Shade)[]) {
-    const [r, g, b] = mix(DAY[key], NIGHT[key], k);
-    mixed[key] = `rgb(${r} ${g} ${b})`;
-    root.setProperty(`--${CSS_NAMES[key]}`, mixed[key]);
-    root.setProperty(`--${CSS_NAMES[key]}-rgb`, `${r} ${g} ${b}`);
+  const shade = shadeAt(k);
+  for (const key of Object.keys(shade) as (keyof Shade)[]) {
+    root.setProperty(`--${CSS_NAMES[key]}`, shade[key]);
+    root.setProperty(`--${CSS_NAMES[key]}-rgb`, channels(shade[key]));
   }
   root.setProperty("--k", String(k));
+  // The terminal sits on the work area, like the logs.
   terminal.setTheme({
-    background: mixed.bg,
-    foreground: mixed.text,
-    cursor: mixed.accent,
-    cursorAccent: mixed.bg,
-    selectionBackground: `rgba(${mix(DAY.accent, NIGHT.accent, k).join(", ")}, 0.3)`,
+    background: shade.bg3,
+    foreground: shade.text,
+    cursor: shade.accent,
+    cursorAccent: shade.bg3,
+    selectionBackground: `rgb(${channels(shade.accent)} / 0.3)`,
   });
   $("#status-light").textContent = `${k < 0.3 ? "☼ day" : k < 0.95 ? "◐ dusk" : "☾ night"}${lighting === "cycle" ? " · cycling" : ""}`;
 }
@@ -115,7 +108,7 @@ function queueLight(k: number): void {
 
 type Lighting = "day" | "dusk" | "night" | "cycle";
 const LIGHTINGS: Lighting[] = ["day", "dusk", "night", "cycle"];
-const LIGHT_LEVEL: Record<Exclude<Lighting, "cycle">, number> = { day: 0, dusk: 0.85, night: 1 };
+const LIGHT_LEVEL: Record<Exclude<Lighting, "cycle">, number> = { day: 0, dusk: DUSK, night: 1 };
 const LIGHTING_LABELS: Record<Lighting, string> = { day: "Day", dusk: "Dusk", night: "Night", cycle: "Day and night, over and over (10 minutes)" };
 let lighting: Lighting = LIGHTINGS.includes(store.get("lighting") as Lighting) ? (store.get("lighting") as Lighting) : "dusk";
 function setLighting(mode: Lighting): void {
@@ -148,7 +141,7 @@ function setGraphics(mode: Graphics): void {
 
 const frame = $<HTMLIFrameElement>("#village");
 const villageAddress = () =>
-  `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? 0.85 : LIGHT_LEVEL[lighting]}${graphics === "auto" ? "" : `&quality=${graphics}`}`;
+  `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? DUSK : LIGHT_LEVEL[lighting]}${graphics === "auto" ? "" : `&quality=${graphics}`}`;
 frame.src = villageAddress();
 frame.addEventListener("load", () => {
   setLighting(lighting);
@@ -326,11 +319,21 @@ interface Step {
   done?: boolean;
   action?: HTMLElement;
 }
-/** Numbered steps, in order: the clearest way to say "do this, then this". */
+/**
+ * Numbered steps, in order: the clearest way to say "do this, then this". When the steps say
+ * which are done, the first one that isn't is "next": its number and its button are the only
+ * gold in the list, so there's one obvious thing to do.
+ */
 function steps(list: Step[]): HTMLElement {
   const ol = el("ol", "steps");
+  const tracked = list.some((s) => s.done !== undefined);
+  const next = tracked ? list.findIndex((s) => !s.done) : -1;
   list.forEach((s, i) => {
-    const li = el("li", s.done ? "step done" : "step");
+    const li = el("li", s.done ? "step done" : i === next ? "step next" : "step");
+    if (tracked && s.action instanceof HTMLButtonElement) {
+      s.action.classList.toggle("primary", i === next);
+      s.action.classList.toggle("ghost", i !== next);
+    }
     li.append(el("span", "step-n", s.done ? "✓" : String(i + 1)), el("b", "step-title", s.title), el("span", "step-text", s.text));
     if (s.action) {
       s.action.classList.add("step-action");
@@ -575,6 +578,7 @@ function renderGuide(): void {
   guideKey = key;
   const installed = info ? info.infisical !== "not installed" : null;
   const linked = info?.infisical === "linked";
+  markWelcomeNext([installed === true, linked, agents > 0]);
   const body = $("#guide-body");
   body.replaceChildren(
     section(
@@ -627,6 +631,18 @@ $("#guide-close").addEventListener("click", () => setPart("guide", false));
 
 // --- Welcome ------------------------------------------------------------------------------------------
 
+/** Make the first Welcome card that isn't done the gold one (as in the Guide's steps). */
+function markWelcomeNext(done: boolean[]): void {
+  const next = done.findIndex((d) => !d);
+  for (const card of document.querySelectorAll<HTMLElement>("#welcome .card")) {
+    const isNext = Number(card.dataset.step) - 1 === next;
+    card.classList.toggle("next", isNext);
+    const action = card.querySelector(".button");
+    action?.classList.toggle("primary", isNext);
+    action?.classList.toggle("ghost", !isNext);
+  }
+}
+
 function renderWelcome(): void {
   const page = $("#welcome");
   const head = el("header", "welcome-head");
@@ -636,13 +652,14 @@ function renderWelcome(): void {
   const cards = el("div", "cards");
   const card = (n: string, title: string, text: string, action: HTMLElement) => {
     const c = el("div", "card");
+    c.dataset.step = n;
     c.append(el("span", "step-n", n), el("h3", undefined, title), el("p", undefined, text), action);
     return c;
   };
   cards.append(
-    card("1", "Check your tools", "Doctor looks for git, Node and the Infisical CLI, and prints the fix for anything missing.", button("Run doctor", () => runCli("doctor"), "primary")),
-    card("2", "Link your secrets", "Log in to Infisical, then link this folder to a project. Only key names ever show here.", button("Open Secrets", () => showView("secrets"), "primary")),
-    card("3", "Watch a workday", "Pretend robots act one out: research, code, tests, a commit. Nothing real runs.", button("Play the demo", () => void bridge.playDemo(), "primary")),
+    card("1", "Check your tools", "Doctor looks for git, Node and the Infisical CLI, and prints the fix for anything missing.", button("Run doctor", () => runCli("doctor"), "ghost")),
+    card("2", "Link your secrets", "Log in to Infisical, then link this folder to a project. Only key names ever show here.", button("Open Secrets", () => showView("secrets"), "ghost")),
+    card("3", "Watch a workday", "Pretend robots act one out: research, code, tests, a commit. Nothing real runs.", button("Play the demo", () => void bridge.playDemo(), "ghost")),
   );
   start.append(cards);
   const then = el("section", "welcome-section");
@@ -1298,7 +1315,7 @@ void bridge.info().then((i) => {
 });
 
 for (const part of Object.keys(layout) as Part[]) setPart(part, layout[part]);
-applyLight(lighting === "cycle" ? 0.85 : LIGHT_LEVEL[lighting]);
+applyLight(lighting === "cycle" ? DUSK : LIGHT_LEVEL[lighting]);
 renderWelcome();
 if (store.get("welcome") !== "0") openTab("welcome");
 buildSidebar();

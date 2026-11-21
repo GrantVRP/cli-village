@@ -5,6 +5,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { DUSK, shadeAt, TERMINAL } from "../../src/views/colors.js";
 
 export interface AppTerminal {
   /** Type a command into the shell and press Enter. */
@@ -21,36 +22,24 @@ export interface AppTerminal {
   setTheme(theme: Partial<ITheme>): void;
 }
 
-/** The colours that don't change with the light: readable, not neon. */
-const PALETTE: ITheme = {
-  black: "#20222f",
-  red: "#e06b66",
-  green: "#8fc98a",
-  yellow: "#e0b878",
-  blue: "#8d9bff",
-  magenta: "#c08fe0",
-  cyan: "#7fc4d6",
-  white: "#d8d8dc",
-  brightBlack: "#636790",
-  brightRed: "#ff8a85",
-  brightGreen: "#a9e0a2",
-  brightYellow: "#f0cf96",
-  brightBlue: "#aab5ff",
-  brightMagenta: "#d9b0f0",
-  brightCyan: "#a0dcea",
-  brightWhite: "#ffffff",
-};
+/** The 16 terminal colours: muted, readable on the work area (src/views/colors.ts). */
+const PALETTE: ITheme = { ...TERMINAL };
 
 /** `isAppKey` says whether the app wants a key (like Ctrl+Shift+P) before the shell sees it. */
+const dusk = shadeAt(DUSK);
+
 export function createTerminal(host: HTMLElement, isAppKey: (e: KeyboardEvent) => boolean): AppTerminal {
   const bridge = window.cliVillage;
   const term = new Terminal({
-    fontFamily: '"JetBrains Mono", "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, monospace',
+    fontFamily: 'ui-monospace, "Cascadia Mono", "Cascadia Code", SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
     fontSize: 13,
     lineHeight: 1.25,
     cursorBlink: true,
     scrollback: 5000,
-    theme: { ...PALETTE, background: "#121426", foreground: "#dadcec", cursor: "#e0b878", cursorAccent: "#121426", selectionBackground: "rgba(224, 184, 120, 0.3)" },
+    // (The background and cursor follow the village's light: see applyLight in main.ts.)
+    theme: { ...PALETTE, background: dusk.bg3, foreground: dusk.text, cursor: dusk.accent, cursorAccent: dusk.bg3, selectionBackground: "rgb(225 186 117 / 0.3)" },
+    // A safety net for programs that print in colours of their own choosing.
+    minimumContrastRatio: 4.5,
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
