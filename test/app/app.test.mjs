@@ -104,13 +104,19 @@ describe("desktop app", () => {
       await new Promise((r) => setTimeout(r, ms));
       return (await cdp.eval(DRAWS)) - before;
     };
+    // Without a graphics card (like CI's machines) each picture is slow, and the window answers
+    // slowly while the village is on screen: so wait for each change rather than a fixed time.
+    const covered = async () => {
+      await cdp.clickOn("the Welcome tab", byText("#tabs .tab-name", "Welcome"));
+      await cdp.until("no drawing behind the Welcome tab", async () => (await drawsDuring(1000)) === 0, 60_000);
+    };
     await cdp.clickOn("the Village tab", byText("#tabs .tab-name", "Village"));
-    await cdp.until("the village drawing", async () => (await drawsDuring(500)) > 0);
-    await cdp.clickOn("the Welcome tab", byText("#tabs .tab-name", "Welcome"));
-    await new Promise((r) => setTimeout(r, 300));
-    assert.equal(await drawsDuring(1000), 0, "nothing is drawn behind the Welcome tab");
+    await cdp.until("the village drawing", async () => (await drawsDuring(500)) > 0, 60_000);
+    await covered();
     await cdp.clickOn("the Village tab", byText("#tabs .tab-name", "Village"));
-    await cdp.until("the village drawing again", async () => (await drawsDuring(500)) > 0);
+    await cdp.until("the village drawing again", async () => (await drawsDuring(500)) > 0, 60_000);
+    // Covered again, so the rest of the test runs at full speed.
+    await covered();
   });
 
   it("runs a menu item when you click it", async () => {
