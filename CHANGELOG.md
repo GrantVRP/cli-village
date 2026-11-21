@@ -17,6 +17,7 @@ Nothing is on npm yet: install it from a copy of this repository (see the README
   - A film-style finish: colour grade, a soft vignette and fine grain.
   - Graphics quality fits the computer (Low, Medium, High) and steps down if the picture gets slow. Choose it yourself in View › Graphics Quality, or with `&quality=` in the page's address.
   - Tests: the renderer's logic is tested without a graphics card, and the app test draws every quality tier.
+  - The look is kept: dusk stays cool and dim, and the cyan rails and the green column glow as brightly as before. Before-and-after pictures are in docs/RENDERING.md.
 
 ### Checked and tested (November 2026)
 

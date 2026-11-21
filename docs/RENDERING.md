@@ -2,11 +2,31 @@
 
 The 3D village is a low-poly miniature: flat-shaded shapes with a colour per face, no image textures, built in code with [three.js](https://threejs.org/) (WebGL 2). The look comes from lighting and post-processing, so all of it lives in `web/src/render/`. Each file starts with a comment saying what it does and why.
 
+## Before and after
+
+The same village, the same colours and the same camera, before and after the new renderer (High quality, still mode).
+
+| | Before | After |
+|---|---|---|
+| Day | ![Day, before](images/rendering/before-day.jpg) | ![Day, after](images/rendering/after-day.jpg) |
+| Dusk (the app's default) | ![Dusk, before](images/rendering/before-dusk.jpg) | ![Dusk, after](images/rendering/after-dusk.jpg) |
+| Night | ![Night, before](images/rendering/before-night.jpg) | ![Night, after](images/rendering/after-night.jpg) |
+
+## Keeping the look
+
+The new light must not change what the village looks like, only how well it's lit. So:
+- Every colour from the art direction in `PROMPT.md` is unchanged. Only light, glow strength and post-processing were tuned.
+- Dusk stays cool and dim, so the glowing rails and column carry the picture, as they did before.
+- Things that glow (the rails, the column's fill) have dark surfaces. Their colour comes from their glow, so a bright sun can't wash it out to white.
+- The rails' glow is divided by the exposure, so after tone mapping they're exactly as bright as before, at every time of day.
+- The colour grade leaves strongly coloured pixels alone, so the cyan and green keep their hue.
+
 ## One frame
 
 ```
 ScenePass        sky dome, then the scene → multisampled HDR target (half float) + depth texture
-GTAOPass         ambient occlusion in creases and corners             (High only)
+GTAOPass         ambient occlusion in creases and corners, from the   (High only)
+                 scene's own depth (so it sways with the trees)
 AtmospherePass   distance haze + height fog, from the depth buffer
 DepthOfFieldPass circle of confusion → half-res bokeh gather → composite
 UnrealBloomPass  glow around anything brighter than white             (Medium, High)
@@ -18,7 +38,7 @@ Everything up to the tone mapping is linear HDR, so the fog, the blur and the gl
 
 ## Light over the day (`timeline.ts`)
 
-A day is one number, `k`: 0 is midday, 0.85 is sunset (the desktop app's default), 1 is night. Four keyframes hold every value that depends on it:
+A day is one number, `k`: 0 is midday, 0.85 is dusk (the desktop app's default: a low warm sun under a cool sky), 1 is night. Four keyframes hold every value that depends on it:
 - the sun's height, direction, colour and strength;
 - the sky's zenith, horizon and glow;
 - the fill light;
@@ -49,7 +69,7 @@ The sky is a dome drawn at the far plane (`gl_Position = p.xyww`), coloured enti
 - clouds from five octaves of value noise, lit on the sun's side;
 - stars, one per cell of a grid on the sky, that twinkle and hide behind clouds.
 
-On Medium and High, the same dome is rendered into a prefiltered environment map (PMREM). The scene's materials then pick up the sky's real colour as soft ambient light. It's rebuilt only when the light has changed noticeably, and never while the village is hidden.
+On Medium and High, the same dome is rendered into a prefiltered environment map (PMREM). The scene's materials then pick up the sky's real colour as soft ambient light. It's rebuilt only when the light has changed noticeably, at most every 0.4 seconds while the light fades, and never while the village is hidden.
 
 ## Haze and mist (`passes.ts`, AtmospherePass)
 
@@ -117,7 +137,9 @@ The starting tier comes from the graphics card's name (`WEBGL_debug_renderer_inf
 - graphics built into the processor start on Medium;
 - graphics cards and Apple silicon start on High.
 
-After that, `FrameBudget` watches frame times. It ignores the first frames, while shaders compile, and judges the median of 90 frames, so one hitch doesn't count. It only ever steps down, so the picture never flickers between two tiers.
+After that, `FrameBudget` watches frame times. It ignores the first frames, while shaders compile, and judges the median of 90 frames, so one hitch doesn't count. It also ignores the frame after a sky-reflection rebuild and time spent hidden. It only ever steps down, so the picture never flickers between two tiers. Each step down frees the previous tier's render targets.
+
+The page shows its average frame time in `data-frame-ms` on the `<html>` element. `?budget=1` makes every frame count as slow, to watch the step-down happen: High → Medium → Low in a few seconds.
 
 The PCSS sample count is fixed when the page starts, because changing it later would mean recompiling every material. `?quality=` in the address (or View › Graphics Quality in the desktop app) fixes a tier and turns off the automatic step-down.
 
@@ -127,4 +149,5 @@ The PCSS sample count is fixed when the page starts, because changing it later w
   - the quality detection and frame budget;
   - the light over the day (endpoints, continuity, clamping, linear-light blends);
   - the soft-shadow patch against the installed three.js.
-- `test/app/app.test.mjs` opens the desktop app. It switches through every graphics quality and checks that each one draws and logs no shader errors. On CI's machines, which have no graphics card, that's the only way the Medium and High shaders get compiled. `CLI_VILLAGE_TEST_NO_GPU=1` reproduces that locally.
+- `test/app/app.test.mjs` opens the desktop app. It switches through every graphics quality, checks that each one draws and logs no shader errors, and reports each tier's frame time. On CI's machines, which have no graphics card, that's the only way the Medium and High shaders get compiled. `CLI_VILLAGE_TEST_NO_GPU=1` reproduces that locally (there, Low takes about 37 ms a frame and Medium about 58 ms).
+- Seen only on Windows (Direct3D 11 through ANGLE) so far, with an RTX 3080 and with Microsoft's software renderer. macOS and Linux run the same shaders through CI's app test, but nobody has looked at the picture there yet.

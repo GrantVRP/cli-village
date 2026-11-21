@@ -43,9 +43,10 @@ const lightPool = new THREE.ShaderMaterial({
 /** Leaves and bushes: the usual matte look, swaying in the wind. */
 const foliage = foliageMaterial(materials.matte);
 
-/** The faint cyan glow along the rails. Brighter at night. */
+/** The faint cyan glow along the rails. Brighter at night. Its look comes from the glow:
+ *  a dark surface, so a bright sun doesn't wash the cyan out to white. */
 export const railGlow = new THREE.MeshStandardMaterial({
-  color: P.glow,
+  color: new THREE.Color(P.glow).multiplyScalar(0.5),
   emissive: P.glow,
   emissiveIntensity: 0.9,
   flatShading: true,
