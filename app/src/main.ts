@@ -158,6 +158,10 @@ const visited: Tab[] = ["village"];
 let visitedAt = 0;
 const docLog = el("ol", "log");
 followBottom(docLog);
+const docStatus = el("p", "doc-status");
+const docNote = el("p", "doc-note");
+/** Which building's log the page shows now. */
+let docFor: Building | null = null;
 
 function showTab(id: Tab, remember = true): void {
   if (id !== "village" && !openTabs.includes(id)) openTabs = [...openTabs, id];
@@ -244,22 +248,27 @@ function renderDoc(): void {
   if (activeTab === "village" || activeTab === "welcome" || !state) return;
   const id = activeTab;
   const b = state.buildings[id];
-  const head = el("div", "doc-head");
-  const title = el("h2", "doc-title", BUILDING_NAMES[id]);
-  const focus = button("Show in the village", () => focusBuilding(id));
-  head.append(title, focus);
-  const status = el("p", b.problem ? "doc-status bad" : "doc-status");
-  status.textContent = b.problem
+  // Every robot's step calls this: build the page only when another building's log opens, then
+  // only change it. A button built again between pressing and releasing the mouse loses the click.
+  if (docFor !== id) {
+    docFor = id;
+    const head = el("div", "doc-head");
+    head.append(el("h2", "doc-title", BUILDING_NAMES[id]), button("Show in the village", () => focusBuilding(id)));
+    doc.replaceChildren(head, el("p", "doc-help", BUILDING_HELP[id]), docStatus, docNote, docLog);
+  }
+  docStatus.className = b.problem ? "doc-status bad" : "doc-status";
+  docStatus.textContent = b.problem
     ? `✖ Needs attention: ${b.problem.message}`
     : b.working.length
       ? `▶ Working here: ${b.working.join(", ")}`
       : "○ Quiet right now";
-  const parts: HTMLElement[] = [head, el("p", "doc-help", BUILDING_HELP[id]), status];
   const harbor = id === "harbor" ? describeHarbor(state) : null;
-  if (harbor) parts.push(el("p", `doc-note ${harbor.level}`, `${HARBOR_ICONS[harbor.icon]} ${harbor.text}`));
+  docNote.style.display = harbor ? "" : "none";
+  if (harbor) {
+    docNote.className = `doc-note ${harbor.level}`;
+    docNote.textContent = `${HARBOR_ICONS[harbor.icon]} ${harbor.text}`;
+  }
   renderLog(docLog, found(b.log), details, findText ? "Nothing in this log matches." : "Nothing has happened here yet.", 120);
-  parts.push(docLog);
-  doc.replaceChildren(...parts);
 }
 
 // --- Small pieces --------------------------------------------------------------------------------
