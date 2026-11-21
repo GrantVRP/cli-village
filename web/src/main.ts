@@ -182,12 +182,15 @@ addEventListener("keydown", (e) => {
 
 // --- Inside the desktop app: messages to and from the window around us ------------------
 
+/** False while the desktop app shows another tab over the village. */
+let shown = true;
+
 if (embedded) {
   overlay.toggleSide(false);
   // In the app, the terminal is right below the village, not somewhere else.
   village.waitingHint = { ...WAITING, subtitle: "Waiting for work. In the terminal below, try:" };
   overlay.onSelect = (id) => parent.postMessage({ type: "cli-village", action: "selected", building: id }, location.origin);
-  addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number; seconds?: number }>) => {
+  addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number; seconds?: number; visible?: boolean }>) => {
     // Only the page around us, from our own server, may steer the village.
     if (e.origin !== location.origin || e.source !== parent) return;
     const m = e.data;
@@ -199,6 +202,8 @@ if (embedded) {
       // A whole day and night, over and over, starting from the current light.
       cycleLength = Math.max(10, Number(m.seconds) || 600);
       cycleStart = performance.now() / 1000 - (Math.acos(1 - 2 * night) / (2 * Math.PI)) * cycleLength;
+    } else if (m.action === "visible") {
+      shown = m.visible !== false;
     } else if (m.action === "home") {
       village.unpin();
       rig.reset();
@@ -266,8 +271,8 @@ renderer.setAnimationLoop((time) => {
   rig.update(dt);
   // With no room (in the desktop app, while the bottom panel is maximized) the page has no
   // height: keep the village up to date, but don't draw it. Drawing into nothing only fills
-  // the log with WebGL errors.
-  if (root.clientWidth === 0 || root.clientHeight === 0) return;
+  // the log with WebGL errors. Behind another tab in the app, nobody sees it: don't draw either.
+  if (!shown || root.clientWidth === 0 || root.clientHeight === 0) return;
   composer.render(dt);
   overlay.labelRenderer.render(scene, rig.camera);
 });
