@@ -8,7 +8,7 @@ CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https:
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days. All the build steps below are done, and the desktop app has been tested by hand on Windows, but CLI Village hasn't been tried with a real Infisical account yet. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`), a 3D village in your browser (`cli-village open`) or the desktop app (`cli-village app`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`, `app --demo`).
+**Status:** early days. All the build steps below are done. The desktop app has been tested by hand on Windows, and the secret scan, flags and error messages have been checked against the real Infisical CLI (0.45.13). What hasn't been tried yet: real secrets from a logged-in Infisical account. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`), a 3D village in your browser (`cli-village open`) or the desktop app (`cli-village app`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`, `app --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
@@ -240,7 +240,7 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 - The village server only listens on your own computer (`127.0.0.1`). Each session gets a new random key, which must be in the page address and on the live connection. Requests from other websites are refused, and the page makes no outside calls.
 - Secrets are never written to disk unless you ask for it (`secrets export --out .env`), and never to a file git could commit.
 - `cli-village run` lets Infisical hand the secrets straight to your program. They never pass through CLI Village, and your program's output isn't recorded.
-- The secret scan runs on your computer. CLI Village asks Infisical for a redacted report in a private temporary folder, reads only where each possible secret is (file, line, rule, fingerprint), and deletes the report straight away.
+- The secret scan runs on your computer. Infisical's report file holds each secret it finds (its `--redact` flag only covers what it prints), so CLI Village has it written to a private temporary folder, reads only where each possible secret is (file, line, rule, fingerprint), and deletes the report straight away.
 - `commit` and `push` use your own git login. CLI Village never sees or stores it, and never shows your remote's address (it can contain a token).
 
 ## Running the tests
@@ -269,6 +269,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 14. The app grows a VS Code title bar and menus, a Welcome page and a Guide, and colours that follow the village's light
 - [x] 15. Fixes from testing the desktop app: menu items work with the mouse, the app's keys work after you click the village, the terminal keeps working after Terminal › New, Clear really clears on Windows, and smaller fixes
 - [x] 16. Leftovers from testing: a commit refused for lack of a scanner shows at the harbor, the demo's pretend robots are marked "demo" in a live village, the village stops drawing behind other tabs, and `cli-village app` hides a harmless Windows error when it closes
+- [x] 17. Checked against the real Infisical CLI: every flag exists, the scan answers as expected, and the test stand-in now writes reports and errors the way the real one does (its report file holds the secret, so the tests prove it's never shown)
 
 ## License
 

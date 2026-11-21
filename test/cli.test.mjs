@@ -146,6 +146,8 @@ describe("the GITHUB HARBOR (status, commit, push)", () => {
     const human = run(["commit", "-m", "Add payments"], { cwd: work });
     assert.match(human.stdout, /Stopped at the gate: 1 possible secret in pay\.js line 1 \(value hidden\)\. Nothing was saved\./);
     assert.match(human.stdout, /\.infisicalignore/);
+    // Infisical's report file holds the secret itself: none of it may reach the output.
+    for (const out of [res.all, human.all]) assert.equal(out.includes(STRIPE_LIVE), false, "the secret is never shown");
   });
 
   it("never saves a .env file", () => {
@@ -211,6 +213,7 @@ describe("the GITHUB HARBOR (status, commit, push)", () => {
     assert.match(res.stdout, /Stopped at the gate: 1 possible secret in keys\.py line 1 \(value hidden\)\. Nothing was sent\./);
     assert.match(res.stdout, /git commit --amend --no-edit/);
     assert.equal(git(remote, "rev-parse", "main"), before, "nothing reached the remote");
+    assert.equal(res.all.includes(AWS_KEY), false, "the secret is never shown");
   });
 
   it("sends only this branch, under its own name, whatever git's push settings say", () => {
