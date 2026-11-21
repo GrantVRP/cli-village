@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "../web/src/connection.ts", "../web/src/lists.ts", "../src/events/state.ts", "../src/events/store.ts", "../src/events/types.ts", "../src/events/explain.ts"]
+  "include": ["src", "../web/src/connection.ts", "../web/src/lists.ts", "../src/events/state.ts", "../src/events/store.ts", "../src/events/types.ts", "../src/views/colors.ts", "../src/events/explain.ts"]
 }
