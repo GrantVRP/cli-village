@@ -227,12 +227,15 @@ describe("desktop app", () => {
       ["low", "Low (fastest)"],
     ]) {
       await choose(label);
-      await cdp.until(`the village at ${tier} quality`, async () => (await quality()) === tier, 60_000);
+      // Each change reloads the village and compiles its shaders, which takes a while without a
+      // graphics card (over a minute on a slow CI machine).
+      await cdp.until(`the village at ${tier} quality`, async () => (await quality()) === tier, 120_000);
       await cdp.until(`the village drawing at ${tier} quality`, async () => (await drawsDuring(1000)) > 0, 120_000);
       // How long a picture takes at this tier (the page averages it), for comparing tiers on CI.
+      // Only a report: a machine too slow to give one in time doesn't fail the test.
       await new Promise((r) => setTimeout(r, 2000));
-      const ms = await cdp.until(`a frame time at ${tier} quality`, () => cdp.eval(`${village}?.dataset.frameMs ?? null`), 30_000);
-      t.diagnostic(`${tier}: ${ms} ms a picture`);
+      const ms = await cdp.until(`a frame time at ${tier} quality`, () => cdp.eval(`${village}?.dataset.frameMs ?? null`), 30_000).catch(() => null);
+      t.diagnostic(`${tier}: ${ms === null ? "no frame time within 30 s" : `${ms} ms a picture`}`);
     }
     await choose("Automatic (fits this computer)");
     await cdp.until("the village picking its own quality again", async () => (await cdp.eval(`!document.querySelector("#village").contentWindow.location.search.includes("quality=")`)) && (await quality()) !== null, 60_000);
@@ -258,7 +261,8 @@ describe("desktop app", () => {
       });
     }
     const { code, stderr } = await exited;
-    assert.equal(code, 0, stderr);
+    assert.equal(code, 0, `exit code ${code}
+${stderr}`);
     await assert.rejects(fetch(`http://127.0.0.1:${port}/json/version`), "the debugging port is closed");
     assert.ok(readdirSync(folders[0]).length > 0, "the app kept its settings in the test's own folder");
   });
