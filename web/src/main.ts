@@ -1,21 +1,15 @@
-// The 3D village page. Sets up the scene, the light, the tilt-shift
-// "tabletop" blur, and the keys, then follows the events from the terminal.
+// The 3D village page. Sets up the scene and the keys, then follows the events from the
+// terminal. How it's drawn (light, sky, shadows, depth of field) lives in render/.
 
 import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
-import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
-import { HorizontalTiltShiftShader } from "three/addons/shaders/HorizontalTiltShiftShader.js";
-import { VerticalTiltShiftShader } from "three/addons/shaders/VerticalTiltShiftShader.js";
 import { glowMaterials } from "./buildings.js";
 import { CameraRig } from "./camera.js";
 import { connect } from "./connection.js";
 import { Effects } from "./effects.js";
 import { shadows } from "./lowpoly.js";
 import { Overlay } from "./overlay.js";
-import { P } from "./palette.js";
+import { Pipeline } from "./render/pipeline.js";
+import { tierFromQuery } from "./render/quality.js";
 import { Village } from "./village.js";
 import { createWorld, railGlow } from "./world.js";
 import { WAITING } from "../../src/events/explain.js";
@@ -38,45 +32,24 @@ const root = document.getElementById("app")!;
 
 // --- Renderer ---------------------------------------------------------------------
 
+// (No antialiasing on the canvas itself: the scene is multisampled in its own render target.)
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
 renderer.domElement.className = "scene";
 root.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const DAY_SKY = new THREE.Color(P.background);
-const NIGHT_SKY = new THREE.Color(0x272a45);
-scene.background = DAY_SKY.clone();
-scene.fog = new THREE.Fog(DAY_SKY.clone(), 75, 150);
-
 const rig = new CameraRig(renderer.domElement, still);
 const overlay = new Overlay(root);
 const effects = new Effects(rig.camera);
 effects.still = still;
 
-// --- Light: a warm low sun from the front-right, plus a soft sky fill -------------------
-
-const sun = new THREE.DirectionalLight(0xffe2b8, 2.7);
-sun.position.set(30, 34, 22);
-sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
-sun.shadow.camera.left = -36;
-sun.shadow.camera.right = 36;
-sun.shadow.camera.top = 36;
-sun.shadow.camera.bottom = -36;
-sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 120;
-sun.shadow.bias = -0.0004;
-sun.shadow.normalBias = 0.03;
-sun.shadow.radius = 3;
-const hemi = new THREE.HemisphereLight(0xfff4de, 0x6f7f4a, 1.25);
-const DAY_SUN = new THREE.Color(0xffe2b8);
-const NIGHT_SUN = new THREE.Color(0x8d9bff);
-scene.add(sun, sun.target, hemi);
+// The light, the sky and the post-processing. ?quality=low|medium|high picks the tier;
+// ?debug=fog|dof|ao shows one effect on its own; ?tonemap=aces|agx|neutral.
+const pipeline = new Pipeline(renderer, scene, rig.camera, {
+  tier: tierFromQuery(params.get("quality")),
+  debug: params.get("debug"),
+  toneMapping: params.get("tonemap"),
+});
 
 // --- The village -------------------------------------------------------------------
 
@@ -96,33 +69,13 @@ function setStill(value: boolean): void {
 }
 scene.add(world.group, village.group, effects.group);
 
-// --- Post-processing: gentle glow, then blur at the top and bottom (tabletop look) -------
-
-const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
-const composer = new EffectComposer(renderer, target);
-composer.addPass(new RenderPass(scene, rig.camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.32, 0.45, 0.9);
-composer.addPass(bloom);
-const tiltH = new ShaderPass(HorizontalTiltShiftShader);
-const tiltV = new ShaderPass(VerticalTiltShiftShader);
-tiltH.uniforms.r!.value = 0.5;
-tiltV.uniforms.r!.value = 0.5;
-composer.addPass(tiltH);
-composer.addPass(tiltV);
-composer.addPass(new OutputPass());
-
 function resize(): void {
   const width = root.clientWidth;
   const height = root.clientHeight;
-  renderer.setSize(width, height);
-  composer.setPixelRatio(renderer.getPixelRatio());
-  composer.setSize(width, height);
-  bloom.resolution.set(width, height);
+  pipeline.resize(width, height);
   overlay.labelRenderer.setSize(width, height);
   overlay.measurePanel();
   rig.resize(width, height);
-  tiltH.uniforms.h!.value = 3.2 / width;
-  tiltV.uniforms.v!.value = 3.2 / height;
 }
 addEventListener("resize", resize);
 resize();
@@ -139,14 +92,12 @@ let cycleStart = 0;
 /** The light level the window around us last heard about. */
 let reportedNight = -1;
 function applyNight(k: number): void {
-  (scene.background as THREE.Color).copy(DAY_SKY).lerp(NIGHT_SKY, k);
-  (scene.fog as THREE.Fog).color.copy(scene.background as THREE.Color);
-  sun.color.copy(DAY_SUN).lerp(NIGHT_SUN, k);
-  sun.intensity = 2.7 - k * 2.2;
-  hemi.intensity = 1.25 - k * 0.9;
-  glowMaterials.window.emissiveIntensity = 0.04 + k * 1.7;
-  glowMaterials.lantern.emissiveIntensity = 0.55 + k * 2;
-  railGlow.emissiveIntensity = 0.9 + k * 1.4;
+  const light = pipeline.setLight(k);
+  world.setSky(light);
+  // The lamps come on as the light goes. (lamps: 0 at midday, 1 at night.)
+  glowMaterials.window.emissiveIntensity = 0.04 + light.lamps * 1.9;
+  glowMaterials.lantern.emissiveIntensity = 0.4 + light.lamps * 2.2;
+  railGlow.emissiveIntensity = 0.3 + light.lamps * 0.8;
   effects.night = k;
   document.body.classList.toggle("night", k > 0.5);
   // The desktop app's colours follow the village's light.
@@ -249,7 +200,7 @@ village.sync(source.getState());
 // --- The loop ---------------------------------------------------------------------------
 
 const timer = new THREE.Timer();
-let exposure = renderer.toneMappingExposure;
+let exposure = 1;
 renderer.setAnimationLoop((time) => {
   timer.update(time);
   const dt = Math.min(timer.getDelta(), 0.1);
@@ -259,9 +210,8 @@ renderer.setAnimationLoop((time) => {
   night += (nightTarget - night) * (still ? 1 : Math.min(1, dt * 1.6));
   applyNight(night);
   // When the run has stopped, the village dims a little.
-  const wanted = source.getState().stopped ? 0.62 : 1.05;
+  const wanted = source.getState().stopped ? 0.6 : 1;
   exposure += (wanted - exposure) * (still ? 1 : Math.min(1, dt * 1.5));
-  renderer.toneMappingExposure = exposure;
 
   world.update(dt, t);
   village.update(dt, t);
@@ -273,7 +223,8 @@ renderer.setAnimationLoop((time) => {
   // height: keep the village up to date, but don't draw it. Drawing into nothing only fills
   // the log with WebGL errors. Behind another tab in the app, nobody sees it: don't draw either.
   if (!shown || root.clientWidth === 0 || root.clientHeight === 0) return;
-  composer.render(dt);
+  // Focus where the camera looks: the village, or the building it's visiting.
+  pipeline.render(dt, t, rig.camera.position.distanceTo(rig.controls.target), exposure);
   overlay.labelRenderer.render(scene, rig.camera);
 });
 
