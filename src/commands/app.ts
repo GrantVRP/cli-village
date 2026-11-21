@@ -1,6 +1,10 @@
 // `cli-village app`: open the desktop app, a window with the 3D village, a real
 // terminal and the tools, like a small VS Code. It runs on Electron (the same
-// base VS Code uses), which is installed with the project's dev dependencies.
+// base VS Code uses).
+//
+// This command starts it from a copy of the repository, where Electron is a dev
+// dependency. The npm package is only the command line: there, it says where to
+// download the desktop app instead.
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -18,6 +22,9 @@ export interface AppCommandOptions {
 }
 
 const require = createRequire(import.meta.url);
+
+/** Where the desktop app's installers are published. */
+export const RELEASES = "https://github.com/GrantVRP/cli-village/releases";
 
 /**
  * Harmless noise from Electron on Windows, kept out of your terminal. Everything else passes through.
@@ -65,7 +72,13 @@ export async function runAppCommand(options: AppCommandOptions, ui: Ui): Promise
 
   const main = fileURLToPath(new URL("../app/main.js", import.meta.url));
   const page = fileURLToPath(new URL("../app/renderer/index.html", import.meta.url));
-  if (!existsSync(main) || !existsSync(page)) return fail("The desktop app isn't built yet.", "Run `npm run build` in the cli-village folder.");
+  if (!existsSync(main) || !existsSync(page)) {
+    if (process.env.CLI_VILLAGE_APP === "1") return fail("You're in the desktop app already.", "File › Open Folder opens another project's village.");
+    // A copy of the repository has the app's source; the npm package doesn't.
+    const source = existsSync(fileURLToPath(new URL("../../src/app/main.ts", import.meta.url)));
+    if (source) return fail("The desktop app isn't built yet.", "Run `npm run build` in the cli-village folder.");
+    return fail("The desktop app is a separate download: the npm package is only the command line.", `Get it for Windows, macOS or Linux at ${RELEASES}`);
+  }
 
   const electron = findElectron();
   if (!electron) return fail("The desktop app needs Electron, which isn't installed.", "Run `npm install` in the cli-village folder (it's a dev dependency).");

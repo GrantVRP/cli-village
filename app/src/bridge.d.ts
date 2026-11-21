@@ -4,6 +4,8 @@ export interface AppInfo {
   mode: string;
   version: string;
   cwd: string;
+  /** False in your home folder (where the installed app starts from a shortcut): open a project. */
+  project: boolean;
   /** win32, darwin or linux: the window draws its own title bar except on macOS. */
   platform: string;
   maximized: boolean;
@@ -31,7 +33,7 @@ export interface Bridge {
   onWindowState(listener: (state: { maximized: boolean; fullScreen: boolean }) => void): () => void;
   edit(action: EditAction): void;
   openFolder(): Promise<string | null>;
-  openLink(name: "repo" | "issues" | "infisical"): void;
+  openLink(name: "repo" | "issues" | "infisical" | "releases"): void;
 }
 
 export type WindowAction = "minimize" | "maximize" | "close" | "fullscreen" | "zoom-in" | "zoom-out" | "zoom-reset" | "reload" | "devtools";

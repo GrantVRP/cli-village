@@ -4,6 +4,10 @@
   "description": "Watch your agents work in a tiny low-poly village. A friendly wrapper around the Infisical CLI.",
   "license": "MIT",
   "author": "GrantVRP",
+  "homepage": "https://github.com/GrantVRP/cli-village#readme",
+  "bugs": {
+    "url": "https://github.com/GrantVRP/cli-village/issues"
+  },
   "type": "module",
   "bin": {
     "cli-village": "dist/cli.js"
@@ -11,6 +15,7 @@
   "files": [
     "dist",
     "!dist/**/*.map",
+    "!dist/app",
     "README.md",
     "LICENSE",
     "SECURITY.md",
@@ -29,10 +34,13 @@
     "demo": "node dist/cli.js --demo",
     "build:web": "vite build --config web/vite.config.ts",
     "build:app": "vite build --config app/vite.config.ts",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:dir": "npm run build && electron-builder --dir --publish never",
     "village": "node dist/cli.js open --demo",
     "pretest": "npm run build",
     "test": "node --test --test-reporter=spec --test-timeout=120000 --test-force-exit \"test/*.test.mjs\"",
-    "test:app": "npm run build && node --test --test-reporter=spec --test-timeout=480000 --test-force-exit \"test/app/*.test.mjs\""
+    "test:app": "npm run build && node --test --test-reporter=spec --test-timeout=480000 --test-force-exit \"test/app/*.test.mjs\"",
+    "prepack": "npm run build"
   },
   "repository": {
     "type": "git",
@@ -47,11 +55,8 @@
     "village"
   ],
   "dependencies": {
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/xterm": "^6.0.0",
     "commander": "^15.0.0",
     "ink": "^8.0.0",
-    "node-pty": "^1.1.0",
     "react": "^19.3.1",
     "ws": "^8.22.0"
   },
@@ -60,7 +65,11 @@
     "@types/react": "^19.3.0",
     "@types/three": "^0.186.0",
     "@types/ws": "^8.18.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "electron": "^45.2.2",
+    "electron-builder": "^26.18.0",
+    "node-pty": "^1.1.0",
     "three": "^0.186.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"

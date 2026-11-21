@@ -1,0 +1,25 @@
+# Dependabot proposes updates as pull requests, which CI then checks. Nothing merges by itself.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Wait a week after a version is published: most malicious releases are caught by then.
+    cooldown:
+      default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+
+  # The workflows' actions, pinned to commits: Dependabot updates the commit and its comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

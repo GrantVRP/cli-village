@@ -7,6 +7,7 @@ import { CameraRig } from "./camera.js";
 import { connect } from "./connection.js";
 import { Effects } from "./effects.js";
 import { shadows } from "./lowpoly.js";
+import { showNoWebGL } from "./no-webgl.js";
 import { Overlay } from "./overlay.js";
 import { Pipeline } from "./render/pipeline.js";
 import { tierFromQuery } from "./render/quality.js";
@@ -34,7 +35,14 @@ const root = document.getElementById("app")!;
 // --- Renderer ---------------------------------------------------------------------
 
 // (No antialiasing on the canvas itself: the scene is multisampled in its own render target.)
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+// Without WebGL 2 this throws: the page says so (no-webgl.ts), and the rest of this file doesn't run.
+let renderer: THREE.WebGLRenderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+} catch (err) {
+  showNoWebGL();
+  throw err;
+}
 renderer.domElement.className = "scene";
 root.appendChild(renderer.domElement);
 
