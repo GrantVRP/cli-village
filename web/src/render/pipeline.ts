@@ -166,7 +166,7 @@ export class Pipeline {
       // after construction: passing it to the constructor leaves GTAOPass without the target
       // it sizes and frees later.)
       ao.setGBuffer(scenePass.depthTexture);
-      ao.updateGtaoMaterial({ radius: 1.8, distanceExponent: 2, thickness: 1.5, scale: 1.25, samples: 16 });
+      ao.updateGtaoMaterial({ radius: 4, distanceExponent: 1.5, thickness: 3, scale: 1.6, samples: 16 });
       ao.updatePdMaterial({ radius: 6, samples: 16, rings: 2 });
       ao.blendIntensity = 1;
       if (this.debug === "ao") ao.output = GTAOPass.OUTPUT.Denoise;
