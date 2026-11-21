@@ -176,11 +176,14 @@ app.whenReady().then(async () => {
     env.CLI_VILLAGE_APP = "1";
     term = pty.spawn(shell, shellArgs, { name: "xterm-256color", cols: cols || 80, rows: rows || 24, cwd, env });
     const current = term;
+    // Only the current shell speaks to the window. A shell we replaced (Terminal › New) still
+    // ends a moment later; its "I closed" must not make the window think the new one closed.
     current.onData((data) => {
-      if (!win.isDestroyed()) win.webContents.send("pty:data", data);
+      if (term === current && !win.isDestroyed()) win.webContents.send("pty:data", data);
     });
     current.onExit(({ exitCode }) => {
-      if (term === current) term = null;
+      if (term !== current) return;
+      term = null;
       if (!win.isDestroyed()) win.webContents.send("pty:exit", exitCode);
     });
     return path.basename(shell);
@@ -190,8 +193,13 @@ app.whenReady().then(async () => {
   });
   ipcMain.on("pty:kill", (e) => {
     if (!fromWindow(e)) return;
+    // The shell's exit (above) tells the window, so it offers to start a new one.
     term?.kill();
-    term = null;
+  });
+  // Terminal › Clear: on Windows the shell's side keeps its own copy of the screen and would
+  // print it again; this empties that copy too (a no-op elsewhere).
+  ipcMain.on("pty:clear", (e) => {
+    if (fromWindow(e)) term?.clear();
   });
   ipcMain.on("pty:resize", (e, cols: unknown, rows: unknown) => {
     if (fromWindow(e) && typeof cols === "number" && typeof rows === "number") term?.resize(Math.max(2, Math.floor(cols)), Math.max(1, Math.floor(rows)));

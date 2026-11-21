@@ -401,6 +401,11 @@ function buildSidebar(): void {
         const h = el("div", "harbor-line");
         h.id = "sb-harbor";
         return h;
+      })(), (() => {
+        // Shown instead of the harbor line while nothing is at the harbor.
+        const quiet = el("p", "sb-hint", "Nothing at the harbor yet. Commit, and your snapshot rides down here as a crate.");
+        quiet.id = "sb-harbor-quiet";
+        return quiet;
       })()),
       log("harbor"),
     );
@@ -408,7 +413,7 @@ function buildSidebar(): void {
     parts.push(
       section(
         "Tests",
-        "Runs your project's tests (npm test, cargo test, go test or pytest). Sprocket carries the result to the Lab.",
+        "Runs your project's tests (npm test, cargo test, go test or pytest). Your robot carries the result to the Lab.",
         row(button("Run the tests", () => runCli("test"), "primary")),
         row(input("sb-test", "or your own command, like npm run test:unit"), button("Run this", () => valueOf("sb-test") && runCli(`test -- ${valueOf("sb-test")}`))),
       ),
@@ -484,6 +489,8 @@ function updateSidebar(s: VillageState): void {
   }
   const harbor = document.querySelector<HTMLElement>("#sb-harbor");
   if (harbor) harborLine(harbor, s);
+  const quiet = document.querySelector<HTMLElement>("#sb-harbor-quiet");
+  if (quiet && harbor) quiet.hidden = !harbor.hidden;
   document.querySelectorAll<HTMLElement>(".building-row").forEach((b) => {
     const id = b.dataset.building as Building;
     const st = s.buildings[id];
@@ -763,7 +770,9 @@ function updateFind(): void {
   if (!state) return;
   refresh(state);
   const source = activeTab !== "village" && activeTab !== "welcome" ? state.buildings[activeTab].log : state.log;
-  $("#find-count").textContent = findText ? `${plural(found(source).length, "line")}` : "";
+  // Count what the log shows: the summary leaves out the small steps (like progress).
+  const shown = found(source).filter((e) => details || e.emphasis !== "tertiary");
+  $("#find-count").textContent = findText ? `${plural(shown.length, "line")}` : "";
 }
 findInput.addEventListener("input", updateFind);
 findInput.addEventListener("keydown", (e) => e.key === "Escape" && closeFind());
@@ -1069,7 +1078,7 @@ $("#about").addEventListener("mousedown", (e) => e.target === e.currentTarget &&
 // --- Keys ----------------------------------------------------------------------------------------------
 
 let altAlone = false;
-addEventListener("keydown", (e) => {
+function onKeyDown(e: KeyboardEvent): void {
   if (e.key === "Alt") {
     altAlone = true;
     return;
@@ -1113,11 +1122,22 @@ addEventListener("keydown", (e) => {
   else if (ctrl && key === "0") bridge.window("zoom-reset");
   else if (ctrl && e.key === "PageDown") nextTab(1);
   else if (ctrl && e.key === "PageUp") nextTab(-1);
-});
+}
 // Alt on its own opens the menus, like VS Code; Alt again, or Esc, closes them.
-addEventListener("keyup", (e) => {
+function onKeyUp(e: KeyboardEvent): void {
   if (e.key === "Alt" && altAlone) menubar.isOpen ? menubar.close() : menubar.open(0);
   altAlone = false;
+}
+addEventListener("keydown", onKeyDown);
+addEventListener("keyup", onKeyUp);
+// After a click in the village, the keys go to the village's own page. The app's keys
+// (Ctrl+Shift+P, Ctrl+J, F8, Alt…) should still work there, as they do in VS Code.
+// The village's own keys (?, n, h, Esc…) never use Ctrl or Alt, so nothing runs twice.
+frame.addEventListener("load", () => {
+  const inside = frame.contentWindow;
+  if (!inside) return;
+  inside.addEventListener("keydown", (e) => e.key !== "Escape" && onKeyDown(e));
+  inside.addEventListener("keyup", onKeyUp);
 });
 
 // --- Status bar ---------------------------------------------------------------------------------------
