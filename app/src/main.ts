@@ -814,10 +814,18 @@ function shellRun(command: string): void {
   terminal.run(command);
 }
 const runCli = (args: string) => shellRun(`${cliName()} ${args}`);
+/** Text as one argument the terminal's shell takes literally ($, ` and ! stay as they are). */
+function shellQuote(text: string): string {
+  const windows = (info?.platform ?? (navigator.userAgent.includes("Windows") ? "win32" : "")) === "win32";
+  // PowerShell: '…' is literal, and ' is written ''. But Windows PowerShell 5.1 splits an argument
+  // that has a double quote in it when it starts a program, so a double quote becomes '.
+  if (windows) return `'${text.replace(/"/g, "'").replace(/'/g, "''")}'`;
+  // bash and zsh: '…' is literal, and ' is written '\''.
+  return `'${text.replace(/'/g, "'\\''")}'`;
+}
 function commit(message: string, thenPush: boolean): void {
-  // Quotes would break the shell's quoting; the message doesn't need them.
-  const clean = message.replace(/["`$]/g, "'");
-  runCli(`commit${clean ? ` -m "${clean}"` : ""}${thenPush ? " --push" : ""}`);
+  const note = message.replace(/[\r\n]+/g, " ").trim();
+  runCli(`commit${note ? ` -m ${shellQuote(note)}` : ""}${thenPush ? " --push" : ""}`);
 }
 function newTerminal(): void {
   showPanel("terminal");

@@ -247,9 +247,12 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 
 ```bash
 npm test         # builds, then runs every test in test/
+npm run test:app # opens the desktop app for about 10 seconds and uses it: clicks, menus, the terminal
 ```
 
 The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you don't need an Infisical account. They cover the privacy guard, every command, the secret-scan gate, the local socket and the 3D server's security, and they check every output for leaked secret values. GitHub Actions runs them on Linux, macOS and Windows with Node.js 22 and 24 for every pull request.
+
+`npm run test:app` opens the real desktop app (as a demo, with its own temporary settings) and uses it the way a person would: real mouse clicks on the tabs and menus, typing in the terminal (also after Terminal › New Terminal), the demo's robots, and a clean close. It also checks that the 3D village draws while you can see it and rests while another tab covers it, and that the window logs no errors. It covers the village inside the app; the browser page (`cli-village open`) shares that code but isn't opened by a test. GitHub Actions runs it on Windows. The first run downloads Electron (about 100 MB).
 
 ## Roadmap
 
@@ -270,6 +273,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 15. Fixes from testing the desktop app: menu items work with the mouse, the app's keys work after you click the village, the terminal keeps working after Terminal › New, Clear really clears on Windows, and smaller fixes
 - [x] 16. Leftovers from testing: a commit refused for lack of a scanner shows at the harbor, the demo's pretend robots are marked "demo" in a live village, the village stops drawing behind other tabs, and `cli-village app` hides a harmless Windows error when it closes
 - [x] 17. Checked against the real Infisical CLI: every flag exists, the scan answers as expected, and the test stand-in now writes reports and errors the way the real one does (its report file holds the secret, so the tests prove it's never shown)
+- [x] 18. Desktop app tests (`npm run test:app`): the real app, driven with real clicks and typing, on Windows in CI; the Git commands keep `$` and backticks in your message
 
 ## License
 
