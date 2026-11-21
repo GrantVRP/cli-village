@@ -23,7 +23,10 @@ const TERMINAL = `[...document.querySelectorAll("#terminal .xterm-rows > div")].
 /** The village page's quality, graphics card and frame time (see web/src/render/pipeline.ts). */
 const VILLAGE = `({ ...document.querySelector("#village")?.contentDocument?.documentElement.dataset })`;
 
-/** For a failure message: the busiest processes, and the app's own with their command lines. */
+/**
+ * For a failure message: the busiest processes, by program name only. Never their command
+ * lines: those can hold values that mustn't reach a log, and CI logs can be public.
+ */
 function whatIsRunning() {
   const run = (command, args) => {
     const result = spawnSync(command, args, { encoding: "utf8", timeout: 30_000 });
@@ -33,11 +36,12 @@ function whatIsRunning() {
     return run("powershell.exe", [
       "-NoProfile",
       "-Command",
-      "Get-Process | Sort-Object CPU -Descending | Select-Object -First 12 Name,Id,CPU,@{n='MB';e={[int]($_.WS/1MB)}} | Format-Table -AutoSize | Out-String -Width 160;" +
-        "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'CLI Village|cmd|powershell|conhost|OpenConsole' } | Select-Object ProcessId,ParentProcessId,Name,@{n='Command';e={$_.CommandLine.Substring(0,[Math]::Min(140,$_.CommandLine.Length))}} | Format-Table -AutoSize | Out-String -Width 260",
+      "Get-Process | Sort-Object CPU -Descending | Select-Object -First 15 Name,Id,CPU,@{n='MB';e={[int]($_.WS/1MB)}} | Format-Table -AutoSize | Out-String -Width 120",
     ]);
   }
-  return run("ps", ["-A", "-o", "pid,ppid,pcpu,rss,args"]).split("\n").slice(0, 40).join("\n");
+  // comm: the program's name, without its arguments.
+  const sort = process.platform === "darwin" ? ["-r"] : ["--sort=-pcpu"];
+  return run("ps", ["-A", "-o", "pid,ppid,pcpu,rss,comm", ...sort]).split("\n").slice(0, 16).join("\n");
 }
 
 async function freePort() {
