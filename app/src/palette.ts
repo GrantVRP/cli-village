@@ -115,7 +115,14 @@ export class Palette {
       const hay = `${c.title} ${c.detail ?? ""} ${c.keywords ?? ""}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     };
-    this.shown = this.commands().filter(matches);
+    // Words found in the name beat words found only in the keywords: "lighting night"
+    // puts "lighting · Night" first, though every lighting command lists "night".
+    const inTitle = (c: Command) => words.filter((w) => c.title.toLowerCase().includes(w)).length;
+    this.shown = this.commands()
+      .filter(matches)
+      .map((c, i) => ({ c, i, score: inTitle(c) }))
+      .sort((a, b) => b.score - a.score || a.i - b.i)
+      .map(({ c }) => c);
     if (this.selected >= this.shown.length) this.selected = 0;
     this.list.replaceChildren(
       ...(this.shown.length

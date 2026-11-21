@@ -6,6 +6,10 @@
 // catching a leaked key before it reaches GitHub.
 
 import type { Building, EventInput } from "../events/types.js";
+import { showScan, unpushedScan } from "../infisical/scan.js";
+
+/** The same command the real `push` shows for its checkpoint, so the demo teaches the real thing. */
+const PUSH_SCAN = showScan(unpushedScan("origin"));
 
 export interface DemoStep {
   /** How long to wait before this event, in milliseconds (at speed 1). */
@@ -137,7 +141,7 @@ function normalDay(round: number): DemoStep[] {
     task: task("scan"),
     kind: "scan",
     title: "Checkpoint: scanning the crate for leaked secrets",
-    command: 'infisical scan --log-opts="origin/main..HEAD" --redact',
+    command: PUSH_SCAN,
   });
   at(1800, { type: "done", agent: "Rivet", task: task("scan"), message: "No leaks found. The gate opens." });
   at(800, {
@@ -207,7 +211,7 @@ function leakCaughtDay(round: number): DemoStep[] {
     task: task("scan"),
     kind: "scan",
     title: "Checkpoint: scanning the crate for leaked secrets",
-    command: 'infisical scan --log-opts="origin/main..HEAD" --redact',
+    command: PUSH_SCAN,
   });
   at(1800, {
     type: "fail",
@@ -243,7 +247,7 @@ function leakCaughtDay(round: number): DemoStep[] {
     task: task("rescan"),
     kind: "scan",
     title: "Checkpoint: scanning the new crate",
-    command: 'infisical scan --log-opts="origin/main..HEAD" --redact',
+    command: PUSH_SCAN,
   });
   at(1800, { type: "done", agent: "Rivet", task: task("rescan"), message: "No leaks found. The gate opens." });
   at(800, {

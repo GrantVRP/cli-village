@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("cliVillage", {
     create: (cols, rows) => ipcRenderer.invoke("pty:create", cols, rows),
     write: (data) => ipcRenderer.send("pty:write", data),
     resize: (cols, rows) => ipcRenderer.send("pty:resize", cols, rows),
+    clear: () => ipcRenderer.send("pty:clear"),
     kill: () => ipcRenderer.send("pty:kill"),
     onData: (listener) => {
       const handler = (_event, data) => listener(data);

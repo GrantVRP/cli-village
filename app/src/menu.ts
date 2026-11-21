@@ -45,8 +45,11 @@ export class MenuBar {
       root.append(title);
       this.titles.push(title);
     });
+    // A press outside the menus closes them. The open lists live in <body>, not in the bar,
+    // so a press on an item must not count as outside (it would close before the click).
     addEventListener("mousedown", (e) => {
-      if (this.openAt >= 0 && !root.contains(e.target as Node)) this.close();
+      const target = e.target as Element;
+      if (this.openAt >= 0 && !root.contains(target) && !target.closest?.(".menu-list")) this.close();
     });
     addEventListener("blur", () => this.close());
     addEventListener("keydown", (e) => this.onKey(e), true);
