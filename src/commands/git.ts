@@ -147,6 +147,20 @@ const NO_SCANNER: Problem = {
   hint: "cli-village doctor",
 };
 
+/**
+ * No scanner, so nothing goes through unchecked. The robot still walks to the gate and
+ * says why, so the village shows the refusal too, not only this terminal.
+ */
+function refuseUnchecked(out: Output, command?: string): number {
+  const bus = new EventBus();
+  const stop = out.watch(bus);
+  const worker = new Worker(bus);
+  worker.job("scan", "Checkpoint: scanning for secrets", command).fail(NO_SCANNER.error);
+  worker.home();
+  stop();
+  return out.problem(NO_SCANNER, true);
+}
+
 function warnSkipped(out: Output): void {
   out.warn(yellow(`${symbols.warn} --skip-scan: no secret scan this time. Nothing checks this for passwords or keys.`));
 }
@@ -241,7 +255,7 @@ export async function runCommit(options: CommitOptions, ui: Ui): Promise<number>
       hint: markFixed(git, status.conflicted),
     });
   }
-  if (!options.skipScan && typeof findInfisical() !== "string") return out.problem(NO_SCANNER);
+  if (!options.skipScan && typeof findInfisical() !== "string") return refuseUnchecked(out, showScan(STAGED_SCAN));
 
   // What goes in: the files you staged (git add), or else every change.
   const useStaged = status.staged.length > 0;
@@ -373,7 +387,7 @@ export async function runPush(options: PushOptions, ui: Ui): Promise<number> {
   const out = new Output(ui);
   const git = await Git.open();
   if (isProblem(git)) return out.problem(git);
-  if (!options.skipScan && typeof findInfisical() !== "string") return out.problem(NO_SCANNER);
+  if (!options.skipScan && typeof findInfisical() !== "string") return refuseUnchecked(out);
   const bus = new EventBus();
   const stop = out.watch(bus);
   const worker = new Worker(bus);
