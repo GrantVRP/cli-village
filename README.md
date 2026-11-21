@@ -234,6 +234,8 @@ Before any view sees an event, a privacy guard checks it. The guard keeps only k
 
 ## Privacy promises
 
+Found a way to break one of these? Please report it privately, as [SECURITY.md](SECURITY.md) explains, not in a public issue.
+
 - Secret **values** never appear in any view, event or log. Only key names and counts.
 - Logging in is handled by Infisical itself (`infisical login` or `INFISICAL_TOKEN`). CLI Village never stores tokens.
 - The village's local socket only works on your computer and only for your user account. Events from it go through the same privacy guard.
@@ -273,7 +275,8 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 15. Fixes from testing the desktop app: menu items work with the mouse, the app's keys work after you click the village, the terminal keeps working after Terminal › New, Clear really clears on Windows, and smaller fixes
 - [x] 16. Leftovers from testing: a commit refused for lack of a scanner shows at the harbor, the demo's pretend robots are marked "demo" in a live village, the village stops drawing behind other tabs, and `cli-village app` hides a harmless Windows error when it closes
 - [x] 17. Checked against the real Infisical CLI: every flag exists, the scan answers as expected, and the test stand-in now writes reports and errors the way the real one does (its report file holds the secret, so the tests prove it's never shown)
-- [x] 18. Desktop app tests (`npm run test:app`): the real app, driven with real clicks and typing, on Windows in CI; the Git commands keep `$` and backticks in your message; fixes it found: in a narrow window the search box covered the Help menu, and in a busy village a click on a tab could do nothing
+- [x] 18. Desktop app tests (`npm run test:app`): the real app, driven with real clicks and typing, on Windows in CI; the Git commands keep `$` and backticks in your message; fixes it found: in a narrow window the search box covered the Help menu, and in a busy village a click on a tab (or a building log's button) could do nothing
+- [x] 19. Cleanup: SECURITY.md (how to report a problem privately), CHANGELOG.md, and no debug `.map` files in the npm package
 
 ## License
 
