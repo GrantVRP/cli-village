@@ -2,9 +2,11 @@
 // for passwords and keys in your changes before they're saved or sent.
 // It runs on your computer and needs no Infisical login.
 //
-// We ask for a redacted JSON report in a private temporary folder, read only
-// the safe fields from it (rule, file, line, commit, fingerprint), and delete
-// it straight away. The secret itself is never read, shown or stored.
+// Infisical writes a JSON report. --redact keeps secrets out of what it prints,
+// but the report FILE still holds each secret (checked with Infisical 0.45.13).
+// So the report goes in a private temporary folder, we read only the safe fields
+// from it (rule, file, line, commit, fingerprint), and delete it straight away.
+// The secret itself is never read, shown or stored.
 
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

@@ -4,8 +4,10 @@
 //
 // FAKE_MODE picks a situation: user (default), machine, expired, none, old,
 // notlogged, noproject, network, leaky, garbage, scanerror, scanold.
-// FAKE_SCAN=unredacted puts the real secret into the scan report (to prove
-// CLI Village never reads those fields). FAKE_LOG=<file> records each call.
+// The scan report always holds the secret itself, like the real Infisical's
+// (its --redact only covers what it prints). FAKE_SCAN=unredacted also prints
+// it, like a scanner ignoring --redact: CLI Village must never show it either
+// way. FAKE_LOG=<file> records each call.
 // FAKE_SCAN_TOUCH=<file> edits that file during a scan (like an editor saving).
 
 const { execFileSync, spawnSync } = require("node:child_process");
@@ -75,8 +77,11 @@ if (argv[0] === "scan") {
         if (!hit) continue;
         const fingerprint = commit ? `${commit}:${file}:${id}:${line}` : `${file}:${id}:${line}`;
         if (ignore.includes(fingerprint)) continue;
-        const secret = process.env.FAKE_SCAN === "unredacted" || !argv.includes("--redact") ? hit[0] : "REDACTED";
-        findings.push({ Description: description, StartLine: line, EndLine: line, StartColumn: 1, EndColumn: 2, Match: secret, Secret: secret, File: file, Commit: commit, Entropy: 4.2, Author: "Fake", Email: "fake@example.com", RuleID: id, Fingerprint: fingerprint, Line: l, Tags: [] });
+        // Like the real Infisical (checked with 0.45.13): the report FILE holds the secret itself, even
+        // with --redact (that flag only covers what it prints). Same fields as the real report, too.
+        const secret = hit[0];
+        const git = commit ? { "git.sha": commit, "git.message": "Fake commit", "git.author_name": "Fake", "git.author_email": "fake@example.com" } : { "git.sha": "", "git.message": "" };
+        findings.push({ RuleID: id, Description: description, StartLine: line, EndLine: line, StartColumn: 1, EndColumn: 2, Match: `key = "${secret}"`, Secret: secret, Attributes: { confidence: "high", ...git, path: file, resource: "git.patch_content" }, Tags: [], Fingerprint: fingerprint, File: file, SymlinkFile: "", Commit: commit, Entropy: 4.2, Author: commit ? "Fake" : "", Email: commit ? "fake@example.com" : "", Date: commit ? "2026-01-01T00:00:00Z" : "", Message: commit ? "Fake commit" : "" });
       }
       line++;
     }
@@ -85,11 +90,13 @@ if (argv[0] === "scan") {
   const report = flag("report-path");
   if (report) fs.writeFileSync(report, process.env.FAKE_SCAN === "badreport" ? "not json" : JSON.stringify(findings, null, 1));
   console.error(findings.length ? `WRN leaks found: ${findings.length}` : "INF no leaks found");
-  if (process.env.FAKE_SCAN === "unredacted" && findings.length) console.log(`Finding: ${findings[0].Secret}`);
+  // A scanner that ignores --redact and prints the secret: CLI Village must still never show it.
+  if ((process.env.FAKE_SCAN === "unredacted" || !argv.includes("--redact")) && findings.length) console.log(`Finding: ${findings[0].Secret}`);
   process.exit(findings.length ? Number(flag("exit-code", "1")) : 0);
 }
 
-if (mode === "notlogged") fail("error: You must be logged in to run this command. To login, run [infisical login]");
+// What the real Infisical (0.45.13) says when nobody is logged in and it can't ask (no keyboard).
+if (mode === "notlogged") fail("INF No valid login session found, triggering login flow\nerror: ^D\nUnable to parse domain url\nFailed to automatically trigger login flow. Please run [infisical login] manually to login.");
 if (mode === "noproject") fail("Please either run infisical init to connect to a project or pass in project id with --projectId flag");
 if (mode === "network") fail('error: Get "https://app.infisical.com/api/v3/secrets": dial tcp: lookup app.infisical.com: no such host');
 if (mode === "leaky") fail(`error: unexpected response, value=${ENVIRONMENTS.dev[1][1]} password: hunter2hunter2`);
