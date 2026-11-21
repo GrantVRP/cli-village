@@ -98,7 +98,9 @@ describe("desktop app", () => {
     for (const folder of folders) rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   });
 
-  it("draws the village, and stops drawing while another tab covers it", async () => {
+  it("draws the village, and stops drawing while another tab covers it", async (t) => {
+    // CI's screens are small, so its windows are too: say which size this run had.
+    t.diagnostic(`window: ${await cdp.eval(`innerWidth + "×" + innerHeight + " (screen " + screen.availWidth + "×" + screen.availHeight + ")"`)}`);
     const drawsDuring = async (ms) => {
       const before = await cdp.eval(DRAWS);
       await new Promise((r) => setTimeout(r, ms));
@@ -108,7 +110,16 @@ describe("desktop app", () => {
     // slowly while the village is on screen: so wait for each change rather than a fixed time.
     const covered = async () => {
       await cdp.clickOn("the Welcome tab", byText("#tabs .tab-name", "Welcome"));
-      await cdp.until("no drawing behind the Welcome tab", async () => (await drawsDuring(1000)) === 0, 60_000);
+      await cdp.until("the Welcome tab in front of the village", async () => {
+        const front = await cdp.eval(`[document.querySelector("#tabs .tab.on .tab-name")?.textContent, document.querySelector("#village").classList.contains("hidden")]`);
+        if (front[0] === "Welcome" && front[1]) return true;
+        throw new Error(`the tab in front is ${front[0]}, and the village is ${front[1] ? "hidden" : "showing"}`);
+      });
+      await cdp.until("no drawing behind the Welcome tab", async () => {
+        const draws = await drawsDuring(1000);
+        if (draws === 0) return true;
+        throw new Error(`${draws} draw calls in the last second`);
+      }, 60_000);
     };
     await cdp.clickOn("the Village tab", byText("#tabs .tab-name", "Village"));
     await cdp.until("the village drawing", async () => (await drawsDuring(500)) > 0, 60_000);
@@ -117,6 +128,44 @@ describe("desktop app", () => {
     await cdp.until("the village drawing again", async () => (await drawsDuring(500)) > 0, 60_000);
     // Covered again, so the rest of the test runs at full speed.
     await covered();
+  });
+
+  it("can click every menu and title bar button, also in the smallest window", async () => {
+    // Before step 18, in a window about 1000 pixels wide the search box slid over the Help menu.
+    const buttons = `[...document.querySelectorAll(".titlebar button")].filter((b) => b.getClientRects().length)`;
+    const check = async (size) => {
+      const count = await cdp.eval(`${buttons}.length`);
+      assert.ok(count >= 10, `${size}: only ${count} title bar buttons`);
+      for (let i = 0; i < count; i++) {
+        const what = await cdp.eval(`(${buttons})[${i}].textContent.trim() || (${buttons})[${i}].title`);
+        try {
+          assert.ok(await cdp.spot(`() => (${buttons})[${i}]`), `${size}: ${what} has no size`);
+        } catch (err) {
+          assert.fail(`${size}: ${what}: ${err.message}`);
+        }
+      }
+    };
+    await check("this window");
+    // Lay the page out like the smallest window the app allows (see minWidth in src/app/main.ts).
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: 980, height: 620, deviceScaleFactor: 0, mobile: false });
+    try {
+      await check("980×620");
+    } finally {
+      await cdp.send("Emulation.clearDeviceMetricsOverride");
+    }
+  });
+
+  it("switches tabs on a slow click while the robots are busy", async () => {
+    // Before step 18 the tabs were built again at every robot's step, so a click with a step
+    // between pressing and releasing the mouse did nothing. In a busy village, that was often.
+    const front = (name) => `document.querySelector("#tabs .tab.on .tab-name")?.textContent === ${JSON.stringify(name)}`;
+    const workshop = await cdp.eval(`document.querySelector('.building-row[data-building="workshop"] b').textContent`);
+    await cdp.clickOn("the Workshop in the side bar", `() => document.querySelector('.building-row[data-building="workshop"]')`);
+    await cdp.until("the Workshop's tab in front", () => cdp.eval(front(workshop)));
+    for (const name of ["Welcome", workshop, "Welcome"]) {
+      await cdp.clickOn(`the ${name} tab`, byText("#tabs .tab-name", name), 1500);
+      await cdp.until(`the ${name} tab in front after a slow click`, () => cdp.eval(front(name)), 5_000);
+    }
   });
 
   it("runs a menu item when you click it", async () => {

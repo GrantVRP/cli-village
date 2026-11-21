@@ -85,24 +85,39 @@ export class Cdp {
     }
   }
 
-  /** A real left click at a point in the window (CSS pixels). */
-  async click(x, y) {
-    for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
-      await this.send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
-    }
+  /** A real left click at a point in the window (CSS pixels), holding the button `holdMs` long. */
+  async click(x, y, holdMs = 0) {
+    await this.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+    await this.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    if (holdMs) await sleep(holdMs);
+    await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
   }
 
-  /** Click the middle of the first visible element that `find` (JavaScript returning an element) finds. */
-  async clickOn(what, find) {
-    const at = await this.until(`${what} on screen`, () =>
-      this.eval(`(() => {
-        const e = (${find})();
-        if (!e) return null;
-        const r = e.getBoundingClientRect();
-        return r.width && r.height ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
-      })()`),
-    );
-    await this.click(at.x, at.y);
+  /**
+   * Where a click on the element that `find` (JavaScript returning an element) finds would land:
+   * its middle, if that point is really it (or something inside it). Throws, naming what's on
+   * top, when something else covers it; null while it isn't there or has no size.
+   */
+  async spot(find) {
+    const at = await this.eval(`(() => {
+      const e = (${find})();
+      if (!e) return null;
+      const r = e.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      const name = (n) => n ? n.tagName.toLowerCase() + (n.id ? "#" + n.id : "") + (typeof n.className === "string" && n.className ? "." + n.className.trim().split(/\\s+/).join(".") : "") : "nothing";
+      const top = hit && (e.contains(hit) || hit.contains(e)) ? null : name(hit?.closest("button, a, [role]") ?? hit);
+      return { x, y, top };
+    })()`);
+    if (at?.top) throw new Error(`it's covered by ${at.top}`);
+    return at;
+  }
+
+  /** Click the middle of the first visible element that `find` finds (see spot). */
+  async clickOn(what, find, holdMs = 0) {
+    const at = await this.until(`${what} on screen`, () => this.spot(find));
+    await this.click(at.x, at.y, holdMs);
   }
 
   /** Type text into whatever has the keyboard. */

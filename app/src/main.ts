@@ -191,27 +191,42 @@ function nextTab(step: 1 | -1): void {
   showTab(all[(at + step + all.length) % all.length]!);
 }
 
+/** Each open tab's element, kept while the tab is open. */
+const tabElements = new Map<Tab, HTMLElement>();
+let tabOrder = "";
+function makeTab(id: Tab): HTMLElement {
+  const tab = el("div", "tab");
+  tab.setAttribute("role", "tab");
+  const name = el("button", "tab-name", TAB_NAMES[id]);
+  name.addEventListener("click", () => showTab(id));
+  name.addEventListener("auxclick", (e) => e.button === 1 && id !== "village" && closeTab(id));
+  tab.append(name);
+  if (id !== "village") {
+    const close = el("button", "tab-close", "×");
+    close.title = "Close (Ctrl+W)";
+    close.addEventListener("click", () => closeTab(id));
+    tab.append(close);
+  }
+  tabElements.set(id, tab);
+  return tab;
+}
+
 function renderTabs(): void {
-  const tabs = $("#tabs");
-  const make = (id: Tab) => {
-    const tab = el("div", `tab${activeTab === id ? " on" : ""}`);
-    tab.setAttribute("role", "tab");
-    const name = el("button", "tab-name", TAB_NAMES[id]);
-    name.addEventListener("click", () => showTab(id));
-    name.addEventListener("auxclick", (e) => e.button === 1 && id !== "village" && closeTab(id));
-    tab.append(name);
-    if (id !== "village") {
-      const close = el("button", "tab-close", "×");
-      close.title = "Close (Ctrl+W)";
-      close.addEventListener("click", () => closeTab(id));
-      tab.append(close);
-    }
+  // Every robot's step calls this, so the tabs are only changed, not built again: a tab built
+  // again between pressing and releasing the mouse loses the click (in a busy village, often).
+  const ids: Tab[] = ["village", ...openTabs];
+  if (ids.join("|") !== tabOrder) {
+    tabOrder = ids.join("|");
+    for (const id of tabElements.keys()) if (!ids.includes(id)) tabElements.delete(id);
+    $("#tabs").replaceChildren(...ids.map((id) => tabElements.get(id) ?? makeTab(id)));
+  }
+  for (const id of ids) {
     const b = id !== "village" && id !== "welcome" && state ? state.buildings[id] : null;
-    if (b?.problem) tab.classList.add("problem");
-    else if (b?.working.length) tab.classList.add("active");
-    return tab;
-  };
-  tabs.replaceChildren(make("village"), ...openTabs.map(make));
+    const look = b?.problem ? " problem" : b?.working.length ? " active" : "";
+    const name = `tab${activeTab === id ? " on" : ""}${look}`;
+    const tab = tabElements.get(id)!;
+    if (tab.className !== name) tab.className = name;
+  }
   $<HTMLButtonElement>("#nav-back").disabled = visitedAt <= 0;
   $<HTMLButtonElement>("#nav-forward").disabled = visitedAt >= visited.length - 1;
 }
@@ -737,10 +752,15 @@ grip.addEventListener("pointerdown", (down) => {
   grip.addEventListener("pointerup", up);
 });
 
+let problemsKey = "";
 function updatePanel(s: VillageState): void {
   renderLog(output, found(s.log), details, findText ? "Nothing in the log matches." : "Nothing yet. Run a command in the terminal, or play the demo.", 200);
   const problems = openProblems(s);
   $("#problems-count").textContent = problems.length ? String(problems.length) : "";
+  // Like the tabs: only build the list again when it changed, so its Open buttons keep their clicks.
+  const key = JSON.stringify(problems.map((b) => [b.id, b.problem!.agent, b.problem!.message]));
+  if (key === problemsKey) return;
+  problemsKey = key;
   $("#problems").replaceChildren(
     ...(problems.length
       ? problems.map((b) => {

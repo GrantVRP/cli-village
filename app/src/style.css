@@ -181,7 +181,10 @@ kbd {
 
 .titlebar {
   display: grid;
-  grid-template-columns: 1fr minmax(260px, 38%) 1fr;
+  /* The menus and the window buttons always get their full width; the search box in the
+     middle stays centered when there's room and gets narrower when there isn't (it used to
+     slide over the Terminal and Help menus in a window about 1000 pixels wide). */
+  grid-template-columns: minmax(max-content, 1fr) minmax(160px, 38%) minmax(max-content, 1fr);
   align-items: center;
   height: var(--title);
   background: var(--bar);
