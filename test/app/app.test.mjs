@@ -52,6 +52,27 @@ describe("desktop app", () => {
   const errors = [];
   const folders = [];
 
+  const drawsDuring = async (ms) => {
+    const before = await cdp.eval(DRAWS);
+    await new Promise((r) => setTimeout(r, ms));
+    return (await cdp.eval(DRAWS)) - before;
+  };
+  // Without a graphics card (like CI's machines) each picture is slow, and the window answers
+  // slowly while the village is on screen: so wait for each change rather than a fixed time.
+  const covered = async () => {
+    await cdp.clickOn("the Welcome tab", byText("#tabs .tab-name", "Welcome"));
+    await cdp.until("the Welcome tab in front of the village", async () => {
+      const front = await cdp.eval(`[document.querySelector("#tabs .tab.on .tab-name")?.textContent, document.querySelector("#village").classList.contains("hidden")]`);
+      if (front[0] === "Welcome" && front[1]) return true;
+      throw new Error(`the tab in front is ${front[0]}, and the village is ${front[1] ? "hidden" : "showing"}`);
+    });
+    await cdp.until("no drawing behind the Welcome tab", async () => {
+      const draws = await drawsDuring(1000);
+      if (draws === 0) return true;
+      throw new Error(`${draws} draw calls in the last second`);
+    }, 60_000);
+  };
+
   before(async () => {
     // Electron downloads itself the first time it's asked for (about 100 MB).
     const electron = createRequire(import.meta.url)("electron");
@@ -101,26 +122,6 @@ describe("desktop app", () => {
   it("draws the village, and stops drawing while another tab covers it", async (t) => {
     // CI's screens are small, so its windows are too: say which size this run had.
     t.diagnostic(`window: ${await cdp.eval(`innerWidth + "×" + innerHeight + " (screen " + screen.availWidth + "×" + screen.availHeight + ")"`)}`);
-    const drawsDuring = async (ms) => {
-      const before = await cdp.eval(DRAWS);
-      await new Promise((r) => setTimeout(r, ms));
-      return (await cdp.eval(DRAWS)) - before;
-    };
-    // Without a graphics card (like CI's machines) each picture is slow, and the window answers
-    // slowly while the village is on screen: so wait for each change rather than a fixed time.
-    const covered = async () => {
-      await cdp.clickOn("the Welcome tab", byText("#tabs .tab-name", "Welcome"));
-      await cdp.until("the Welcome tab in front of the village", async () => {
-        const front = await cdp.eval(`[document.querySelector("#tabs .tab.on .tab-name")?.textContent, document.querySelector("#village").classList.contains("hidden")]`);
-        if (front[0] === "Welcome" && front[1]) return true;
-        throw new Error(`the tab in front is ${front[0]}, and the village is ${front[1] ? "hidden" : "showing"}`);
-      });
-      await cdp.until("no drawing behind the Welcome tab", async () => {
-        const draws = await drawsDuring(1000);
-        if (draws === 0) return true;
-        throw new Error(`${draws} draw calls in the last second`);
-      }, 60_000);
-    };
     await cdp.clickOn("the Village tab", byText("#tabs .tab-name", "Village"));
     await cdp.until("the village drawing", async () => (await drawsDuring(500)) > 0, 60_000);
     await covered();
@@ -155,7 +156,7 @@ describe("desktop app", () => {
     }
   });
 
-  it("switches tabs on a slow click while the robots are busy", async () => {
+  it("keeps a slow click on a tab or button while the robots are busy", async () => {
     // Before step 18 the tabs were built again at every robot's step, so a click with a step
     // between pressing and releasing the mouse did nothing. In a busy village, that was often.
     const front = (name) => `document.querySelector("#tabs .tab.on .tab-name")?.textContent === ${JSON.stringify(name)}`;
@@ -166,6 +167,11 @@ describe("desktop app", () => {
       await cdp.clickOn(`the ${name} tab`, byText("#tabs .tab-name", name), 1500);
       await cdp.until(`the ${name} tab in front after a slow click`, () => cdp.eval(front(name)), 5_000);
     }
+    // The same for the button on a building's log, which every robot's step built again too.
+    await cdp.clickOn("the Workshop's tab", byText("#tabs .tab-name", workshop));
+    await cdp.clickOn("Show in the village", byText("#doc button", "Show in the village"), 1500);
+    await cdp.until("the village in front after a slow click", () => cdp.eval(front("Village")), 5_000);
+    await covered();
   });
 
   it("runs a menu item when you click it", async () => {
