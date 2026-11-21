@@ -2,21 +2,73 @@
 
 > Watch your agents work in a tiny low-poly village.
 
-[![CI](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml/badge.svg)](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml)
+[![CI](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml/badge.svg)](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml) [![Release](https://github.com/GrantVRP/cli-village/actions/workflows/release.yml/badge.svg)](https://github.com/GrantVRP/cli-village/actions/workflows/release.yml)
 
 CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https://infisical.com/docs/cli/overview). It keeps everything Infisical does, including its privacy guarantees, and lets you *see* the work happening. Each agent is a little robot, each building is a type of task, and commits get carried down to the GitHub Harbor.
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days. All the build steps below are done. The desktop app has been tested by hand on Windows, and the secret scan, flags and error messages have been checked against the real Infisical CLI (0.45.13). What hasn't been tried yet: real secrets from a logged-in Infisical account. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`), a 3D village in your browser (`cli-village open`) or the desktop app (`cli-village app`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`, `app --demo`).
+**Status:** early days, nearly ready for a first release. All the build steps below are done. CI builds the installers for Windows, macOS and Linux and opens the Windows one, but no release has been published yet: until then, install from source (below). The desktop app has been tested by hand on Windows, and the secret scan, flags and error messages have been checked against the real Infisical CLI (0.45.13). What hasn't been tried yet: real secrets from a logged-in Infisical account. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`), a 3D village in your browser (`cli-village open`) or the desktop app (`cli-village app`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`, `app --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
 ## What you need
 
-- Node.js 22.12 or newer
 - git
 - The Infisical CLI, for secrets and the secret scan (`cli-village doctor` tells you how to install it)
+- For the command line from npm, or from source: Node.js 22.12 or newer. The desktop app brings its own.
+
+## Install
+
+Two parts, use either or both:
+
+- **The desktop app** (Windows, macOS, Linux): the village, a terminal and the tools in one window. Its terminal has `cli-village` built in, so it's all you need.
+- **The command line** (`npm install -g cli-village`): `cli-village` in any terminal, the terminal view, and the 3D village in your browser.
+
+> No release has been published yet. Until the first one, these links lead to an empty page: use [from source](#try-it-from-source).
+
+### The desktop app
+
+Download the file for your computer from the [latest release](https://github.com/GrantVRP/cli-village/releases/latest):
+
+| Computer | File | Then |
+|---|---|---|
+| Windows | `cli-village-<version>-win-x64.exe` | Run it. It installs for you only (no administrator rights) and adds a Start menu entry. |
+| Mac with Apple silicon (M1 and newer) | `cli-village-<version>-mac-arm64.dmg` | Open it and drag CLI Village to Applications. |
+| Mac with Intel | `cli-village-<version>-mac-x64.dmg` | The same. |
+| Linux (Ubuntu, Debian) | `cli-village-<version>-linux-amd64.deb` | `sudo apt install ./cli-village-<version>-linux-amd64.deb` |
+| Linux (other) | `cli-village-<version>-linux-x86_64.AppImage` | `chmod +x` it, then run it. |
+
+The installers aren't signed with a paid certificate yet, so the first start shows a warning:
+
+- **Windows** says "Windows protected your PC". Choose **More info**, then **Run anyway**.
+- **macOS** says it can't check the app for malicious software. Open **System Settings › Privacy & Security**, scroll down to CLI Village and choose **Open Anyway**, then confirm.
+- **Linux:** on Ubuntu 24.04 and newer (and other systems that restrict "unprivileged user namespaces"), the AppImage can close at once with a sandbox error such as "The SUID sandbox helper binary was found, but is not configured correctly". Install the `.deb` instead. Don't start it with `--no-sandbox` or switch the restriction off: both weaken your computer's protection ([why](https://docs.appimage.org/user-guide/troubleshooting/electron-sandboxing.html)).
+
+Don't turn off these protections for your whole computer: allowing this one app is enough. If you'd rather not, check the download first (below), or use the command line from npm.
+
+Started from the Start menu, Launchpad or a shortcut, the app opens in your home folder and its Guide asks you to **Open your project** (File › Open Folder). The app doesn't update itself: Help › New Versions opens the releases page.
+
+**Uninstall:** Windows: Settings › Apps › CLI Village › Uninstall. macOS: drag CLI Village from Applications to the Bin. Linux: `sudo apt remove cli-village`, or delete the AppImage. Your settings stay in your user folder (`%APPDATA%\CLI Village`, `~/Library/Application Support/CLI Village` or `~/.config/CLI Village`); delete that folder too for a clean slate.
+
+### The command line
+
+```bash
+npm install -g cli-village
+cli-village doctor   # check your setup
+cli-village --demo   # watch pretend robots work (Ctrl+C to stop)
+```
+
+The npm package is only the command line: no native code, no install scripts, and nothing from the desktop app (`cli-village app` says where to download it). Uninstall with `npm uninstall -g cli-village`.
+
+### Check a download (optional)
+
+Every release is built by GitHub Actions from a tagged commit of this repository, never on someone's computer, and comes with proof of that:
+
+- **Attestation:** with the [GitHub CLI](https://cli.github.com/), `gh attestation verify <file> -R GrantVRP/cli-village` confirms the file was built by this repository's release workflow and hasn't changed since.
+- **Checksums:** `SHA256SUMS` in the release lists each file's SHA-256. Compare with `sha256sum <file>` (Linux), `shasum -a 256 <file>` (macOS) or `Get-FileHash <file>` (PowerShell).
+- **npm:** the package is published from the same workflow with [provenance](https://docs.npmjs.com/generating-provenance-statements); `npm audit signatures` checks it.
+- **SBOM:** `sbom.cdx.json` lists every package inside.
 
 ## Try it (from source)
 
@@ -233,7 +285,7 @@ A window laid out like VS Code, so nothing has to open in your browser:
 - **A real terminal** at the bottom (PowerShell on Windows, your shell elsewhere). Run `cli-village test`, `commit`, `push` or anything else there, and the village reacts, because the app hosts the village's socket. The Output tab shows the whole log; Problems lists what needs attention. `Ctrl+F` finds a word in a log.
 - **A command palette** on `Ctrl+Shift+P` with every command: each line says what it does in plain English and shows the real command it types into the terminal. `Ctrl+J` hides the panel, `Ctrl+B` the side bar.
 
-The app runs on [Electron](https://www.electronjs.org/), the same base as VS Code, and [node-pty](https://github.com/microsoft/node-pty) for the terminal. Both are installed by `npm install` in this folder. The window can't reach Node.js or other websites: it only talks to the main process through a tiny bridge, and the village server still listens on this computer only, behind the session's token.
+The app runs on [Electron](https://www.electronjs.org/), the same base as VS Code, and [node-pty](https://github.com/microsoft/node-pty) for the terminal. Installed from a release, it brings both, and its terminal has its own `cli-village` (the app's Electron runs the command line, like VS Code's `code` command). From source, `npm install` in this folder installs them, and `npm run dist` builds the installers for your computer into `release/` (see [docs/RELEASING.md](docs/RELEASING.md)). The window can't reach Node.js or other websites: it only talks to the main process through a tiny bridge, and the village server still listens on this computer only, behind the session's token.
 
 ## How it works
 
@@ -261,6 +313,8 @@ npm test         # builds, then runs every test in test/
 npm run test:app # opens the desktop app for about 30 seconds and uses it: clicks, menus, the terminal
 ```
 
+`test/package.test.mjs` (part of `npm test`) checks what the npm package would contain: the command line and the browser village, no desktop app, no source maps, no native dependencies. `test/app/installed.test.mjs` opens the app as the installers build it (`npm run dist:dir`), started like a shortcut starts it, and checks the home-folder start, the terminal's own `cli-village` and a clean close. For every pull request that changes the app or its packaging, CI builds the installers on Windows, macOS and Linux and runs this test on each (Linux in a virtual screen); it also checks the macOS build's signature.
+
 The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you don't need an Infisical account. They cover the privacy guard, every command, the secret-scan gate, the local socket and the 3D server's security, and they check every output for leaked secret values. `test/render.test.mjs` checks the renderer's logic without a graphics card: the light over the day never jumps, the quality tiers, and that the soft-shadow shader still fits the three.js version in use. GitHub Actions runs them on Linux, macOS and Windows with Node.js 22 and 24 for every pull request.
 
 `npm run test:app` opens the real desktop app (as a demo, with its own temporary settings) and uses it the way a person would: real mouse clicks on the tabs and menus, typing in the terminal (also after Terminal › New Terminal), the demo's robots, and a clean close. It also checks that the 3D village draws while you can see it and rests while another tab covers it, that every menu and title bar button can be clicked, also in the smallest window, that a slow click on a tab works while robots are busy, that the village draws at every graphics quality (so every shader is compiled, even on machines without a graphics card), and that the window logs no errors. `CLI_VILLAGE_TEST_NO_GPU=1 npm run test:app` draws without the graphics card, like CI's machines. It covers the village inside the app; the browser page (`cli-village open`) shares that code but isn't opened by a test. GitHub Actions runs it on Windows. The first run downloads Electron (about 100 MB).
@@ -287,6 +341,9 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 18. Desktop app tests (`npm run test:app`): the real app, driven with real clicks and typing, on Windows in CI; the Git commands keep `$` and backticks in your message; fixes it found: in a narrow window the search box covered the Help menu, and in a busy village a click on a tab (or a building log's button) could do nothing
 - [x] 19. Cleanup: SECURITY.md (how to report a problem privately), CHANGELOG.md, and no debug `.map` files in the npm package
 - [x] 20. A new renderer for the village: soft contact-hardening shadows, a sky and light that follow the time of day, haze and ground mist, a real depth of field, a river shader, wind in the trees, lamplight on the ground, and graphics quality that fits the computer
+- [x] 21. Calmer colours with a clear order in the app, the browser page and the terminal view: one gold accent, a lifted work area, and every text colour passing WCAG AA
+- [x] 22. Ready for others to install: a command-line-only npm package, desktop installers for Windows, macOS and Linux, and a release workflow with checksums, an SBOM, attestations and npm provenance
+- [ ] The first release (see [docs/RELEASING.md](docs/RELEASING.md))
 
 ## License
 
