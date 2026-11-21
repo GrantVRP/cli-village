@@ -34,6 +34,7 @@ describe("the installed desktop app", { skip: program ? false : "set CLI_VILLAGE
   let cdp;
   let exited;
   let info;
+  let stderr = "";
   const settings = mkdtempSync(path.join(tmpdir(), "cli-village-installed-"));
 
   /** Type a command line into the terminal; resolves with the screen once `marker` shows. */
@@ -43,7 +44,11 @@ describe("the installed desktop app", { skip: program ? false : "set CLI_VILLAGE
     await cdp.clickOn("the terminal", `() => document.querySelector("#terminal .xterm-screen")`);
     await cdp.type(`${command}; echo ${marker}$((6*7))`);
     await cdp.press("Enter");
-    await cdp.until(`the terminal to finish: ${command}`, async () => (await cdp.eval(TERMINAL)).includes(`${marker}42`), 90_000);
+    try {
+      await cdp.until(`the terminal to finish: ${command}`, async () => (await cdp.eval(TERMINAL)).includes(`${marker}42`), 90_000);
+    } catch (err) {
+      throw new Error(`${err.message}\nThe terminal showed:\n${await cdp.eval(TERMINAL)}\nThe app said: ${stderr.trim().slice(-2000) || "(nothing)"}`);
+    }
     return cdp.eval(TERMINAL);
   }
 
@@ -58,7 +63,6 @@ describe("the installed desktop app", { skip: program ? false : "set CLI_VILLAGE
     if (process.platform === "linux" && process.env.CI) args.push("--no-sandbox");
     // From its own folder, as a shortcut or the Start menu starts it.
     app = spawn(program, args, { cwd: path.dirname(program), env, stdio: ["ignore", "ignore", "pipe"] });
-    let stderr = "";
     app.stderr.on("data", (d) => (stderr += d));
     exited = new Promise((resolve) => app.once("exit", (code) => resolve({ code, stderr })));
     try {
@@ -67,9 +71,19 @@ describe("the installed desktop app", { skip: program ? false : "set CLI_VILLAGE
       throw new Error(`${err.message}\nThe app said: ${stderr.trim() || "(nothing)"}`);
     }
     await cdp.send("Runtime.enable");
-    await cdp.until("the village and the terminal", () =>
-      cdp.eval(`Boolean(document.querySelector("#village").contentDocument?.querySelector("canvas") && document.querySelector("#terminal .xterm-rows"))`),
-    60_000);
+    const parts = `({
+      canvas: Boolean(document.querySelector("#village")?.contentDocument?.querySelector("canvas")),
+      terminal: Boolean(document.querySelector("#terminal .xterm-rows")),
+      village: (document.querySelector("#village")?.contentDocument?.body?.innerText ?? "").slice(0, 300),
+    })`;
+    try {
+      await cdp.until("the village and the terminal", async () => {
+        const p = await cdp.eval(parts);
+        return p.canvas && p.terminal;
+      }, 60_000);
+    } catch (err) {
+      throw new Error(`${err.message}\nThe window has: ${JSON.stringify(await cdp.eval(parts))}\nThe app said: ${stderr.trim().slice(-3000) || "(nothing)"}`);
+    }
     info = await cdp.eval("window.cliVillage.info()");
   });
 
