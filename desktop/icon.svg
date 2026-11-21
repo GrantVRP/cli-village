@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- CLI Village's app icon: a house on a low-poly hill at dusk, and the glowing rail.
+       Colours from web/src/palette.ts and the dusk light in web/src/render/timeline.ts.
+       desktop/icon.png is made from this file by scripts/make-icon.cjs. -->
+  <defs>
+    <clipPath id="tile"><rect x="64" y="64" width="896" height="896" rx="196"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c2740"/>
+      <stop offset="0.45" stop-color="#2c3f66"/>
+      <stop offset="0.68" stop-color="#5e6584"/>
+      <stop offset="0.8" stop-color="#e2a47e"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="760" cy="640" r="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffbe8a" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#ffbe8a" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-20%" y="-50%" width="140%" height="200%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="64" y="64" width="896" height="896" fill="url(#sky)"/>
+    <rect x="64" y="64" width="896" height="896" fill="url(#sun)"/>
+    <g fill="#ede6d6">
+      <circle cx="210" cy="200" r="5" opacity="0.8"/>
+      <circle cx="330" cy="150" r="3.5" opacity="0.6"/>
+      <circle cx="560" cy="190" r="4" opacity="0.7"/>
+      <circle cx="770" cy="160" r="5" opacity="0.8"/>
+      <circle cx="860" cy="270" r="3.5" opacity="0.55"/>
+      <circle cx="150" cy="330" r="3" opacity="0.5"/>
+    </g>
+    <!-- The hill: flat-shaded facets, lit from the low sun on the right. -->
+    <polygon points="40,700 200,646 300,760" fill="#6e9a45"/>
+    <polygon points="200,646 380,690 300,760" fill="#7daa4f"/>
+    <polygon points="380,690 540,730 300,760" fill="#6fa046"/>
+    <polygon points="540,730 720,664 640,820" fill="#7aa84d"/>
+    <polygon points="720,664 880,630 640,820" fill="#86b356"/>
+    <polygon points="880,630 1000,690 900,830" fill="#7daa4f"/>
+    <polygon points="880,630 900,830 640,820" fill="#6fa046"/>
+    <polygon points="540,730 640,820 300,760" fill="#5f8f3b"/>
+    <polygon points="40,700 300,760 40,900" fill="#527d33"/>
+    <polygon points="300,760 640,820 380,980" fill="#527d33"/>
+    <polygon points="40,900 300,760 380,980" fill="#5f8f3b"/>
+    <polygon points="640,820 900,830 1000,1000 380,980" fill="#5f8f3b"/>
+    <polygon points="900,830 1000,690 1000,1000" fill="#6e9a45"/>
+    <polygon points="40,900 380,980 40,1000" fill="#4a7230"/>
+    <!-- The house. -->
+    <polygon points="352,620 452,520 552,662 552,786 352,744" fill="#ede6d6"/>
+    <polygon points="552,662 720,604 720,724 552,786" fill="#b8a98a"/>
+    <polygon points="440,512 614,450 734,604 556,672" fill="#7a573b"/>
+    <polygon points="556,672 734,604 734,618 556,688" fill="#5a3e2b"/>
+    <polyline points="342,628 452,512 562,672" fill="none" stroke="#5a3e2b" stroke-width="18" stroke-linejoin="round"/>
+    <polygon points="636,500 672,487 672,560 636,574" fill="#5a3e2b"/>
+    <polygon points="672,487 690,494 690,553 672,560" fill="#4a3324"/>
+    <!-- Lit windows and the door. -->
+    <polygon points="430,598 474,607 474,644 430,635" fill="#ffd58a"/>
+    <polygon points="404,676 446,685 446,760 404,751" fill="#5a3e2b"/>
+    <polygon points="474,690 516,699 516,738 474,729" fill="#ffd58a"/>
+    <polygon points="584,674 622,661 622,704 584,717" fill="#ffd58a"/>
+    <polygon points="656,650 692,638 692,681 656,693" fill="#ffd58a"/>
+    <!-- The rail's glow, the village's signature. -->
+    <path d="M 40 930 C 300 820, 640 900, 1000 790" fill="none" stroke="#6fe3ff" stroke-width="60" opacity="0.45" filter="url(#glow)"/>
+    <path d="M 40 930 C 300 820, 640 900, 1000 790" fill="none" stroke="#6fe3ff" stroke-width="16"/>
+    <path d="M 40 930 C 300 820, 640 900, 1000 790" fill="none" stroke="#e6fbff" stroke-width="5"/>
+  </g>
+</svg>

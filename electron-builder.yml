@@ -1,0 +1,99 @@
+# The desktop app's installers, built by electron-builder: `npm run dist` builds the ones for
+# the computer you're on, into release/ (not committed). docs/RELEASING.md says how a release
+# is published. Every key is checked against node_modules/app-builder-lib/scheme.json.
+
+appId: io.github.grantvrp.clivillage
+productName: CLI Village
+copyright: Copyright © 2026 GrantVRP
+# Installers are named cli-village-<version>-<os>-<arch>.<ext>: no spaces in download links.
+artifactName: cli-village-${version}-${os}-${arch}.${ext}
+# electron-builder never uploads anything: the release workflow does, after checks.
+publish: null
+
+directories:
+  buildResources: desktop   # the icon (icon.png, made from icon.svg)
+  output: release
+
+# What goes into app.asar: the built JavaScript and the license. electron-builder adds the
+# command line's own dependencies (commander, ink, react, ws), never dev dependencies.
+files:
+  - dist/**/*
+  - "!dist/**/*.map"
+  - LICENSE
+# Only the packaged copy of package.json says where Electron starts: the npm package's
+# package.json has no "main" (it's a command, not a library).
+extraMetadata:
+  main: dist/app/main.js
+asar: true
+
+extraResources:
+  # node-pty, the terminal's native library, next to app.asar so its programs can run.
+  # Only what it needs at run time: its code and this platform's prebuilt binaries (Linux
+  # has none, so CI compiles it into build/Release).
+  - from: node_modules/node-pty
+    to: node-pty
+    filter:
+      - package.json
+      - LICENSE
+      - lib/**/*.js
+      - "!lib/**/*.test.js"
+      - prebuilds/${platform}-*/**
+      - "!**/*.pdb"   # debug symbols: 55 MB nobody needs at run time
+      - build/Release/*.node
+      - build/Release/spawn-helper
+  # The app terminal's own `cli-village` command (see src/app/main.ts).
+  - from: desktop/bin
+    to: bin
+
+# node-pty brings its own binaries; nothing is compiled while packaging.
+npmRebuild: false
+# Only English text in Electron's own dialogs: the app's text is English anyway.
+electronLanguages: [en-US]
+
+# Electron features switched off in the app's binary (https://www.electronjs.org/docs/latest/tutorial/fuses).
+electronFuses:
+  # On: node-pty starts a helper this way on Windows, and the terminal's `cli-village` runs
+  # the app's Electron as Node.js (like VS Code's `code` command).
+  runAsNode: true
+  # Off: NODE_OPTIONS, and --inspect and its friends, can't inject code into the app.
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  # The app only runs its own app.asar, checked against the hash in the binary (macOS, Windows).
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  # The window loads http://127.0.0.1 only, never file:// pages.
+  grantFileProtocolExtraPrivileges: false
+  # Encrypting cookies needs a signed macOS app; the app keeps no cookies anyway.
+  enableCookieEncryption: false
+
+win:
+  target: [nsis, zip]
+  # Not signed yet: Windows SmartScreen calls it unrecognised (see the README).
+nsis:
+  # Installs for you only, into your own AppData: no administrator rights, ever.
+  oneClick: true
+  perMachine: false
+  packElevateHelper: false
+  # Uninstalling keeps your settings, so a reinstall picks up where you were.
+  deleteAppDataOnUninstall: false
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  category: public.app-category.developer-tools
+  # Not notarized yet: an ad-hoc signature, so Apple silicon Macs run it at all (an unsigned
+  # app is reported "damaged"). Ad-hoc signing needs the hardened runtime off.
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false
+
+linux:
+  target: [AppImage, deb]
+  category: Development
+  executableName: cli-village
+  synopsis: Watch your agents work in a tiny low-poly village.
+  # A .deb names its maintainer; this avoids publishing anyone's email address.
+  maintainer: GrantVRP <https://github.com/GrantVRP/cli-village>

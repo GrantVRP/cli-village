@@ -341,6 +341,8 @@ is open. Programs can also write the same JSON lines to the local socket:
   process.exitCode = await runEmit(event, uiOf(cmd));
 });
 
-await program.parseAsync();
+// from: "node": under Electron (the desktop app's terminal), commander would otherwise expect
+// a packaged app's arguments, without the script's path.
+await program.parseAsync(process.argv, { from: "node" });
 // Let any events still on their way to an open village arrive.
 await flushForwarders();

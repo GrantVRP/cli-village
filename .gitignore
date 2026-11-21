@@ -154,3 +154,6 @@ vite.config.ts.timestamp-*
 !.env.example
 # Art reference stills: inspiration only, not ours to share
 docs/reference/
+
+# Desktop installers built by `npm run dist`
+release/

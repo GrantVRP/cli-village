@@ -573,7 +573,7 @@ $$(".activity-item[data-view]").forEach((b) =>
 let guideKey = "";
 function renderGuide(): void {
   const agents = state ? Object.keys(state.agents).length : 0;
-  const key = `${view}|${info?.infisical}|${info?.branch}|${agents}|${info?.hub.role}`;
+  const key = `${view}|${info?.infisical}|${info?.branch}|${agents}|${info?.hub.role}|${info?.project}`;
   if (key === guideKey) return;
   guideKey = key;
   const installed = info ? info.infisical !== "not installed" : null;
@@ -585,6 +585,17 @@ function renderGuide(): void {
       "Start here",
       "What a new village needs, in order.",
       steps([
+        // Started from a shortcut, the installed app opens in your home folder: no project yet.
+        ...(info && !info.project
+          ? [
+              {
+                title: "Open your project",
+                text: "The folder with your code. Its village opens in this window.",
+                done: false,
+                action: button("Open Folder", () => void openFolder(), "primary"),
+              },
+            ]
+          : []),
         {
           title: "Check your tools",
           text: installed === null ? "Checking…" : installed ? "Infisical CLI found." : "The Infisical CLI isn't installed. Doctor prints the fix.",
@@ -605,7 +616,13 @@ function renderGuide(): void {
         },
         {
           title: "Save your work",
-          text: info?.branch ? `On branch ${info.branch}. Commit at the Harbor.` : info ? "Not a git project yet (git init in the terminal)." : "Checking…",
+          text: info?.branch
+            ? `On branch ${info.branch}. Commit at the Harbor.`
+            : !info
+              ? "Checking…"
+              : info.project
+                ? "Not a git project yet (git init in the terminal)."
+                : "Open a project first.",
           done: Boolean(info?.branch),
           action: button("Open Git", () => showView("git"), "ghost"),
         },
