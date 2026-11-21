@@ -105,6 +105,8 @@ function run(cmd: string, cmdArgs: string[]): string | null {
 const LINKS: Record<string, string> = {
   repo: "https://github.com/GrantVRP/cli-village",
   issues: "https://github.com/GrantVRP/cli-village/issues/new",
+  // The app doesn't update itself (unsigned apps can't safely): new versions are downloaded here.
+  releases: "https://github.com/GrantVRP/cli-village/releases",
   infisical: "https://infisical.com/docs/cli/overview",
 };
 
@@ -312,7 +314,7 @@ app.whenReady().then(async () => {
 
   // Help menu: a few known web pages open in the system browser (never an arbitrary URL).
   ipcMain.on("app:open-link", (e, name: unknown) => {
-    const url = typeof name === "string" ? LINKS[name] : undefined;
+    const url = typeof name === "string" && Object.hasOwn(LINKS, name) ? LINKS[name] : undefined;
     if (fromWindow(e) && url) void shell.openExternal(url);
   });
 

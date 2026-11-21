@@ -4,7 +4,18 @@ What changed in CLI Village, newest first. Each step was built and merged as its
 
 ## 0.1.0 (not released yet)
 
-Nothing is on npm yet: install it from a copy of this repository (see the README).
+Nothing is on npm or in a release yet: install it from a copy of this repository (see the README).
+
+### Ready to install (November 2026)
+
+- **Step 22:** everything a first release needs. Publishing it is the owner's step (see [docs/RELEASING.md](docs/RELEASING.md)).
+  - The npm package is only the command line: 43 packages, no native code, no install scripts. `cli-village app` from npm says where to download the desktop app.
+  - Desktop installers, built by electron-builder: Windows (installs for you only, no administrator rights), macOS (Apple silicon and Intel) and Linux (AppImage and deb). Electron's fuses switch off NODE_OPTIONS, `--inspect` and file:// privileges, and the app only runs its own, hash-checked code.
+  - The installed app opens in your home folder when started from a shortcut, and its Guide asks you to open a project. Its terminal has its own `cli-village`.
+  - An app icon in the village's colours.
+  - A release workflow: on a version tag it builds and tests the installers, then drafts a GitHub release with SHA-256 checksums, an SBOM and a build-provenance attestation, and, after the owner approves, publishes to npm with trusted publishing (no stored token). On pull requests it builds the installers so a broken one shows up early.
+  - Every GitHub Action is pinned to a commit, and Dependabot proposes updates after a week's cooldown.
+  - Fixes found by testing the packaged app: commands run by the app's own Electron read their arguments wrongly, and the app's crash-reporter pipe made Electron programs in its terminal print an error.
 
 ### Look (November 2026)
 

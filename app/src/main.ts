@@ -1131,6 +1131,7 @@ const menus: Menu[] = [
       { label: "Infisical CLI Docs (in your browser)", run: () => bridge.openLink("infisical") },
       { label: "CLI Village on GitHub (in your browser)", run: () => bridge.openLink("repo") },
       { label: "Report an Issue (in your browser)", run: () => bridge.openLink("issues") },
+      { label: "New Versions (in your browser)", run: () => bridge.openLink("releases") },
       "-",
       { label: "Toggle Developer Tools", keys: "Ctrl+Shift+I", run: () => bridge.window("devtools") },
       { label: "Reload Window", run: () => bridge.window("reload") },
