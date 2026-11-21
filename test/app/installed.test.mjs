@@ -10,7 +10,7 @@
 //   CLI_VILLAGE_TEST_INSTALLED_APP="release/win-unpacked/CLI Village.exe" node --test test/app/installed.test.mjs
 
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import net from "node:net";
 import { homedir, tmpdir } from "node:os";
@@ -20,6 +20,25 @@ import { Cdp } from "./cdp.mjs";
 
 const program = process.env.CLI_VILLAGE_TEST_INSTALLED_APP;
 const TERMINAL = `[...document.querySelectorAll("#terminal .xterm-rows > div")].map((row) => row.textContent).join("\\n")`;
+/** The village page's quality, graphics card and frame time (see web/src/render/pipeline.ts). */
+const VILLAGE = `({ ...document.querySelector("#village")?.contentDocument?.documentElement.dataset })`;
+
+/** For a failure message: the busiest processes, and the app's own with their command lines. */
+function whatIsRunning() {
+  const run = (command, args) => {
+    const result = spawnSync(command, args, { encoding: "utf8", timeout: 30_000 });
+    return (result.stdout || result.stderr || String(result.error ?? "")).trim();
+  };
+  if (process.platform === "win32") {
+    return run("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      "Get-Process | Sort-Object CPU -Descending | Select-Object -First 12 Name,Id,CPU,@{n='MB';e={[int]($_.WS/1MB)}} | Format-Table -AutoSize | Out-String -Width 160;" +
+        "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'CLI Village|cmd|powershell|conhost|OpenConsole' } | Select-Object ProcessId,ParentProcessId,Name,@{n='Command';e={$_.CommandLine.Substring(0,[Math]::Min(140,$_.CommandLine.Length))}} | Format-Table -AutoSize | Out-String -Width 260",
+    ]);
+  }
+  return run("ps", ["-A", "-o", "pid,ppid,pcpu,rss,args"]).split("\n").slice(0, 40).join("\n");
+}
 
 async function freePort() {
   const server = net.createServer().listen(0, "127.0.0.1");
@@ -47,7 +66,9 @@ describe("the installed desktop app", { skip: program ? false : "set CLI_VILLAGE
     try {
       await cdp.until(`the terminal to finish: ${command}`, async () => (await cdp.eval(TERMINAL)).includes(`${marker}42`), 90_000);
     } catch (err) {
-      throw new Error(`${err.message}\nThe terminal showed:\n${await cdp.eval(TERMINAL)}\nThe app said: ${stderr.trim().slice(-2000) || "(nothing)"}`);
+      throw new Error(
+        `${err.message}\nThe terminal showed:\n${await cdp.eval(TERMINAL)}\nThe village: ${JSON.stringify(await cdp.eval(VILLAGE))}\nThe app said: ${stderr.trim().slice(-2000) || "(nothing)"}\nRunning:\n${whatIsRunning()}`,
+      );
     }
     return cdp.eval(TERMINAL);
   }
