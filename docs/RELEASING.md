@@ -26,7 +26,8 @@ public, anyone can read it in the history.
    **Block command line pushes that expose my email**.
 2. Copy the `…@users.noreply.github.com` address shown there, then:
    `git config --global user.email "<that address>"`
-3. **Decide about the commits already made** (71 so far). Either:
+3. **Decide about the commits already made** (`git log --all --format=%ae%n%ce | sort | uniq -c`
+   shows which addresses they carry). Either:
    - accept that the address becomes public with them (simplest; it's already in every
      commit GitHub has stored), or
    - publish a fresh public repository whose history is rewritten or squashed, and keep this
