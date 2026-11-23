@@ -17,8 +17,8 @@ What a release contains:
 Do these in order. They're settings on GitHub and npm that only the owner can change. Menu
 names were checked in November 2026 and may move a little.
 
-**First, claim the npm name:** `cli-village` isn't registered on npm yet, and the README
-points people at it. Step 6 and the first publish make it yours.
+**The npm name:** 0.1.0 claims `cli-village` on npm (step 6, then "The first release only"
+below).
 
 **Done on 22 November 2026:** steps 2 to 5 (the repository is public, with the settings,
 rulesets and `npm` environment below), and this repository's own commits now use the
