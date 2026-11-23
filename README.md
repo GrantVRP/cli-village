@@ -8,7 +8,7 @@ CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https:
 
 It's made for beginners (every action is explained in plain English, next to the real command) and stays out of the way for experts.
 
-**Status:** early days, nearly ready for a first release. All the build steps below are done. CI builds the installers for Windows, macOS and Linux and opens the Windows one, but no release has been published yet: until then, install from source (below). The desktop app has been tested by hand on Windows, and the secret scan, flags and error messages have been checked against the real Infisical CLI (0.45.13). What hasn't been tried yet: real secrets from a logged-in Infisical account. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`), a 3D village in your browser (`cli-village open`) or the desktop app (`cli-village app`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`, `app --demo`).
+**Status:** early days: version 0.1.0 is the first release. CI builds the installers for Windows, macOS and Linux and opens and tests each one; the Mac and Linux installers haven't been tried by a person yet, so tell us how they go. The desktop app has been tested by hand on Windows, and the secret scan, flags and error messages have been checked against the real Infisical CLI (0.45.13). What hasn't been tried yet: real secrets from a logged-in Infisical account. You can check your setup with `doctor`, work with your real Infisical secrets (`secrets fetch`, `secrets diff`, `secrets export`, `run`), save and send your work with a secret-scan checkpoint (`status`, `commit`, `push`), run your tests (`test`), and watch it all happen in the terminal (`cli-village`), a 3D village in your browser (`cli-village open`) or the desktop app (`cli-village app`). Your AI agents can join in too (`cli-village emit`). No real work to show yet? Try the demo (`--demo`, `open --demo`, `app --demo`).
 
 ![The 3D village during the demo](docs/screenshots/village-day.jpg)
 
@@ -24,8 +24,6 @@ Two parts, use either or both:
 
 - **The desktop app** (Windows, macOS, Linux): the village, a terminal and the tools in one window. Its terminal has `cli-village` built in, so it's all you need.
 - **The command line** (`npm install -g cli-village`): `cli-village` in any terminal, the terminal view, and the 3D village in your browser.
-
-> No release has been published yet: there are no installers, and **`cli-village` isn't on npm yet**. Until the first release, use [from source](#try-it-from-source), and don't install a `cli-village` package from npm: it wouldn't be this project's. The first release will say so here.
 
 ### The desktop app
 
@@ -53,8 +51,6 @@ Started from the Start menu, Launchpad or a shortcut, the app opens in your home
 
 ### The command line
 
-After the first release (not yet: see the note above):
-
 ```bash
 npm install -g cli-village
 cli-village doctor   # check your setup
@@ -69,7 +65,7 @@ Every release is built by GitHub Actions from a tagged commit of this repository
 
 - **Attestation:** with the [GitHub CLI](https://cli.github.com/), `gh attestation verify <file> -R GrantVRP/cli-village` confirms the file was built by this repository's release workflow and hasn't changed since.
 - **Checksums:** `SHA256SUMS` in the release lists each file's SHA-256. Compare with `sha256sum <file>` (Linux), `shasum -a 256 <file>` (macOS) or `Get-FileHash <file>` (PowerShell).
-- **npm:** the package is published from the same workflow with [provenance](https://docs.npmjs.com/generating-provenance-statements); `npm audit signatures` checks it.
+- **npm:** from 0.1.1 on, the package is published from the same workflow with [provenance](https://docs.npmjs.com/generating-provenance-statements); `npm audit signatures` checks it. (0.1.0 was published by hand, because npm only lets a workflow publish a package that already exists. It has npm's registry signature, but no provenance.)
 - **SBOM:** `sbom.cdx.json` lists every package inside.
 
 ## Try it (from source)
@@ -104,7 +100,7 @@ Want to type `cli-village` from any folder? Run `npm link` once inside the proje
 | `cli-village open` | Opens the 3D village in your browser, showing real work (like `cli-village`, but in 3D). The terminal keeps its own view. Add `--no-open` to just print the address, or `--port 4317` to pick the port. |
 | `cli-village emit '<json>'` | For AI agents and scripts: tells the open village what you're doing. `emit -` reads one event per line from stdin. See [docs/EVENTS.md](docs/EVENTS.md). |
 | `cli-village open --demo` | Opens the 3D village in your browser and plays the demo there (the terminal keeps its own view). Add `--no-open` to just print the address, `--port 4317` to pick the port, or `--speed 2`. |
-| `cli-village app` | The desktop app: the village, a real terminal and the tools in one window (see [The desktop app](#the-desktop-app)). Add `--demo` for pretend robots. For now it runs from this project's folder, after `npm install`. |
+| `cli-village app` | The desktop app: the village, a real terminal and the tools in one window (see [The desktop app](#the-desktop-app)). Add `--demo` for pretend robots. Installed from npm, it tells you where to download the app; from this project's folder, it runs after `npm install`. |
 
 ## Learning as you go (or not)
 
@@ -345,7 +341,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 20. A new renderer for the village: soft contact-hardening shadows, a sky and light that follow the time of day, haze and ground mist, a real depth of field, a river shader, wind in the trees, lamplight on the ground, and graphics quality that fits the computer
 - [x] 21. Calmer colours with a clear order in the app, the browser page and the terminal view: one gold accent, a lifted work area, and every text colour passing WCAG AA
 - [x] 22. Ready for others to install: a command-line-only npm package, desktop installers for Windows, macOS and Linux, and a release workflow with checksums, an SBOM, attestations and npm provenance
-- [ ] The first release (see [docs/RELEASING.md](docs/RELEASING.md))
+- [x] The first release: 0.1.0 (see [docs/RELEASING.md](docs/RELEASING.md))
 
 ## License
 
