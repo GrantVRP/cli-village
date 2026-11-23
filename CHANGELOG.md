@@ -6,6 +6,11 @@ What changed in CLI Village, newest first. Each step was built and merged as its
 
 Nothing is on npm or in a release yet: install it from a copy of this repository (see the README).
 
+### Public (November 2026)
+
+- **Step 23:** the repository is public, with GitHub's security checks on: secret scanning with push protection, Dependabot alerts and security fixes, CodeQL code scanning and private vulnerability reporting. `main` changes only through a pull request whose checks pass, only the owner makes version tags, the npm publish waits for the owner's approval, and only GitHub's own Actions may run.
+- Found by CodeQL: on Windows, an Infisical installed as a `.cmd` script in a folder whose path has `%` or a quote is now refused instead of run, because cmd.exe would expand it.
+
 ### Ready to install (November 2026)
 
 - **Step 22:** everything a first release needs. Publishing it is the owner's step (see [docs/RELEASING.md](docs/RELEASING.md)).
