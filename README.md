@@ -25,7 +25,7 @@ Two parts, use either or both:
 - **The desktop app** (Windows, macOS, Linux): the village, a terminal and the tools in one window. Its terminal has `cli-village` built in, so it's all you need.
 - **The command line** (`npm install -g cli-village`): `cli-village` in any terminal, the terminal view, and the 3D village in your browser.
 
-> No release has been published yet. Until the first one, these links lead to an empty page: use [from source](#try-it-from-source).
+> No release has been published yet: there are no installers, and **`cli-village` isn't on npm yet**. Until the first release, use [from source](#try-it-from-source), and don't install a `cli-village` package from npm: it wouldn't be this project's. The first release will say so here.
 
 ### The desktop app
 
@@ -52,6 +52,8 @@ Started from the Start menu, Launchpad or a shortcut, the app opens in your home
 **Uninstall:** Windows: Settings › Apps › CLI Village › Uninstall. macOS: drag CLI Village from Applications to the Bin. Linux: `sudo apt remove cli-village`, or delete the AppImage. Your settings stay in your user folder (`%APPDATA%\CLI Village`, `~/Library/Application Support/CLI Village` or `~/.config/CLI Village`); delete that folder too for a clean slate.
 
 ### The command line
+
+After the first release (not yet: see the note above):
 
 ```bash
 npm install -g cli-village
