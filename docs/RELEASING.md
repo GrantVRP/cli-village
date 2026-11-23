@@ -17,6 +17,9 @@ What a release contains:
 Do these in order. They're settings on GitHub and npm that only the owner can change. Menu
 names were checked in November 2026 and may move a little.
 
+**First, claim the npm name:** `cli-village` isn't registered on npm yet, and the README
+points people at it. Step 6 and the first publish make it yours.
+
 **Done on 22 November 2026:** steps 2 to 5 (the repository is public, with the settings,
 rulesets and `npm` environment below), and this repository's own commits now use the
 GitHub noreply address. **Still to do:** the two switches in step 1's **Settings › Emails**,
@@ -64,9 +67,16 @@ and npm provenance only work for public repositories, and Actions minutes are fr
 - **Settings › Actions › General › Workflow permissions:** **Read repository contents**, and
   leave "Allow GitHub Actions to create and approve pull requests" off. (Each workflow asks
   for more only where it needs it.)
+- **Settings › Actions › General:** allow only actions made by GitHub (every workflow uses only
+  `actions/…`), and require approval for workflow runs on pull requests from **all outside
+  contributors**.
+- **Settings › General › Features:** wiki off (on a public repository anyone could edit it;
+  the docs live in `docs/`).
 - **Settings › Rules › Rulesets**, two rulesets:
   - **`main`**: require a pull request, require the CI checks to pass, block force pushes and
-    deletion.
+    deletion. The ruleset lists the 7 CI jobs by name (`ubuntu-latest · Node 22`, …,
+    `Desktop app · windows-latest`). If `ci.yml`'s jobs or Node versions change, update that
+    list in the same pull request, or every pull request waits for a check that never comes.
   - **Tags `v*`**: only you may create them; block updates and deletion. A version tag is
     what starts a release.
 
