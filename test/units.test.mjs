@@ -59,6 +59,10 @@ describe("running programs", () => {
   it("refuses characters cmd.exe can't pass safely", () => {
     assert.ok("error" in spawnPlan("x.cmd", ["100%"], true));
     assert.ok("error" in spawnPlan("x.bat", ["a\nb"], true));
+    // The script's own path too: cmd.exe would expand %NAME% in it, even in quotes.
+    assert.ok("error" in spawnPlan("C:\\100%USERPROFILE%\\infisical.cmd", ["--version"], true));
+    assert.ok("error" in spawnPlan('C:\\a"&calc&"\\infisical.cmd', [], true));
+    assert.ok(!("error" in spawnPlan("C:\\Tools & More\\infisical.cmd", ["--version"], true)), "& in a quoted path is plain text");
     // Real programs (not .cmd) get their arguments as they are.
     assert.deepEqual(spawnPlan("/usr/bin/git", ["a&b", "100%"], false).args, ["a&b", "100%"]);
   });

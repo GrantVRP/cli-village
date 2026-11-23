@@ -55,6 +55,14 @@ export type SpawnPlan = { command: string; args: string[]; options: SpawnOptions
  */
 export function spawnPlan(file: string, args: readonly string[], windows = isWindows): SpawnPlan {
   if (!windows || !/\.(cmd|bat)$/i.test(file)) return { command: file, args: [...args], options: {} };
+  // The script's own path goes on the same command line. It's quoted, which makes & | > plain
+  // text, but cmd.exe still expands %NAME% inside quotes, and a quote would end the quoting.
+  // (Windows doesn't allow quotes in file names; this checks anyway.)
+  if (CMD_UNSAFE.test(file) || file.includes('"')) {
+    return {
+      error: `${path.basename(file)} is a Windows script in a folder whose path has %, a quote or a line break, which cmd.exe can't run safely. Move it, or install Infisical as a program (winget install infisical).`,
+    };
+  }
   if (args.some((a) => CMD_UNSAFE.test(a))) {
     return {
       error: `${path.basename(file)} is a Windows script, which can't safely pass the characters %, line breaks or NUL. Remove them, or install Infisical as a program (winget install infisical).`,
