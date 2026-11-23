@@ -2,9 +2,9 @@
 
 What changed in CLI Village, newest first. Each step was built and merged as its own pull request.
 
-## 0.1.0 (not released yet)
+## 0.1.0 (22 November 2026)
 
-Nothing is on npm or in a release yet: install it from a copy of this repository (see the README).
+The first release: desktop installers for Windows, macOS and Linux on GitHub Releases, and the command line on npm (`npm install -g cli-village`).
 
 ### Public (November 2026)
 
