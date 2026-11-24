@@ -438,6 +438,7 @@ export function createWorld(): World {
       water.uniforms.skyZenith.value.set(light.zenith);
       lightPool.uniforms.strength!.value = light.lamps * 0.55;
       water.uniforms.skyReflect.value = 1 - light.lamps * 0.35;
+      water.uniforms.glint.value = 1 - light.moon * 0.9;
     },
   };
 }
