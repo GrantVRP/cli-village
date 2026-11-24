@@ -111,6 +111,14 @@ describe("light over the day", options, async () => {
     }
   });
 
+  it("keeps the night's own look out of the day and the default dusk", () => {
+    // The night sky, night vision and the moon's softer glints all follow `moon`.
+    for (const k of [0, 0.5, 0.85]) assert.equal(tl.lightingAt(k).moon, 0, `no moon at ${k}`);
+    assert.equal(tl.lightingAt(1).moon, 1);
+    const mid = tl.lightingAt(0.93).moon;
+    assert.ok(mid > 0 && mid < 1, "it fades in after sunset");
+  });
+
   it("dims the sun while it sets and the moon rises, so shadows don't swing across the village", () => {
     const swap = tl.lightingAt(0.925);
     assert.ok(swap.sunIntensity < tl.lightingAt(0.85).sunIntensity * 0.5);

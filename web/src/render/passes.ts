@@ -209,13 +209,14 @@ const cocFunction = /* glsl */ `
   uniform float pixels;
   uniform float cameraNear;
   uniform float cameraFar;
+  uniform float skyBlur;
   float viewDistance(float depth) {
     float ndc = depth * 2.0 - 1.0;
     return 2.0 * cameraNear * cameraFar / (cameraFar + cameraNear - ndc * (cameraFar - cameraNear));
   }
   float signedCoc(float depth) {
     float limit = maxCoc * pixels;
-    if (depth >= 0.99999) return limit; // the sky: as far, and as blurred, as it gets
+    if (depth >= 0.99999) return limit * skyBlur; // the sky: as far, and as blurred, as it gets (less at night)
     float z = viewDistance(depth);
     return clamp((1.0 - focus / z) * strength * pixels, -limit, limit);
   }
@@ -229,6 +230,8 @@ export class DepthOfFieldPass extends Pass {
     pixels: { value: 1000 },
     cameraNear: { value: 0.5 },
     cameraFar: { value: 400 },
+    /** How blurred the sky is, 0–1 of the most blur. */
+    skyBlur: { value: 1 },
     debug: { value: 0 },
   };
   private readonly half: THREE.WebGLRenderTarget;
@@ -391,6 +394,13 @@ export class FinishPass extends Pass {
     shadowTint: { value: new THREE.Color(0x2d3c55) },
     highlightTint: { value: new THREE.Color(0xffe2b8) },
     splitAmount: { value: 0.07 },
+    /**
+     * Night vision, 0–1: in the dark the eye sees with its rods, so dim colours fade and lean
+     * blue (the Purkinje shift; Ghost of Tsushima's tone mapping does the same). Bright and
+     * strongly coloured light is left alone, so lamps stay warm and status colours keep meaning.
+     */
+    nightShift: { value: 0 },
+    nightTint: { value: new THREE.Color(0x8796c4) },
     vignette: { value: 0.28 },
     grain: { value: 0.022 },
   };
@@ -413,6 +423,8 @@ export class FinishPass extends Pass {
           uniform vec3 shadowTint;
           uniform vec3 highlightTint;
           uniform float splitAmount;
+          uniform float nightShift;
+          uniform vec3 nightTint;
           uniform float vignette;
           uniform float grain;
           varying vec2 vUv;
@@ -436,6 +448,14 @@ export class FinishPass extends Pass {
             vec3 tint = mix(shadowTint, highlightTint, smoothstep(0.15, 0.75, y));
             float chroma = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
             c = mix(c, c * tint / max(luma(tint), 1e-4), splitAmount * (1.0 - smoothstep(0.2, 0.6, chroma)));
+            if (nightShift > 0.0) {
+              // Night vision: the darker and the less colourful, the more the colour gives way
+              // to the rods' slate blue, at the same brightness.
+              float yn = luma(c);
+              float cn = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+              float rods = (1.0 - smoothstep(0.06, 0.42, yn)) * (1.0 - smoothstep(0.1, 0.32, cn));
+              c = mix(c, yn * nightTint / luma(nightTint), rods * nightShift * 0.7);
+            }
             // Vignette: an ellipse that follows the window's shape, very soft.
             vec2 p = (vUv - 0.5) * vec2(resolution.x / resolution.y, 1.0);
             c *= 1.0 - vignette * smoothstep(0.35, 1.05, length(p));
