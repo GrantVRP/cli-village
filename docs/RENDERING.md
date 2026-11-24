@@ -177,14 +177,14 @@ Things that aren't about the work, so the village feels lived in. Who is out whe
 
 - **Birds:** a loose flock on one slow circle over the village, flapping in bursts, then gliding. Drawn half again as big as life so they read from the home view.
 - **Butterflies** visit the real wildflower patches (`nature.ts` tells `life.ts` where they are). **Fireflies** are points that each blink on their own, along the meadows and the river bank.
-- **On the river:** ducks paddle by the near bank upstream of the library, where the home view sees open water; the rowboat is tied to a post on the far bank, close in, so it and the fishing line stay clear of the boats' lane.
+- **On the river:** ducks paddle by the near bank upstream of the library, where the home view sees open water; the fisherman drifts down the far bank for about 80 seconds, turns, rows back up and turns again; at night the boat is tied to a post. He keeps close in to the far bank, so the float and the oars stay clear of the boats' lane. From the home view the ducks and the rowboat are small; they're for when you look closer.
 - **The cat and villagers** keep to their own spots (two benches, the well, a flower patch, a sunny spot in the meadow), away from the robots' paths and doors.
 - **The windmill** (`world.ts`) stands in a clearing in the tree line on the far bank. The trees that stood there are still made, into a builder that's thrown away, so they use up the same random numbers and no other tree moves.
 - **One wind** (`breeze` in `life-rules.ts`): 1 on a fair day, so the trees sway as before, up to 1.7 in a storm. The trees, the flags (`flag.ts`), the chimney smoke and the windmill's sails all follow it. The flags' wave adds up its phase over time, so a change in the wind never makes it jump.
 - **Hearth fires** (`hearthFires`): lit at dusk and in winter (half of them in autumn), so chimneys puff more often and the smoke lasts longer. A winter evening has about three times the smoke of a summer day.
 - **Robots react** (`reactions.ts`, tested): only to what happens from now on, never to the history a page catches up on. A cheer beats a wave, and each robot reacts once.
 
-Everything is seeded, so it looks the same every time, and everything follows still mode: one fixed pose, no smoke. Birds, butterflies and fireflies are instanced (one draw each, shared by all of them); Low draws 6 birds, 6 butterflies and about a third of the fireflies, High 12, 14 and 64. Measured on this PC with the cap off, all of it together costs about 0.5 ms a frame on High and 0.2 ms on Low.
+Everything is seeded, so it looks the same every time, and everything follows still mode: one fixed pose, no smoke. Birds (a body and two wings), butterflies (two wings) and fireflies are instanced, so a few draws cover the whole flock whatever its size; Low draws 6 birds, 6 butterflies and 24 fireflies, Medium 9, 10 and 40, High 12, 14 and 64. The villagers, the cat, the ducks and the rowboat are small models of a few parts each: with their shadows they add about 80 draw calls. Measured on this PC with the cap off, at the dusk the app opens with, switching them off and on in the same run: on High the difference was inside the noise (3.7 to 3.8 ms a frame either way); on Low it was about 0.25 ms (1.55 against 1.3).
 
 ## Finish (`passes.ts`, FinishPass)
 
