@@ -51,8 +51,12 @@ const rainVertex = /* glsl */ `
     float y = mod(seed.z * height - time * speed, height);
     vec3 dir = normalize(vec3(wind.x, -speed, wind.y));
     vec3 p = vec3(center.x + (seed.x - 0.5) * size.x, center.y + y, center.z + (seed.y - 0.5) * size.y);
+    // A drop right at the lens would draw as a long streak across the picture: both ends of
+    // the streak go by the head, so a drop too close is skipped whole, and fades in from there.
+    float near = -(viewMatrix * vec4(p, 1.0)).z;
+    if (near < 3.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vAlpha = 0.0; return; }
     p -= dir * len * tip;
-    vAlpha = (1.0 - tip * 0.85) * smoothstep(0.0, 1.0, y) * (1.0 - smoothstep(height - 2.0, height, y));
+    vAlpha = (1.0 - tip * 0.85) * smoothstep(0.0, 1.0, y) * (1.0 - smoothstep(height - 2.0, height, y)) * smoothstep(3.0, 7.0, near);
     gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   }
 `;

@@ -209,6 +209,36 @@ describe("desktop app", () => {
     await say("cv-second-shell");
   });
 
+  it("turns weather and seasons off and on, from View and with w, and remembers it", async () => {
+    const village = `document.querySelector("#village").contentDocument?.documentElement`;
+    const weather = () => cdp.eval(`${village}?.dataset.weather ?? null`);
+    const stored = () => cdp.eval(`localStorage.getItem("cli-village.weather")`);
+    const toggle = async () => {
+      await cdp.clickOn("the View menu", byText("#menubar .menu-title", "View"));
+      await cdp.clickOn("Weather and Seasons", byText(".menu-list .menu-label", "Weather and Seasons"));
+    };
+    await cdp.clickOn("the Village tab", byText("#tabs .tab-name", "Village"));
+    await cdp.until("the village with weather on", async () => (await weather()) === "on");
+    await toggle();
+    await cdp.until("the village with weather off", async () => (await weather()) === "off");
+    assert.equal(await stored(), "off");
+    // w in the village turns it back on, and the app hears it (so View's tick stays right).
+    await cdp.eval(`document.querySelector("#village").contentWindow.dispatchEvent(new KeyboardEvent("keydown", { key: "w" }))`);
+    await cdp.until("the village with weather on again", async () => (await weather()) === "on");
+    await cdp.until("the app remembering it's on", async () => (await stored()) === "on");
+    // Off, then the village reloads (a new graphics setting): it starts off, from its address.
+    await toggle();
+    await cdp.until("the village with weather off", async () => (await weather()) === "off");
+    await cdp.clickOn("the View menu", byText("#menubar .menu-title", "View"));
+    await cdp.clickOn("Graphics Quality", byText(".menu-list .menu-label", "Graphics Quality"));
+    await cdp.clickOn("Low (fastest)", byText(".menu-list .menu-label", "Low (fastest)"));
+    await cdp.until("the village reloaded at low quality", async () => (await cdp.eval(`${village}?.dataset.quality ?? null`)) === "low", 120_000);
+    assert.equal(await cdp.eval(`document.querySelector("#village").contentWindow.location.search.includes("weather=off")`), true);
+    assert.equal(await weather(), "off");
+    await toggle();
+    await cdp.until("the village with weather on", async () => (await weather()) === "on");
+  });
+
   it("draws the village at every graphics quality, with no shader errors", async (t) => {
     // CI's machines have no graphics card, so on its own the village picks the lowest tier
     // there: choosing each tier by hand compiles and runs every shader at least once.
