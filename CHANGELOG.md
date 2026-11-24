@@ -10,6 +10,7 @@ What changed in CLI Village, newest first. Each step was built and merged as its
   - a night sky with a thin glow along the horizon, round stars of different brightness and colour down to the horizon, and a faint Milky Way;
   - the moon behind the river, glittering on the water from the usual view;
   - day and the dusk default look the same as before.
+- Security: the installer build tool (electron-builder) no longer uses a minimatch version with a denial-of-service bug (GHSA-g3hv-75wg-m249). It was only used on build machines, on our own file patterns; the installers contain exactly the same files.
 
 ## 0.1.0 (22 November 2026)
 
