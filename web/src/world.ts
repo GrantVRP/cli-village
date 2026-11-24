@@ -59,6 +59,8 @@ export interface World {
   update(dt: number, t: number): void;
   /** The sky the river reflects, and how bright the lamps' light pools are. */
   setSky(light: Lighting): void;
+  /** Show the extra grass (on the graphics settings that can afford it). */
+  setDenseGrass(on: boolean): void;
 }
 
 const rng = makeRandom(7);
@@ -413,7 +415,8 @@ export function createWorld(): World {
   props(b);
   // Grass, wildflowers, boulders, reeds and garden fences (nature.ts), clear of the trees.
   const trunks: KeepOut[] = [...AROUND_TREES.map(([x, z, s]): KeepOut => [x, z, 0.9 * s]), [-24, -12.5, 1.4]];
-  group.add(addNature(b, foliage, trunks));
+  const nature = addNature(b, foliage, trunks);
+  group.add(nature.small, nature.dense);
   group.add(b.build("world-static"));
   swayShadows(group, foliage);
 
@@ -446,6 +449,9 @@ export function createWorld(): World {
       lightPool.uniforms.strength!.value = light.lamps * 0.55;
       water.uniforms.skyReflect.value = 1 - light.lamps * 0.35;
       water.uniforms.glint.value = 1 - light.moon * 0.9;
+    },
+    setDenseGrass: (on) => {
+      nature.dense.visible = on;
     },
   };
 }

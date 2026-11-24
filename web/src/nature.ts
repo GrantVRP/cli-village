@@ -14,6 +14,7 @@ import * as THREE from "three";
 import { BUILDINGS } from "../../src/events/types.js";
 import { HARBOR, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, type ModelBuilder, ModelBuilder as Builder, pick } from "./lowpoly.js";
+import { P } from "./palette.js";
 
 /**
  * Grass is lit as if it faced straight up, like the ground it grows from (as stylized games
@@ -30,7 +31,6 @@ const smallMaterial = materials.matte.clone();
 smallMaterial.depthWrite = false;
 smallMaterial.name = "nature-small";
 const SMALL_ORDER = 10;
-import { P } from "./palette.js";
 
 /** A spot to keep clear: x, z and radius. */
 export type KeepOut = readonly [number, number, number];
@@ -60,11 +60,60 @@ function distanceToSegment(x: number, z: number, a: THREE.Vector3, b: THREE.Vect
 }
 
 /**
+ * Grass blades, written straight into one buffer: tens of thousands of them, so no shape
+ * objects or matrices per blade (that took over half a second). A blade is a thin
+ * three-sided spike, three triangles, darker at the root and lighter at the tip.
+ */
+class Blades {
+  private readonly positions: number[] = [];
+  private readonly colors: number[] = [];
+  private readonly root = new THREE.Color();
+  private readonly tip = new THREE.Color();
+
+  /** A blade from (x, y, z), `height` tall and `width` across, its tip pushed by (leanX, leanZ). */
+  add(x: number, y: number, z: number, height: number, width: number, leanX: number, leanZ: number, color: THREE.Color, r: () => number): void {
+    const turn = r() * Math.PI * 2;
+    const tipX = x + leanX;
+    const tipY = y + height;
+    const tipZ = z + leanZ;
+    this.root.copy(color).multiplyScalar(0.72);
+    this.tip.copy(color).multiplyScalar(1.12);
+    for (let side = 0; side < 3; side++) {
+      const a0 = turn + (side * Math.PI * 2) / 3;
+      const a1 = a0 + (Math.PI * 2) / 3;
+      this.positions.push(x + Math.cos(a0) * width, y, z + Math.sin(a0) * width, x + Math.cos(a1) * width, y, z + Math.sin(a1) * width, tipX, tipY, tipZ);
+      const { root, tip } = this;
+      this.colors.push(root.r, root.g, root.b, root.r, root.g, root.b, tip.r, tip.g, tip.b);
+    }
+  }
+
+  build(name: string): THREE.Mesh {
+    const geometry = new THREE.BufferGeometry();
+    const count = this.positions.length / 3;
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(this.positions, 3));
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(this.colors, 3));
+    // Lit as if facing up, like the ground (see grassMaterial).
+    const normals = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) normals[i * 3 + 1] = 1;
+    geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+    geometry.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geometry, grassMaterial);
+    mesh.name = name;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.renderOrder = SMALL_ORDER;
+    return mesh;
+  }
+}
+
+/**
  * Add the nature details. The bigger things (boulders, reeds, fences) go into `big`, with the
  * rest of the village, so they cast shadows; the tiny ones come back as their own group,
- * without shadows. `trees` are the trees around the village, so nothing grows through a trunk.
+ * without shadows. `dense` is extra grass that fills out the meadows, for the graphics settings
+ * that can afford it (it has its own random numbers, so the rest is the same with or without
+ * it). `trees` are the trees around the village, so nothing grows through a trunk.
  */
-export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: readonly KeepOut[]): THREE.Group {
+export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: readonly KeepOut[]): { small: THREE.Group; dense: THREE.Group } {
   const rng = makeRandom(91);
   const small = new Builder();
   const keepOut = [...PROPS, ...trees];
@@ -93,22 +142,21 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
   const groundAt = (x: number, z: number) => (z < -30 ? Math.min(2.5, (-30 - z) * 0.12) + Math.sin(x * 0.3) * 0.3 : 0);
 
   // Grass tufts: three to five blades leaning out from the middle.
-  const tuft = (x: number, z: number, size = 1) => {
+  const grass = new Blades();
+  const color = new THREE.Color();
+  const tuft = (x: number, z: number, size = 1, into = grass, r = rng) => {
     const y = groundAt(x, z) - 0.03;
-    const color = pick(GRASS, rng);
-    const blades = 3 + Math.floor(rng() * 3);
-    const tall = (0.34 + rng() * 0.26) * size;
+    const blades = 3 + Math.floor(r() * 3);
+    const tall = (0.34 + r() * 0.26) * size;
     for (let k = 0; k < blades; k++) {
-      const a = (k / blades) * Math.PI * 2 + rng();
-      const lean = 0.25 + rng() * 0.35;
-      const h = tall * (0.7 + rng() * 0.5);
-      small.add(new THREE.ConeGeometry(0.06 * size, h, 3, 1, true), color, {
-        at: [x + Math.cos(a) * 0.1 * size, y + h / 2, z + Math.sin(a) * 0.1 * size],
-        rot: [Math.sin(a) * lean, rng() * Math.PI, -Math.cos(a) * lean],
-        jitter: 0.1,
-        material: grassMaterial,
-        rng,
-      });
+      // Each blade a slightly different shade of the tuft's green.
+      if (k === 0) color.set(pick(GRASS, r));
+      const shade = 0.92 + r() * 0.16;
+      const a = (k / blades) * Math.PI * 2 + r();
+      const lean = (0.25 + r() * 0.35) * tall;
+      const h = tall * (0.7 + r() * 0.5);
+      const out = 0.1 * size;
+      into.add(x + Math.cos(a) * out, y, z + Math.sin(a) * out, h, 0.06 * size, Math.cos(a) * lean, Math.sin(a) * lean, color.clone().multiplyScalar(shade), r);
     }
   };
   // In patches across the meadows, thicker where the land is lusher.
@@ -156,15 +204,15 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     const [x, z] = somewhere();
     if (!clear(x, z, 0.4, true)) continue;
     placed++;
-    const color = pick(MEADOW_FLOWERS, rng);
+    const bloom = pick(MEADOW_FLOWERS, rng);
     const count = 4 + Math.floor(rng() * 5);
     const y = groundAt(x, z);
     for (let k = 0; k < count; k++) {
       const fx = x + (rng() - 0.5) * 1.3;
       const fz = z + (rng() - 0.5) * 1.0;
       const h = 0.18 + rng() * 0.14;
-      small.add(new THREE.ConeGeometry(0.03, h, 3, 1, true), pick(GRASS, rng), { at: [fx, y + h / 2, fz], material: grassMaterial, rng });
-      small.add(new THREE.IcosahedronGeometry(0.06 + rng() * 0.025, 0), rng() < 0.85 ? color : pick(MEADOW_FLOWERS, rng), { at: [fx, y + h + 0.02, fz], material: smallMaterial, rng });
+      grass.add(fx, y, fz, h, 0.03, 0, 0, color.set(pick(GRASS, rng)), rng);
+      small.add(new THREE.IcosahedronGeometry(0.06 + rng() * 0.025, 0), rng() < 0.85 ? bloom : pick(MEADOW_FLOWERS, rng), { at: [fx, y + h + 0.02, fz], material: smallMaterial, rng });
     }
   }
 
@@ -249,16 +297,38 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     }
   }
 
-  const group = small.build("nature-small");
-  group.traverse((child) => {
+  // Extra grass for Medium and High: more and bigger patches, and single tufts in between.
+  const dense = new Blades();
+  const more = makeRandom(92);
+  const where = (): [number, number] => [(more() - 0.5) * 88, -44 + more() * 80];
+  for (let i = 0, placed = 0; i < 5000 && placed < 560; i++) {
+    const [x, z] = where();
+    if (more() > lush(x, z) + 0.15 || !clear(x, z, 0)) continue;
+    placed++;
+    const count = 6 + Math.floor(more() * 14);
+    const spread = 0.8 + more() * 1.4;
+    for (let k = 0; k < count; k++) {
+      const a = more() * Math.PI * 2;
+      const d = Math.sqrt(more()) * spread;
+      const tx = x + Math.cos(a) * d;
+      const tz = z + Math.sin(a) * d * 0.8;
+      if (clear(tx, tz, 0)) tuft(tx, tz, 1 - (d / spread) * 0.35, dense, more);
+    }
+  }
+  for (let i = 0; i < 2600; i++) {
+    const [x, z] = where();
+    if (more() > lush(x, z) * 0.8 || !clear(x, z, 0)) continue;
+    tuft(x, z, 0.7 + more() * 0.4, dense, more);
+  }
+
+  const smallGroup = small.build("nature-small");
+  smallGroup.traverse((child) => {
     child.castShadow = false;
     child.renderOrder = SMALL_ORDER;
-    const mesh = child as THREE.Mesh;
-    if (mesh.isMesh && mesh.material === grassMaterial) {
-      const normals = mesh.geometry.getAttribute("normal");
-      for (let i = 0; i < normals.count; i++) normals.setXYZ(i, 0, 1, 0);
-      normals.needsUpdate = true;
-    }
   });
-  return group;
+  smallGroup.add(grass.build("grass"));
+  const denseGroup = new THREE.Group();
+  denseGroup.name = "nature-dense";
+  denseGroup.add(dense.build("grass-dense"));
+  return { small: smallGroup, dense: denseGroup };
 }

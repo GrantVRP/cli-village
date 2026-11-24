@@ -127,7 +127,10 @@ The shadow pass uses a depth material with the same displacement, so shadows swa
 
 Grass, wildflowers, mossy boulders, reeds and garden fences, placed from their own random numbers (so nothing else in the village moves) and kept clear of the plaza, paths, rails, buildings, props, trees and river. Grass grows in patches, thicker where a smooth "lushness" pattern says so, and along the edges where nobody walks: beside the paths and round the buildings' feet.
 
-Two tricks keep the thousands of small things cheap and in the style:
+On Medium and High a second layer of grass, with its own random numbers, fills the meadows out (about twice as much). Low keeps only the first, so the rest of the village is the same either way.
+
+Three tricks keep the tens of thousands of blades cheap and in the style:
+- **Blades go straight into one buffer.** A blade is a thin three-sided spike, three triangles, darker at the root and lighter at the tip, written as numbers. With a shape object and a matrix per blade, building the grass took over half a second at start-up.
 - **Grass is lit as if it faced up**, like the ground it grows from. Thin blades lit by their own steep faces look dark from above.
 - **The tiny things don't write depth** and are drawn after the other solid things, so everything still hides them correctly, but ambient occlusion, depth of field and the haze see the ground under them, as they would a decal. Otherwise the occlusion finds a crease round every blade and turns the grass black. They cast no shadows either: theirs would be too small to see.
 
@@ -156,6 +159,7 @@ It uses no lookup-table image (the page loads no textures).
 | Ambient occlusion | – | – | ✓ |
 | Bloom | – | ✓ | ✓ |
 | Bokeh samples | 12 | 24 | 48 |
+| Extra grass | – | ✓ | ✓ |
 
 The starting tier comes from the graphics card's name (`WEBGL_debug_renderer_info`):
 - software renderers (SwiftShader, llvmpipe, WARP, Microsoft Basic Render) start on Low;
