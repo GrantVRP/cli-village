@@ -241,6 +241,38 @@ describe("desktop app", () => {
     await cdp.until("the village picking its own quality again", async () => (await cdp.eval(`!document.querySelector("#village").contentWindow.location.search.includes("quality=")`)) && (await quality()) !== null, 60_000);
   });
 
+  it("turns weather and seasons off and on, from View and with w, and remembers it", async () => {
+    const village = `document.querySelector("#village").contentDocument?.documentElement`;
+    const weather = () => cdp.eval(`${village}?.dataset.weather ?? null`);
+    const stored = () => cdp.eval(`localStorage.getItem("cli-village.weather")`);
+    const toggle = async () => {
+      await cdp.clickOn("the View menu", byText("#menubar .menu-title", "View"));
+      await cdp.clickOn("Weather and Seasons", byText(".menu-list .menu-label", "Weather and Seasons"));
+    };
+    await cdp.clickOn("the Village tab", byText("#tabs .tab-name", "Village"));
+    await cdp.until("the village with weather on", async () => (await weather()) === "on");
+    await toggle();
+    await cdp.until("the village with weather off", async () => (await weather()) === "off");
+    assert.equal(await stored(), "off");
+    // w in the village turns it back on, and the app hears it (so View's tick stays right).
+    await cdp.eval(`document.querySelector("#village").contentWindow.dispatchEvent(new KeyboardEvent("keydown", { key: "w" }))`);
+    await cdp.until("the village with weather on again", async () => (await weather()) === "on");
+    await cdp.until("the app remembering it's on", async () => (await stored()) === "on");
+    // Off, then the village reloads (a new graphics setting): it starts off, from its address.
+    await toggle();
+    await cdp.until("the village with weather off", async () => (await weather()) === "off");
+    // Mark this page, so the wait below sees the new one (CI may already be at Low quality).
+    await cdp.eval(`document.querySelector("#village").contentDocument.documentElement.dataset.stale = "yes"`);
+    await cdp.clickOn("the View menu", byText("#menubar .menu-title", "View"));
+    await cdp.clickOn("Graphics Quality", byText(".menu-list .menu-label", "Graphics Quality"));
+    await cdp.clickOn("Low (fastest)", byText(".menu-list .menu-label", "Low (fastest)"));
+    await cdp.until("the village reloaded at low quality", () => cdp.eval(`${village}?.dataset.stale === undefined && ${village}?.dataset.quality === "low" && Boolean(${village}?.dataset.weather)`), 120_000);
+    assert.equal(await cdp.eval(`document.querySelector("#village").contentWindow.location.search.includes("weather=off")`), true);
+    assert.equal(await weather(), "off");
+    await toggle();
+    await cdp.until("the village with weather on", async () => (await weather()) === "on");
+  });
+
   it("plays the demo: robots walk into the village", async () => {
     await cdp.until("robots in the status bar", async () => {
       const text = await cdp.eval(`document.querySelector("#status-robots").textContent`);
