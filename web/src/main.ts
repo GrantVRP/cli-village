@@ -10,7 +10,7 @@ import { shadows } from "./lowpoly.js";
 import { showNoWebGL } from "./no-webgl.js";
 import { Overlay } from "./overlay.js";
 import { Pipeline } from "./render/pipeline.js";
-import { tierFromQuery } from "./render/quality.js";
+import { SETTINGS, tierFromQuery } from "./render/quality.js";
 import { Village } from "./village.js";
 import { createWorld, railGlow } from "./world.js";
 import { WAITING } from "../../src/events/explain.js";
@@ -229,6 +229,7 @@ renderer.setAnimationLoop((time) => {
   const wanted = source.getState().stopped ? 0.6 : 1;
   exposure += (wanted - exposure) * (still ? 1 : Math.min(1, dt * 1.5));
 
+  world.setDenseGrass(SETTINGS[pipeline.tier].denseGrass);
   world.update(dt, t);
   village.update(dt, t);
   effects.update(dt, t);

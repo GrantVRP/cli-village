@@ -75,6 +75,9 @@ describe("graphics quality", options, async () => {
     assert.ok(low.shadowSamples <= medium.shadowSamples && medium.shadowSamples <= high.shadowSamples);
     assert.equal(low.msaa, 0);
     assert.equal(low.ambientOcclusion, false);
+    // The extra grass is for computers that can afford it; a step down to Low drops it.
+    assert.equal(low.denseGrass, false);
+    assert.ok(medium.denseGrass && high.denseGrass);
   });
 });
 

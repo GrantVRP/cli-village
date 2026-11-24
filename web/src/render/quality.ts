@@ -29,12 +29,14 @@ export interface TierSettings {
   bokehSamples: number;
   /** The sky as soft ambient light and in reflections on brass (a prefiltered environment map). */
   environment: boolean;
+  /** Extra grass that fills out the meadows (nature.ts). */
+  denseGrass: boolean;
 }
 
 export const SETTINGS: Readonly<Record<Tier, TierSettings>> = {
-  low: { maxPixelRatio: 1, msaa: 0, shadowMap: 2048, shadowSamples: 0, ambientOcclusion: false, bloom: false, bokehSamples: 12, environment: false },
-  medium: { maxPixelRatio: 1.5, msaa: 4, shadowMap: 2048, shadowSamples: 12, ambientOcclusion: false, bloom: true, bokehSamples: 24, environment: true },
-  high: { maxPixelRatio: 2, msaa: 4, shadowMap: 4096, shadowSamples: 20, ambientOcclusion: true, bloom: true, bokehSamples: 48, environment: true },
+  low: { maxPixelRatio: 1, msaa: 0, shadowMap: 2048, shadowSamples: 0, ambientOcclusion: false, bloom: false, bokehSamples: 12, environment: false, denseGrass: false },
+  medium: { maxPixelRatio: 1.5, msaa: 4, shadowMap: 2048, shadowSamples: 12, ambientOcclusion: false, bloom: true, bokehSamples: 24, environment: true, denseGrass: true },
+  high: { maxPixelRatio: 2, msaa: 4, shadowMap: 4096, shadowSamples: 20, ambientOcclusion: true, bloom: true, bokehSamples: 48, environment: true, denseGrass: true },
 };
 
 /** Software renderers: no graphics card, every pixel is drawn by the processor. */
