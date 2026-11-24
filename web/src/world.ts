@@ -448,7 +448,10 @@ export function createWorld(): World {
       water.uniforms.skyZenith.value.set(light.zenith);
       lightPool.uniforms.strength!.value = light.lamps * 0.55;
       water.uniforms.skyReflect.value = 1 - light.lamps * 0.35;
-      water.uniforms.glint.value = 1 - light.moon * 0.9;
+      // The moon glints less than the sun, and neither glints through thick cloud.
+      // (Above the most cloud a clear sky ever has, 0.55 at sunset, so clear skies are unchanged.)
+      const cloud = Math.min(1, Math.max(0, (light.cloudCover - 0.6) / 0.35));
+      water.uniforms.glint.value = (1 - light.moon * 0.9) * (1 - 0.9 * cloud * cloud * (3 - 2 * cloud));
     },
     setDenseGrass: (on) => {
       nature.dense.visible = on;
