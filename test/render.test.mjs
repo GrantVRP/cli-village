@@ -373,4 +373,18 @@ describe("village life", options, async () => {
     const autumn = l.butterfliesWanted(at(0, { autumn: 1 }));
     assert.ok(autumn > 0 && autumn < 0.5);
   });
+
+  it("blows harder in a storm, and keeps the usual sway on a fair day", () => {
+    assert.equal(l.breeze(0, 0, 0), 1);
+    assert.ok(l.breeze(1, 0, 0) > 1);
+    assert.ok(l.breeze(1, 1, 0) > l.breeze(1, 0, 0));
+    assert.ok(l.breeze(1, 1, 1) <= 1.7);
+  });
+
+  it("lights more hearth fires in the evening and in the cold", () => {
+    assert.equal(l.hearthFires(0, 0, 0), 0);
+    assert.ok(l.hearthFires(0.85, 0, 0) > 0.9);
+    assert.equal(l.hearthFires(0, 0, 1), 1);
+    assert.ok(l.hearthFires(0, 1, 0) > 0 && l.hearthFires(0, 1, 0) < 1);
+  });
 });

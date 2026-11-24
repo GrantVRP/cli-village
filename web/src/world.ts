@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { BUILDINGS } from "../../src/events/types.js";
 import { glowMaterials } from "./buildings.js";
+import { wavingFlag, type Flag } from "./flag.js";
 import { addNature, type KeepOut } from "./nature.js";
 import { HARBOR, PLAZA_R, CURB_R, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
@@ -247,7 +248,76 @@ function tree(b: ModelBuilder, x: number, z: number, scale: number, leaf: number
 function treeLineTree(b: ModelBuilder, x: number, row: number, random: () => number): void {
   const z = RIVER_Z - RIVER_HALF - 3.2 - row * 3.4 - random() * 1.5;
   const hill = z < -30 ? Math.min(2.5, (-30 - z) * 0.12) : 0;
-  tree(b, x, z, 1.1 + random() * 0.7 + row * 0.15, pick(P.leaf, random), hill - 0.1, random);
+  // The windmill stands in a clearing. Those trees are still made, into a builder that's
+  // thrown away, so they use up the same random numbers and every other tree stays put.
+  const cleared = row < 2 && Math.hypot(x - WINDMILL.x, z - WINDMILL.z) < 4.2;
+  tree(cleared ? new ModelBuilder() : b, x, z, 1.1 + random() * 0.7 + row * 0.15, pick(P.leaf, random), hill - 0.1, random);
+}
+
+/** The windmill on the far bank, right of the harbor. It faces into the wind (from the front left). */
+const WINDMILL = { x: 22.5, z: -31.4, turn: -Math.PI / 4 };
+
+/**
+ * The windmill: a stone plinth, a cream tower with a timber band, lit windows, a cap with a
+ * pennant, and four lattice sails that turn with the wind. The still parts go into the
+ * world's merged mesh; the sails and the pennant move, so they're returned.
+ */
+function windmill(b: ModelBuilder): { moving: THREE.Group; sails: THREE.Object3D; pennant: Flag } {
+  const { x, z, turn } = WINDMILL;
+  const y = Math.min(2.5, (-30 - z) * 0.12) + Math.sin(x * 0.3) * 0.3 - 0.14;
+  b.push([x, y, z], turn);
+  b.add(new THREE.CylinderGeometry(1.85, 2.0, 0.55, 8), P.stone, { at: [0, 0.27, 0], jitter: 0.04 });
+  b.add(new THREE.CylinderGeometry(1.1, 1.55, 4.4, 8), 0xe6dccb, { at: [0, 2.75, 0], jitter: 0.03 });
+  b.add(new THREE.CylinderGeometry(1.37, 1.37, 0.14, 8), P.wood, { at: [0, 2.6, 0] });
+  b.add(new THREE.CylinderGeometry(1.14, 1.14, 0.12, 8), P.wood, { at: [0, 4.92, 0] });
+  // Door and steps at the front, windows up the tower.
+  b.box([0.66, 1.08, 0.12], P.wood, { at: [0, 1.08, 1.47], rot: [-0.1, 0, 0] });
+  b.box([0.84, 0.12, 0.5], P.stoneDark, { at: [0, 0.58, 1.75] });
+  for (const [wx, wy, wz, ry] of [
+    [0, 3.5, 1.25, 0],
+    [-1.3, 1.9, 0.02, -Math.PI / 2],
+    [0.0, 3.9, -1.2, Math.PI],
+  ] as const) {
+    b.push([wx, wy, wz], ry);
+    b.box([0.44, 0.54, 0.1], P.wood, { at: [0, 0, -0.02] });
+    b.box([0.32, 0.42, 0.05], 0xffffff, { at: [0, 0, 0.04], material: glowMaterials.window });
+    b.pop();
+  }
+  // The cap, the axle and a finial with the pennant's pole.
+  b.add(new THREE.ConeGeometry(1.38, 1.35, 8), P.roof2, { at: [0, 5.66, 0], jitter: 0.05 });
+  b.add(new THREE.CylinderGeometry(0.13, 0.16, 0.9, 6), P.wood, { at: [0, 5.25, 1.25], rot: [Math.PI / 2, 0, 0] });
+  b.add(new THREE.CylinderGeometry(0.03, 0.035, 0.9, 5), P.iron, { at: [0, 6.75, 0], material: materials.metal });
+  b.add(new THREE.SphereGeometry(0.07, 6, 4), P.brass, { at: [0, 7.22, 0], material: materials.metal });
+  b.pop();
+
+  // The sails: a spar each, with a lattice of canvas on one side.
+  const s = new ModelBuilder();
+  s.add(new THREE.CylinderGeometry(0.22, 0.22, 0.2, 8), P.woodLight, { rot: [Math.PI / 2, 0, 0] });
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 2;
+    const along = (side: number, r: number): [number, number, number] => [side * Math.cos(a) - r * Math.sin(a), side * Math.sin(a) + r * Math.cos(a), 0];
+    const at = (side: number, r: number, depth: number): [number, number, number] => [...along(side, r).slice(0, 2), depth] as [number, number, number];
+    s.box([0.13, 3.45, 0.11], P.wood, { at: along(0, 1.75), rot: [0, 0, a] });
+    // Canvas behind a lattice: bars across, and a frame along the outer edge.
+    s.box([0.74, 2.55, 0.025], 0xe9dcc0, { at: at(0.5, 2.0, -0.03), rot: [0, 0, a] });
+    for (const r of [0.75, 1.3, 1.85, 2.4, 2.95, 3.28]) s.box([0.92, 0.05, 0.05], P.wood, { at: at(0.46, r, 0.03), rot: [0, 0, a] });
+    s.box([0.06, 2.6, 0.06], P.wood, { at: at(0.9, 2.0, 0.03), rot: [0, 0, a] });
+  }
+  const sails = s.build("windmill-sails");
+  sails.position.set(0, 5.25, 1.75);
+  sails.rotation.z = 0.35;
+
+  const pennant = wavingFlag(0.85, 0.36, P.purple, true);
+  pennant.mesh.position.set(0, 7.05, 0);
+  // It streams out behind the sails (downwind).
+  pennant.mesh.rotation.y = Math.PI / 2;
+
+  const moving = new THREE.Group();
+  moving.name = "windmill";
+  moving.position.set(x, y, z);
+  moving.rotation.y = turn;
+  moving.add(sails, pennant.mesh);
+  return { moving, sails, pennant };
 }
 
 /** The trees around the village: x, z and size. */
@@ -415,6 +485,8 @@ export function createWorld(): World {
   riverBanks(b);
   trees(b);
   props(b);
+  const mill = windmill(b);
+  group.add(mill.moving);
   // Grass, wildflowers, boulders, reeds and garden fences (nature.ts), clear of the trees.
   const trunks: KeepOut[] = [...AROUND_TREES.map(([x, z, s]): KeepOut => [x, z, 0.9 * s]), [-24, -12.5, 1.4]];
   const nature = addNature(b, foliage, trunks);
@@ -442,9 +514,12 @@ export function createWorld(): World {
   return {
     group,
     flowers: nature.flowers,
-    update: (_dt, t) => {
+    update: (dt, t) => {
       water.uniforms.time.value = t;
       windUniforms.time.value = t;
+      // The sails turn with the wind (dt is 0 in still mode, so they hold still).
+      mill.sails.rotation.z += dt * 0.55 * windUniforms.strength.value;
+      mill.pennant.update(dt, dt === 0);
     },
     setSky: (light) => {
       water.uniforms.skyHorizon.value.set(light.horizon);

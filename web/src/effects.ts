@@ -67,6 +67,10 @@ export class Effects {
   private windTimer = 2;
   /** 0 = day, 1 = night. */
   night = 0;
+  /** How windy it is (1 = a breeze; render/life-rules.ts). Chimney smoke leans with it. */
+  breeze = 1;
+  /** How many hearth fires are lit, 0 to 1: smoke lasts longer in the evening and the cold. */
+  fires = 0;
   /** Still mode (--no-animation or reduced motion): nothing drifts, rises or puffs. */
   still = false;
 
@@ -127,9 +131,9 @@ export class Effects {
     const p = this.smoke.spawn();
     if (!p) return;
     p.mesh.position.copy(at);
-    p.life = strong ? 3.4 : 2.8;
-    p.size = strong ? 1.25 : 0.9;
-    p.velocity.set(0.25 + Math.random() * 0.2, 0.75 + Math.random() * 0.3, (Math.random() - 0.5) * 0.15);
+    p.life = (strong ? 3.4 : 2.8) * (1 + 0.35 * this.fires);
+    p.size = (strong ? 1.25 : 0.9) * (1 + 0.2 * this.fires);
+    p.velocity.set((0.2 + Math.random() * 0.15) * this.breeze, 0.75 + Math.random() * 0.3, (Math.random() - 0.5) * 0.15);
     p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, 0);
   }
 
@@ -177,6 +181,8 @@ export class Effects {
       p.age += dt;
       const k = p.age / p.life;
       p.mesh.position.addScaledVector(p.velocity, dt);
+      // The higher it rises, the more the wind bends it over.
+      p.mesh.position.x += dt * k * 0.6 * this.breeze;
       p.mesh.scale.setScalar(p.size * (0.4 + k * 1.3));
       p.mesh.rotation.y += dt * 0.4;
       p.mesh.material.opacity = (k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85) * 0.8;

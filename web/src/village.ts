@@ -283,9 +283,9 @@ export class Village {
       if (id !== "harbor") {
         const model = this.models[id];
         model.update(dt, t, active, this.still);
-        // Chimney smoke: always a little, more when busy.
+        // Chimney smoke: always a little, more when busy, and in the evening and the cold.
         model.chimneys.forEach((c, i) => {
-          if (this.every(`smoke-${id}-${i}`, active ? (id === "workshop" ? 0.18 : 0.3) : 0.8, dt)) {
+          if (this.every(`smoke-${id}-${i}`, active ? (id === "workshop" ? 0.18 : 0.3) : 0.8 / (1 + 1.2 * this.effects.fires), dt)) {
             this.effects.puff(model.group.localToWorld(c.clone()), active);
           }
         });

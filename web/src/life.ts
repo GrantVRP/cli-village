@@ -1,6 +1,6 @@
 // Life around the village: birds over the rooftops, butterflies in the gardens in spring
-// and summer, fireflies on warm evenings, ducks on the river, a cat on a bench and two
-// villagers going about their day. None of it is about the work; it makes the village
+// and summer, fireflies on warm evenings, ducks on the river, a cat on a bench, two
+// villagers going about their day and a fisherman in a rowboat. None of it is about the work; it makes the village
 // feel lived in. Everything follows the light, the season and the weather (birds shelter
 // from rain, the villagers go indoors at night). It is seeded, so it looks the same each
 // time, and in still mode (reduced motion) it holds one fixed pose.
@@ -8,6 +8,7 @@
 import * as THREE from "three";
 import { RIVER_HALF, RIVER_Z, SPOTS } from "./layout.js";
 import { makeRandom, ModelBuilder } from "./lowpoly.js";
+import { P } from "./palette.js";
 import { birdsWanted, butterfliesWanted, catAwake, firefliesWanted, lanternLight, type LifeConditions, smooth, villagersOut } from "./render/life-rules.js";
 import type { Tier } from "./render/quality.js";
 import { keepDry } from "./render/weathering.js";
@@ -578,6 +579,114 @@ class Villagers {
   }
 }
 
+// --- A rowboat on the far side of the river, tied up, with a fisherman by day ----------------
+
+/**
+ * The mooring post at the edge of the far bank. The boat lies downstream of it on a short
+ * rope, close in to the bank, so it and the fishing line stay clear of the boats' lane.
+ */
+const MOORING = new THREE.Vector3(-21.4, 0, RIVER_Z - RIVER_HALF - 0.55);
+const ROPE = 2.4;
+/** The rod, in the boat's own frame: where it's held, how long, how far it leans out. */
+const ROD = { base: new THREE.Vector3(0.3, 0.42, -0.5), length: 1.6, lean: 0.6 };
+const FLOAT = new THREE.Vector3(1.0, 0.03, -0.5);
+
+function rowboat(): THREE.Group {
+  const b = new ModelBuilder();
+  // A solid hull, narrowing to a point at the bow and towards the keel.
+  const hull = new THREE.BoxGeometry(0.9, 0.34, 1.9, 1, 1, 2);
+  const p = hull.getAttribute("position");
+  for (let i = 0; i < p.count; i++) {
+    const [x, y, z] = [p.getX(i), p.getY(i), p.getZ(i)];
+    const bow = z > 0.5;
+    p.setXYZ(i, x * (bow ? 0.08 : z < -0.5 ? 0.85 : 1) * (y < 0 ? 0.62 : 1), y + (bow && y > 0 ? 0.08 : 0), z);
+  }
+  b.add(hull, P.woodLight, { at: [0, 0.05, 0] });
+  // Inside (the floor between the sides), the gunwale, two seats and the oars shipped along the sides.
+  b.box([0.62, 0.03, 0.95], P.wood, { at: [0, 0.215, -0.4] });
+  // The gunwale follows the hull: straight along the sides, then in to the bow.
+  for (const s of [-1, 1]) {
+    b.box([0.06, 0.06, 0.95], P.wood, { at: [s * 0.42, 0.23, -0.47] });
+    b.box([0.06, 0.06, 1.04], P.wood, { at: [s * 0.21, 0.27, 0.47], rot: [0, -s * 0.425, 0] });
+  }
+  for (const [z, w] of [[-0.55, 0.82], [0.12, 0.66]] as const) b.box([w, 0.05, 0.2], P.wood, { at: [0, 0.27, z] });
+  for (const s of [-1, 1]) b.box([0.05, 0.04, 1.2], P.trunk, { at: [s * 0.27, 0.3, -0.25], rot: [0, s * 0.04, 0] });
+  return b.build("rowboat");
+}
+
+class Rowboat {
+  readonly group = new THREE.Group();
+  private readonly boat = new THREE.Group();
+  private readonly rope: THREE.Mesh;
+  private readonly fisher: ReturnType<typeof villager>;
+  private readonly rod = new THREE.Group();
+  private readonly line: THREE.Mesh;
+  private readonly float: THREE.Object3D;
+
+  constructor() {
+    this.boat.add(rowboat());
+    // The post it's tied to.
+    const post = new ModelBuilder();
+    post.add(new THREE.CylinderGeometry(0.09, 0.11, 1.3, 6), P.wood, { at: [MOORING.x, 0.1, MOORING.z] });
+    this.group.add(post.build("mooring"));
+    const rope = new ModelBuilder();
+    rope.add(new THREE.CylinderGeometry(0.02, 0.02, 1, 4), 0xcbb98f, { at: [0, 0.5, 0] });
+    this.rope = rope.build("rope").children[0] as THREE.Mesh;
+    this.rope.castShadow = false;
+    // The fisherman sits on the back seat, looking out over the water with a rod and a float.
+    this.fisher = villager(0x4f6478, "straw");
+    this.fisher.group.position.set(0, 0.27 - 0.5, -0.5);
+    this.fisher.group.rotation.y = Math.PI / 2;
+    this.fisher.lantern.scale.setScalar(0.001);
+    const r = new ModelBuilder();
+    r.add(new THREE.CylinderGeometry(0.012, 0.022, ROD.length, 4), P.trunk, { at: [0, ROD.length / 2, 0] });
+    this.rod.add(r.build("rod"));
+    this.rod.position.copy(ROD.base);
+    // The line hangs from the rod's tip to a float on the water.
+    const l = new ModelBuilder();
+    l.add(new THREE.CylinderGeometry(0.006, 0.006, 1, 3), 0xe8e2d4, { at: [0, 0.5, 0] });
+    this.line = l.build("line").children[0] as THREE.Mesh;
+    this.line.castShadow = false;
+    const fl = new ModelBuilder();
+    fl.add(new THREE.SphereGeometry(0.05, 6, 4), 0xe39a4a, { scale: [1, 0.8, 1] });
+    fl.add(new THREE.SphereGeometry(0.035, 6, 4), 0xf0ebe0, { at: [0, 0.035, 0] });
+    this.float = fl.build("float");
+    this.float.position.copy(FLOAT);
+    this.boat.add(this.fisher.group, this.rod, this.line, this.float);
+    this.group.add(this.boat, this.rope);
+  }
+
+  update(t: number, c: LifeConditions): void {
+    // It swings slowly on its rope as the current eddies, and bobs.
+    const swing = 0.35 + Math.sin(t * 0.11) * 0.07 + Math.sin(t * 0.047 + 1) * 0.04;
+    const dir = tmpV.set(Math.cos(swing), 0, Math.sin(swing));
+    this.boat.position.set(MOORING.x + dir.x * ROPE, WATER_Y - 0.02 + Math.sin(t * 1.7) * 0.02, MOORING.z + dir.z * ROPE);
+    // The bow points back up the rope to the post.
+    this.boat.rotation.set(Math.sin(t * 1.1) * 0.02, Math.atan2(-dir.x, -dir.z), Math.sin(t * 1.3) * 0.04, "YXZ");
+    const bow = new THREE.Vector3(0, 0.25, 1.0).applyEuler(this.boat.rotation).add(this.boat.position);
+    const top = new THREE.Vector3(MOORING.x, 0.65, MOORING.z);
+    const along = bow.clone().sub(top);
+    this.rope.position.copy(top);
+    this.rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.clone().normalize());
+    this.rope.scale.set(1, along.length(), 1);
+    // The fisherman is out by day (as the villagers are), holding the rod with both hands.
+    const out = villagersOut(c);
+    for (const o of [this.fisher.group, this.rod, this.line, this.float]) o.visible = out;
+    if (!out) return;
+    this.fisher.legs.forEach((leg) => (leg.rotation.x = -1.45));
+    this.fisher.body.position.y = 0.03;
+    this.fisher.arms.forEach((arm) => (arm.rotation.x = -1.05 + Math.sin(t * 0.9) * 0.04));
+    const lean = ROD.lean + Math.sin(t * 0.9) * 0.03;
+    this.rod.rotation.z = -lean;
+    const tip = ROD.base.clone().add(new THREE.Vector3(Math.sin(lean), Math.cos(lean), 0).multiplyScalar(ROD.length));
+    this.float.position.y = FLOAT.y + Math.sin(t * 2.3) * 0.015;
+    const drop = this.float.position.clone().sub(tip);
+    this.line.position.copy(tip);
+    this.line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), drop.clone().normalize());
+    this.line.scale.set(1, drop.length(), 1);
+  }
+}
+
 // --- All of it -----------------------------------------------------------------------------
 
 export class Life {
@@ -588,6 +697,7 @@ export class Life {
   private readonly ducks = new Ducks();
   private readonly cat = new Cat();
   private readonly villagers: Villagers;
+  private readonly rowboat = new Rowboat();
 
   /** `flowers`: where the patches of wildflowers are (the butterflies visit them). */
   constructor(material: THREE.Material, flowers: readonly [number, number][]) {
@@ -595,7 +705,7 @@ export class Life {
     this.birds = new Birds(material);
     this.butterflies = new Butterflies(material, flowers);
     this.villagers = new Villagers(flowers);
-    this.group.add(this.birds.body, ...this.birds.wings, ...this.butterflies.wings, this.fireflies.points, this.ducks.group, this.cat.group, this.villagers.group);
+    this.group.add(this.birds.body, ...this.birds.wings, ...this.butterflies.wings, this.fireflies.points, this.ducks.group, this.cat.group, this.villagers.group, this.rowboat.group);
     // Creatures look the same in any weather (no snow on a duck's back).
     keepDry(this.group);
     this.setTier("high");
@@ -621,6 +731,7 @@ export class Life {
     this.ducks.update(t);
     this.cat.update(step, t, c);
     this.villagers.update(t, c);
+    this.rowboat.update(t, c);
   }
 }
 

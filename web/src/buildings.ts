@@ -3,6 +3,7 @@
 
 import * as THREE from "three";
 import type { Building } from "../../src/events/types.js";
+import { wavingFlag } from "./flag.js";
 import { glowMesh, makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
 
@@ -383,32 +384,16 @@ function townhall(): BuildingModel {
   b.add(new THREE.SphereGeometry(0.09, 6, 4), P.brass, { at: [0, roofY + 4.38, tz], material: materials.metal });
   const group = b.build("townhall");
 
-  // The flag waves (its shape changes every frame).
-  const flagGeo = new THREE.PlaneGeometry(1.5, 0.85, 10, 4);
-  flagGeo.translate(0.75, 0, 0);
-  const flag = new THREE.Mesh(
-    flagGeo,
-    new THREE.MeshStandardMaterial({ color: P.purple, flatShading: true, side: THREE.DoubleSide, roughness: 0.8 }),
-  );
-  flag.position.set(0.05, roofY + 3.85, tz);
-  flag.castShadow = true;
-  group.add(flag);
-  const base = (flagGeo.getAttribute("position").array as Float32Array).slice();
-  const pos = flagGeo.getAttribute("position");
+  // The flag waves in the wind (flag.ts), faster while the village is busy.
+  const flag = wavingFlag(1.5, 0.85, P.purple);
+  flag.mesh.position.set(0.05, roofY + 3.85, tz);
+  group.add(flag.mesh);
   return {
     id: "townhall",
     group,
     chimneys: info.chimneyTop ? [info.chimneyTop] : [],
     extras: {},
-    update: (_dt, t, active) => {
-      const speed = active ? 6 : 3.5;
-      for (let i = 0; i < pos.count; i++) {
-        const x = base[i * 3]!;
-        pos.setZ(i, Math.sin(x * 3 - t * speed) * 0.12 * x);
-      }
-      pos.needsUpdate = true;
-      flagGeo.computeVertexNormals();
-    },
+    update: (dt, _t, active, still) => flag.update(dt, still, active),
   };
 }
 
