@@ -127,7 +127,7 @@ The shadow pass uses a depth material with the same displacement, so shadows swa
 
 Grass, wildflowers, mossy boulders, reeds and garden fences, placed from their own random numbers (so nothing else in the village moves) and kept clear of the plaza, paths, rails, buildings, props, trees and river. Grass grows in patches, thicker where a smooth "lushness" pattern says so, and along the edges where nobody walks: beside the paths and round the buildings' feet.
 
-On Medium and High a second layer of grass, with its own random numbers, fills the meadows out (about twice as much). Low keeps only the first, so the rest of the village is the same either way.
+On Medium and High a second layer of grass, with its own random numbers, fills the meadows out: about 30,000 more blades on top of the first 16,000, so three times the grass. Low keeps only the first, so the rest of the village is the same either way.
 
 Three tricks keep the tens of thousands of blades cheap and in the style:
 - **Blades go straight into one buffer.** A blade is a thin three-sided spike, three triangles, darker at the root and lighter at the tip, written as numbers. With a shape object and a matrix per blade, building the grass took over half a second at start-up.
