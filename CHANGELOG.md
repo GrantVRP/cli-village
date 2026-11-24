@@ -4,6 +4,11 @@ What changed in CLI Village, newest first. Each step was built and merged as its
 
 ## Unreleased
 
+- **Step 26:** weather and seasons ([docs/RENDERING.md](docs/RENDERING.md#weather-and-seasons-weatherts-weatheringts-precipitationts)):
+  - the work brings the weather: cloud and rain while there's an unfixed problem, a storm when the gate stops a secret; otherwise clouds come and go over minutes, now and then a light shower;
+  - the season from this computer's calendar (the time zone says which half of the world): blossom in spring, gold, orange and red trees and falling leaves in autumn, snow on roofs and fields in winter, trodden off the plaza and paths;
+  - grey, soft light under cloud, drifting cloud shadows, wet ground and puddles in rain, rain and snow falling (nothing falls with reduced motion);
+  - `w` in the village, or View › Weather and Seasons in the desktop app, turns it all off: then the village is exactly as before. `?weather=` and `?season=` pin them.
 - **Step 25:** nature details ([docs/RENDERING.md](docs/RENDERING.md#nature-details-naturets)): grass across the meadows and along the paths and buildings (three times as thick on Medium and High), with dark roots and light tips, wildflowers in soft colours, mossy boulders with pebbles, reeds and cattails along both river banks, and low wooden fences round the cottage gardens (open at the front, where the robots walk). The rest of the village is exactly as before.
 - **Step 24:** a new night, designed from how film, painting and games show moonlight ([docs/RENDERING.md](docs/RENDERING.md#the-night)):
   - a slate-blue moonlit night instead of a dark green one: night vision fades dim colours toward slate blue while the lamps stay warm;
