@@ -14,6 +14,7 @@ import { Harbor } from "./harbor.js";
 import { HARBOR, route, SPOTS, standPoint } from "./layout.js";
 import type { BubbleMode, Overlay } from "./overlay.js";
 import { P } from "./palette.js";
+import { chatAt, chatPairs, reactionsTo } from "./render/reactions.js";
 import { Robot } from "./robot.js";
 
 const BUBBLE_MS = 4500;
@@ -54,6 +55,10 @@ export class Village {
   /** What the caption suggests before any work arrives (the desktop app says where its terminal is). */
   waitingHint = WAITING;
   private fresh = false;
+  /** The newest log entry the robots have reacted to (older ones are never acted out). */
+  private reactedTo = -1;
+  /** Buildings that had an unfixed problem at the last sync (to tell a fix from a plain done). */
+  private problems = new Set<string>();
   private readonly tmp = new THREE.Vector3();
 
   constructor(
@@ -154,6 +159,17 @@ export class Village {
       }
     }
 
+    // Reactions: a wave for a job done, a cheer for a fix or a push. Only for what happens
+    // from now on: catching up (or still mode) acts nothing out.
+    const problems = new Set(BUILDINGS.filter((id) => state.buildings[id].problem));
+    if (!snap && this.reactedTo >= 0) {
+      for (const r of reactionsTo(state.log, this.reactedTo, this.problems, problems, this.resting())) {
+        this.robots.get(r.agent)?.robot.react(r.gesture, r.delay);
+      }
+    }
+    this.reactedTo = Math.max(this.reactedTo, state.lastSeq);
+    this.problems = problems;
+
     for (const id of BUILDINGS) {
       const b = state.buildings[id];
       this.overlay.setLabel(id, b.problem ? "problem" : b.working.length ? "active" : "idle");
@@ -243,6 +259,18 @@ export class Village {
     return false;
   }
 
+  /** Robots standing at home with nothing to do, by name (so pairs stay the same). */
+  private resting(): string[] {
+    const agents = this.state?.agents ?? {};
+    return [...this.robots.keys()]
+      .filter((name) => {
+        const agent = agents[name];
+        // ("walking" stays the status after arriving, until the next job.)
+        return agent?.location === "home" && agent.status !== "working" && agent.status !== "failed" && !this.robots.get(name)!.robot.walking;
+      })
+      .sort();
+  }
+
   update(dt: number, t: number): void {
     const state = this.state;
     const now = Date.now();
@@ -277,11 +305,25 @@ export class Village {
       this.alarms[id].intensity = problem && id !== "harbor" ? 32 + Math.sin(t * 5) * 12 : 0; // the harbor has its own alarm
     }
 
+    // Robots resting at home chat in pairs, now and then (not in still mode).
+    const resting = this.still ? [] : this.resting();
+    const chatting = new Set<string>();
+    chatPairs(resting).forEach(([a, b], i) => {
+      const { chatting: on, speaker } = chatAt(t, i);
+      if (!on) return;
+      const ra = this.robots.get(a)!.robot;
+      const rb = this.robots.get(b)!.robot;
+      ra.chat(rb, speaker === 0);
+      rb.chat(ra, speaker === 1);
+      chatting.add(a).add(b);
+    });
+    for (const [name, info] of this.robots) if (!chatting.has(name)) info.robot.chat(null);
+
     // Robots and their speech bubbles.
     const headlineAgent = state?.headline.agent;
     const wanted: { name: string; text: string; mode: BubbleMode; failed: boolean; saidAt: number; box: Box | null }[] = [];
     for (const [name, info] of this.robots) {
-      info.robot.update(dt, t, this.effects.trailSink);
+      info.robot.update(dt, t, this.effects.trailSink, this.still);
       const agent = state?.agents[name];
       let mode: BubbleMode = "hidden";
       if (info.said && agent) {

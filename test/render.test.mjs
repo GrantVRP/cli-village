@@ -283,3 +283,49 @@ describe("weather and seasons", options, async () => {
     assert.ok(storm.exposure < rain.exposure && storm.sunIntensity < rain.sunIntensity);
   });
 });
+
+describe("robot reactions", options, async () => {
+  const r = canRunTypeScript ? await load("reactions") : null;
+  const none = new Set();
+
+  it("waves for a job done, cheers for a fix, and acts out nothing from before", () => {
+    const log = [
+      { seq: 1, type: "done", agent: "Bolt", building: "vault" },
+      { seq: 2, type: "fail", agent: "Sprocket", building: "lab" },
+      { seq: 3, type: "done", agent: "Rivet", building: "lab" },
+      { seq: 4, type: "start", agent: "Pip", building: "library" },
+    ];
+    // Rivet's done cleared the lab's problem; Bolt's done was already seen.
+    assert.deepEqual(r.reactionsTo(log, 1, new Set(["lab"]), none), [{ agent: "Rivet", gesture: "cheer", delay: 0 }]);
+    // The same done with the problem still there is a plain wave; a failure is no gesture (the slump is a pose).
+    assert.deepEqual(r.reactionsTo(log, 0, new Set(["lab"]), new Set(["lab"])), [
+      { agent: "Bolt", gesture: "wave", delay: 0 },
+      { agent: "Rivet", gesture: "wave", delay: 0 },
+    ]);
+    assert.deepEqual(r.reactionsTo(log, 4, none, none), []);
+  });
+
+  it("cheers a push: the robot that pushed, then the ones resting at home, one after another", () => {
+    const log = [
+      { seq: 7, type: "done", agent: "Rivet", building: "harbor" },
+      { seq: 8, type: "push", agent: "Rivet", building: "harbor" },
+    ];
+    const out = r.reactionsTo(log, 6, none, none, ["Bolt", "Pip", "Rivet"]);
+    // The cheer wins over the wave for Rivet; nobody reacts twice.
+    assert.deepEqual(out.map((x) => [x.agent, x.gesture]), [["Rivet", "cheer"], ["Bolt", "cheer"], ["Pip", "cheer"]]);
+    assert.equal(out[0].delay, 0);
+    assert.ok(out[1].delay > 0 && out[2].delay > out[1].delay);
+  });
+
+  it("pairs resting robots and lets each pair talk in turns, not all at once", () => {
+    assert.deepEqual(r.chatPairs(["Bolt", "Mayor", "Pip"]), [["Bolt", "Mayor"]]);
+    assert.deepEqual(r.chatPairs(["A", "B", "C", "D"]), [["A", "B"], ["C", "D"]]);
+    const seconds = Array.from({ length: 220 }, (_, i) => i * 0.05);
+    const talking = seconds.filter((t) => r.chatAt(t, 0).chatting).length / seconds.length;
+    assert.ok(talking > 0.3 && talking < 0.45, `talks ${Math.round(talking * 100)}% of the time`);
+    const speakers = new Set(seconds.filter((t) => r.chatAt(t, 0).chatting).map((t) => r.chatAt(t, 0).speaker));
+    assert.deepEqual([...speakers].sort(), [0, 1]);
+    // Two pairs don't start together.
+    assert.notDeepEqual(seconds.map((t) => r.chatAt(t, 0).chatting), seconds.map((t) => r.chatAt(t, 1).chatting));
+  });
+});
