@@ -123,6 +123,16 @@ Trees are merged into one mesh with everything else that doesn't move, which kee
 
 The shadow pass uses a depth material with the same displacement, so shadows sway with the trees. Flat shading takes its normals from screen-space derivatives, so the lighting follows the moved faces for free.
 
+## Nature details (`nature.ts`)
+
+Grass, wildflowers, mossy boulders, reeds and garden fences, placed from their own random numbers (so nothing else in the village moves) and kept clear of the plaza, paths, rails, buildings, props, trees and river. Grass grows in patches, thicker where a smooth "lushness" pattern says so, and along the edges where nobody walks: beside the paths and round the buildings' feet.
+
+Two tricks keep the thousands of small things cheap and in the style:
+- **Grass is lit as if it faced up**, like the ground it grows from. Thin blades lit by their own steep faces look dark from above.
+- **The tiny things don't write depth** and are drawn after the other solid things, so everything still hides them correctly, but ambient occlusion, depth of field and the haze see the ground under them, as they would a decal. Otherwise the occlusion finds a crease round every blade and turns the grass black. They cast no shadows either: theirs would be too small to see.
+
+Boulders, reeds and fences are merged with the rest of the village (no extra draw calls) and cast shadows; reeds sway with the trees.
+
 ## Finish (`passes.ts`, FinishPass)
 
 This pass runs after tone mapping:
