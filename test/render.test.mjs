@@ -329,3 +329,48 @@ describe("robot reactions", options, async () => {
     assert.notDeepEqual(seconds.map((t) => r.chatAt(t, 0).chatting), seconds.map((t) => r.chatAt(t, 1).chatting));
   });
 });
+
+describe("village life", options, async () => {
+  const l = canRunTypeScript ? await load("life-rules") : null;
+  const at = (night, more = {}) => ({ night, rain: 0, snowfall: 0, spring: 0, autumn: 0, winter: 0, still: false, ...more });
+  const DUSK = 0.85; // the app opens at dusk
+
+  it("fills the default dusk: birds still flying, fireflies out, villagers out with lit lanterns", () => {
+    assert.ok(l.birdsWanted(at(DUSK)) > 0.9);
+    assert.ok(l.firefliesWanted(at(DUSK)) > 0.9);
+    assert.equal(l.villagersOut(at(DUSK)), true);
+    assert.ok(l.lanternLight(DUSK) > 0.9);
+    assert.equal(l.catAwake(at(DUSK)), true);
+    // Butterflies are a daytime thing.
+    assert.equal(l.butterfliesWanted(at(DUSK)), 0);
+  });
+
+  it("by day: birds and butterflies, no fireflies, no lanterns", () => {
+    assert.equal(l.birdsWanted(at(0)), 1);
+    assert.equal(l.butterfliesWanted(at(0)), 1);
+    assert.equal(l.firefliesWanted(at(0)), 0);
+    assert.equal(l.lanternLight(0), 0);
+  });
+
+  it("at night everyone is home: no birds or villagers, the cat asleep, fireflies out", () => {
+    assert.equal(l.birdsWanted(at(1)), 0);
+    assert.equal(l.villagersOut(at(1)), false);
+    assert.equal(l.catAwake(at(1)), false);
+    assert.equal(l.firefliesWanted(at(1)), 1);
+  });
+
+  it("shelters from the weather and follows the seasons", () => {
+    for (const wet of [{ rain: 1 }, { snowfall: 1 }]) {
+      assert.equal(l.birdsWanted(at(0, wet)), 0);
+      assert.equal(l.butterfliesWanted(at(0, wet)), 0);
+      assert.equal(l.firefliesWanted(at(1, wet)), 0);
+      assert.equal(l.villagersOut(at(0, wet)), false);
+      assert.equal(l.catAwake(at(0, wet)), false);
+    }
+    // No butterflies or fireflies in winter; fewer butterflies in autumn.
+    assert.equal(l.butterfliesWanted(at(0, { winter: 1 })), 0);
+    assert.equal(l.firefliesWanted(at(1, { winter: 1 })), 0);
+    const autumn = l.butterfliesWanted(at(0, { autumn: 1 }));
+    assert.ok(autumn > 0 && autumn < 0.5);
+  });
+});

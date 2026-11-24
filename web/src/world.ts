@@ -61,6 +61,8 @@ export interface World {
   setSky(light: Lighting): void;
   /** Show the extra grass (on the graphics settings that can afford it). */
   setDenseGrass(on: boolean): void;
+  /** Where the patches of wildflowers are (x, z). */
+  flowers: readonly [number, number][];
 }
 
 const rng = makeRandom(7);
@@ -439,6 +441,7 @@ export function createWorld(): World {
 
   return {
     group,
+    flowers: nature.flowers,
     update: (_dt, t) => {
       water.uniforms.time.value = t;
       windUniforms.time.value = t;
