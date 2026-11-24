@@ -245,6 +245,7 @@ $ cli-village commit -m "Add payments"
 `cli-village open` (or `open --demo`) starts a small web server on your own computer and opens the village in your browser. Your terminal shows the address. It looks like `http://127.0.0.1:53021/?token=…`, and only works on this computer.
 
 - Each robot is an agent. When it starts a task it walks to that kind of building: secrets → VAULT, research → LIBRARY, code → WORKSHOP, tests → LAB, planning → TOWN HALL, commits and pushes → GITHUB HARBOR. Idle robots rest at HOME.
+- Robots react: a wave when they finish a job, a cheer when they fix a problem or push (the robots resting at home join in), a slump while their task has failed. Robots resting at home chat in pairs.
 - Busy buildings send up cyan rings. Problems glow red and get a ✖ on their label.
 - The glass column in the plaza shows the village's health: green → yellow → orange → red.
 - At the GITHUB HARBOR, each snapshot is a crate on a rail cart. The cart stops at the gate while it's scanned: a leak keeps it there under a red light, a clean scan lifts the barrier, and the cart waits at the dock (up to 3 crates drawn) until a push sails the boat away. A snapshot saved without a scan waits on a pallet beside the gate until the check before the next push.
@@ -270,10 +271,12 @@ Everything is built from simple shapes in code (no image textures) with [three.j
 - grass in patches across the meadows and along the paths, wildflowers, mossy boulders, reeds and cattails at the water's edge, and low fences round the cottage gardens;
 - weather that follows the work: cloud and rain while there's an unfixed problem, a storm when the gate stops a secret, and otherwise clouds that come and go, with drifting cloud shadows;
 - the season from your computer's calendar: blossom in spring, gold and red trees and falling leaves in autumn, snow on the roofs and fields in winter (`w`, or View › Weather and Seasons in the desktop app, turns weather and seasons off);
+- life that isn't about the work: birds circling over the rooftops, butterflies on the wildflowers, fireflies on warm evenings, ducks on the river, a cat on a bench, two villagers going about their day (with lanterns at dusk), a fisherman in a rowboat, and a windmill on the far bank. They follow the light, the season and the weather: everyone goes home at night or in the rain;
+- one wind for everything: the trees, the flags, the chimney smoke and the windmill all move more in a storm. Chimneys smoke more on cold evenings;
 - lamps that light the ground around them after dark;
 - a real depth of field (the tilt-shift look), focused on whatever the camera looks at.
 
-It picks how much of this your computer can draw, and steps down by itself if the picture gets slow. To choose yourself: View › Graphics Quality in the desktop app, or add `&quality=low`, `medium` or `high` to the page's address. In still mode the wind, water and clouds stand still too. [docs/RENDERING.md](docs/RENDERING.md) explains how each effect works.
+It picks how much of this your computer can draw, and steps down by itself if the picture gets slow. To choose yourself: View › Graphics Quality in the desktop app, or add `&quality=low`, `medium` or `high` to the page's address. In still mode the wind, water, clouds and the village's life stand still too. [docs/RENDERING.md](docs/RENDERING.md) explains how each effect works.
 
 ## The desktop app
 
@@ -356,6 +359,7 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 24. A new night: slate-blue moonlight, night vision, stars and a faint Milky Way, the moon glittering on the river
 - [x] 25. Nature details: grass, wildflowers, mossy boulders, reeds and garden fences
 - [x] 26. Weather and seasons: rain when work has problems, drifting clouds, and the season from the calendar
+- [x] 27. Village life: robots that react, birds, butterflies, fireflies, ducks, a cat, villagers, a fisherman, a windmill, flags in the wind and more smoke
 
 ## License
 
