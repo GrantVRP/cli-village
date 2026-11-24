@@ -61,8 +61,9 @@ class Birds {
       w.add(new THREE.OctahedronGeometry(0.22, 0), 0x4a4d52, { at: [side * 0.22, 0, -0.02], scale: [1, 0.12, 0.38] });
       return new THREE.InstancedMesh(geometryOf(w), material, MAX.birds);
     });
+    // No shadows: from this high up they'd only be soft smudges on the plaza.
     for (const m of [this.body, ...this.wings]) {
-      m.castShadow = true;
+      m.castShadow = false;
       m.frustumCulled = false;
     }
     this.seeds = Array.from({ length: MAX.birds }, () => [rng(), rng(), rng(), rng()]);
@@ -579,17 +580,23 @@ class Villagers {
   }
 }
 
-// --- A rowboat on the far side of the river, tied up, with a fisherman by day ----------------
+// --- A rowboat on the far side of the river: a fisherman drifts and rows by day -------------
 
-/**
- * The mooring post at the edge of the far bank. The boat lies downstream of it on a short
- * rope, close in to the bank, so it and the fishing line stay clear of the boats' lane.
- */
+/** The mooring post at the edge of the far bank, where the boat is tied up at night. */
 const MOORING = new THREE.Vector3(-21.4, 0, RIVER_Z - RIVER_HALF - 0.55);
 const ROPE = 2.4;
-/** The rod, in the boat's own frame: where it's held, how long, how far it leans out. */
-const ROD = { base: new THREE.Vector3(0.3, 0.42, -0.5), length: 1.6, lean: 0.6 };
-const FLOAT = new THREE.Vector3(1.0, 0.03, -0.5);
+/**
+ * By day the fisherman lets the boat drift down the far bank while he fishes, then turns it
+ * and rows back up, over and over. Close in to the bank, so the float and the oars stay clear of
+ * the boats' lane, and upstream of the library, where the home view sees the water.
+ */
+const TRIP = { from: -29.5, to: -18.5, z: RIVER_Z - RIVER_HALF + 0.95, drift: 80, turn: 5, row: 22 };
+const TRIP_SECONDS = TRIP.drift + TRIP.turn + TRIP.row + TRIP.turn;
+/** The rod, in the boat's own frame: where it's held, how long, how far it leans out (to the boat's left). */
+const ROD = { base: new THREE.Vector3(-0.3, 0.42, -0.5), length: 1.6, lean: 0.6 };
+const FLOAT = new THREE.Vector3(-0.85, 0.03, -0.5);
+/** Where the oars turn, on the gunwale. */
+const OARLOCK = { x: 0.43, y: 0.28, z: 0.02 };
 
 function rowboat(): THREE.Group {
   const b = new ModelBuilder();
@@ -602,7 +609,7 @@ function rowboat(): THREE.Group {
     p.setXYZ(i, x * (bow ? 0.08 : z < -0.5 ? 0.85 : 1) * (y < 0 ? 0.62 : 1), y + (bow && y > 0 ? 0.08 : 0), z);
   }
   b.add(hull, P.woodLight, { at: [0, 0.05, 0] });
-  // Inside (the floor between the sides), the gunwale, two seats and the oars shipped along the sides.
+  // Inside (the floor between the sides), the gunwale and two seats.
   b.box([0.62, 0.03, 0.95], P.wood, { at: [0, 0.215, -0.4] });
   // The gunwale follows the hull: straight along the sides, then in to the bow.
   for (const s of [-1, 1]) {
@@ -610,8 +617,19 @@ function rowboat(): THREE.Group {
     b.box([0.06, 0.06, 1.04], P.wood, { at: [s * 0.21, 0.27, 0.47], rot: [0, -s * 0.425, 0] });
   }
   for (const [z, w] of [[-0.55, 0.82], [0.12, 0.66]] as const) b.box([w, 0.05, 0.2], P.wood, { at: [0, 0.27, z] });
-  for (const s of [-1, 1]) b.box([0.05, 0.04, 1.2], P.trunk, { at: [s * 0.27, 0.3, -0.25], rot: [0, s * 0.04, 0] });
   return b.build("rowboat");
+}
+
+/** An oar, turning at its oarlock: the handle inboard, the blade out along +x (or -x for the left one). */
+function oar(side: 1 | -1): THREE.Group {
+  const b = new ModelBuilder();
+  b.box([1.25, 0.04, 0.04], P.trunk, { at: [side * 0.25, 0, 0] });
+  b.box([0.3, 0.02, 0.12], P.trunk, { at: [side * 0.8, 0, 0] });
+  const g = new THREE.Group();
+  g.add(b.build("oar"));
+  g.position.set(side * OARLOCK.x, OARLOCK.y, OARLOCK.z);
+  g.rotation.order = "YZX";
+  return g;
 }
 
 class Rowboat {
@@ -622,10 +640,11 @@ class Rowboat {
   private readonly rod = new THREE.Group();
   private readonly line: THREE.Mesh;
   private readonly float: THREE.Object3D;
+  private readonly oars: [THREE.Group, THREE.Group] = [oar(-1), oar(1)];
 
   constructor() {
-    this.boat.add(rowboat());
-    // The post it's tied to.
+    this.boat.add(rowboat(), ...this.oars);
+    // The post it's tied to at night.
     const post = new ModelBuilder();
     post.add(new THREE.CylinderGeometry(0.09, 0.11, 1.3, 6), P.wood, { at: [MOORING.x, 0.1, MOORING.z] });
     this.group.add(post.build("mooring"));
@@ -633,10 +652,7 @@ class Rowboat {
     rope.add(new THREE.CylinderGeometry(0.02, 0.02, 1, 4), 0xcbb98f, { at: [0, 0.5, 0] });
     this.rope = rope.build("rope").children[0] as THREE.Mesh;
     this.rope.castShadow = false;
-    // The fisherman sits on the back seat, looking out over the water with a rod and a float.
     this.fisher = villager(0x4f6478, "straw");
-    this.fisher.group.position.set(0, 0.27 - 0.5, -0.5);
-    this.fisher.group.rotation.y = Math.PI / 2;
     this.fisher.lantern.scale.setScalar(0.001);
     const r = new ModelBuilder();
     r.add(new THREE.CylinderGeometry(0.012, 0.022, ROD.length, 4), P.trunk, { at: [0, ROD.length / 2, 0] });
@@ -657,33 +673,83 @@ class Rowboat {
   }
 
   update(t: number, c: LifeConditions): void {
-    // It swings slowly on its rope as the current eddies, and bobs.
-    const swing = 0.35 + Math.sin(t * 0.11) * 0.07 + Math.sin(t * 0.047 + 1) * 0.04;
-    const dir = tmpV.set(Math.cos(swing), 0, Math.sin(swing));
-    this.boat.position.set(MOORING.x + dir.x * ROPE, WATER_Y - 0.02 + Math.sin(t * 1.7) * 0.02, MOORING.z + dir.z * ROPE);
-    // The bow points back up the rope to the post.
-    this.boat.rotation.set(Math.sin(t * 1.1) * 0.02, Math.atan2(-dir.x, -dir.z), Math.sin(t * 1.3) * 0.04, "YXZ");
-    const bow = new THREE.Vector3(0, 0.25, 1.0).applyEuler(this.boat.rotation).add(this.boat.position);
-    const top = new THREE.Vector3(MOORING.x, 0.65, MOORING.z);
-    const along = bow.clone().sub(top);
-    this.rope.position.copy(top);
-    this.rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.clone().normalize());
-    this.rope.scale.set(1, along.length(), 1);
-    // The fisherman is out by day (as the villagers are), holding the rod with both hands.
     const out = villagersOut(c);
+    const bob = WATER_Y - 0.02 + Math.sin(t * 1.7) * 0.02;
+    this.rope.visible = !out;
     for (const o of [this.fisher.group, this.rod, this.line, this.float]) o.visible = out;
-    if (!out) return;
-    this.fisher.legs.forEach((leg) => (leg.rotation.x = -1.45));
-    this.fisher.body.position.y = 0.03;
-    this.fisher.arms.forEach((arm) => (arm.rotation.x = -1.05 + Math.sin(t * 0.9) * 0.04));
+    if (!out) {
+      // Tied up for the night: it swings slowly on its rope, bow to the post, oars shipped.
+      const swing = 0.35 + Math.sin(t * 0.11) * 0.07 + Math.sin(t * 0.047 + 1) * 0.04;
+      const dir = tmpV.set(Math.cos(swing), 0, Math.sin(swing));
+      this.boat.position.set(MOORING.x + dir.x * ROPE, bob, MOORING.z + dir.z * ROPE);
+      this.boat.rotation.set(Math.sin(t * 1.1) * 0.02, Math.atan2(-dir.x, -dir.z), Math.sin(t * 1.3) * 0.04, "YXZ");
+      const bow = new THREE.Vector3(0, 0.25, 1.0).applyEuler(this.boat.rotation).add(this.boat.position);
+      const top = new THREE.Vector3(MOORING.x, 0.65, MOORING.z);
+      const along = bow.clone().sub(top);
+      this.rope.position.copy(top);
+      this.rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.clone().normalize());
+      this.rope.scale.set(1, along.length(), 1);
+      this.shipOars();
+      return;
+    }
+    // By day: drift down fishing, turn, row back up, turn.
+    const k = t % TRIP_SECONDS;
+    const ease = (f: number) => f * f * (3 - 2 * f);
+    let x: number;
+    let yaw: number;
+    let rowing = true;
+    if (k < TRIP.drift) {
+      rowing = false;
+      x = TRIP.from + (TRIP.to - TRIP.from) * (k / TRIP.drift);
+      yaw = Math.PI / 2; // drifting bow first, downstream
+    } else if (k < TRIP.drift + TRIP.turn) {
+      x = TRIP.to;
+      yaw = Math.PI / 2 - Math.PI * ease((k - TRIP.drift) / TRIP.turn);
+    } else if (k < TRIP.drift + TRIP.turn + TRIP.row) {
+      x = TRIP.to + (TRIP.from - TRIP.to) * ease((k - TRIP.drift - TRIP.turn) / TRIP.row);
+      yaw = -Math.PI / 2; // rowed bow first, upstream
+    } else {
+      x = TRIP.from;
+      yaw = -Math.PI / 2 + Math.PI * ease((k - TRIP.drift - TRIP.turn - TRIP.row) / TRIP.turn);
+    }
+    const stroke = t * 2.6;
+    this.boat.position.set(x, bob, TRIP.z);
+    this.boat.rotation.set(rowing ? Math.sin(stroke) * 0.015 : 0, yaw, Math.sin(t * 1.3) * 0.04, "YXZ");
+    const f = this.fisher;
+    f.legs.forEach((leg) => (leg.rotation.x = -1.45));
+    f.body.position.y = 0.03;
+    this.rod.visible = this.line.visible = this.float.visible = !rowing;
+    if (rowing) {
+      // On the middle seat, facing the stern, pulling on the oars.
+      f.group.position.set(0, 0.27 - 0.5, 0.12);
+      f.group.rotation.y = Math.PI;
+      f.body.rotation.x = -Math.sin(stroke) * 0.18;
+      f.arms.forEach((arm) => (arm.rotation.x = -1.25 + Math.sin(stroke) * 0.45));
+      this.oars.forEach((o, i) => {
+        const side = i === 0 ? -1 : 1;
+        o.rotation.set(0, side * Math.sin(stroke) * 0.5, side * -(0.28 + 0.12 * Math.cos(stroke)));
+      });
+      return;
+    }
+    // On the back seat, facing out over the water (to the boat's left, the village's side), fishing.
+    f.group.position.set(0, 0.27 - 0.5, -0.5);
+    f.group.rotation.y = -Math.PI / 2;
+    f.body.rotation.x = 0;
+    f.arms.forEach((arm) => (arm.rotation.x = -1.05 + Math.sin(t * 0.9) * 0.04));
+    this.shipOars();
     const lean = ROD.lean + Math.sin(t * 0.9) * 0.03;
-    this.rod.rotation.z = -lean;
-    const tip = ROD.base.clone().add(new THREE.Vector3(Math.sin(lean), Math.cos(lean), 0).multiplyScalar(ROD.length));
+    this.rod.rotation.z = lean;
+    const tip = ROD.base.clone().add(new THREE.Vector3(-Math.sin(lean), Math.cos(lean), 0).multiplyScalar(ROD.length));
     this.float.position.y = FLOAT.y + Math.sin(t * 2.3) * 0.015;
     const drop = this.float.position.clone().sub(tip);
     this.line.position.copy(tip);
     this.line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), drop.clone().normalize());
     this.line.scale.set(1, drop.length(), 1);
+  }
+
+  /** Oars in, lying along the sides. */
+  private shipOars(): void {
+    this.oars.forEach((o, i) => o.rotation.set(0, (i === 0 ? -1 : 1) * (Math.PI / 2 - 0.06), 0));
   }
 }
 
