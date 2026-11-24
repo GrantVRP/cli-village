@@ -144,3 +144,56 @@ export function sunDirection(light: Pick<Lighting, "sunElevation" | "sunAzimuth"
   const az = (light.sunAzimuth * Math.PI) / 180;
   return [Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)];
 }
+
+/** A colour towards grey (keeping its brightness, a little cool, like light through cloud), and darker. */
+function dull(c: number, amount: number, darken = 0): number {
+  const lin = [16, 8, 0].map((shift) => toLinear(((c >> shift) & 255) / 255));
+  const y = 0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!;
+  const grey = [y * 0.96, y, y * 1.06];
+  let out = 0;
+  [16, 8, 0].forEach((shift, i) => {
+    const v = (lin[i]! + (grey[i]! - lin[i]!) * amount) * (1 - darken);
+    out |= Math.min(255, Math.max(0, Math.round(toSrgb(Math.max(0, v)) * 255))) << shift;
+  });
+  return out;
+}
+
+/** What the sky is doing, for the light (see weather.ts). */
+export interface SkyCover {
+  overcast: number;
+  rain: number;
+  snowfall: number;
+}
+
+/**
+ * The light under the weather. Cloud takes the sun's direct light and spreads it through the
+ * whole sky: weaker sun, stronger fill, softer and greyer colours, thicker haze, fewer stars.
+ * (Moving cloud shadows on the ground come from weathering.ts.) Snow lying on the ground
+ * throws light back up. A clear sky with no snow is the light exactly as it was.
+ */
+export function withWeather(light: Lighting, sky: SkyCover, snow = 0): Lighting {
+  const o = Math.min(1, Math.max(0, sky.overcast || 0));
+  const falling = Math.min(1, Math.max(0, Math.max(sky.rain || 0, sky.snowfall || 0)));
+  const s = Math.min(1, Math.max(0, snow || 0));
+  if (o === 0 && falling === 0 && s === 0) return light;
+  const storm = smooth(Math.min(1, Math.max(0, (o - 0.85) / 0.15))) * Math.min(1, Math.max(0, sky.rain || 0));
+  const out = { ...light };
+  out.sunIntensity = light.sunIntensity * (1 - 0.5 * o - 0.25 * storm);
+  out.sunColor = dull(light.sunColor, 0.5 * o);
+  out.fillIntensity = light.fillIntensity * (1 + 0.4 * o - 0.35 * storm);
+  out.skyFill = dull(light.skyFill, 0.55 * o);
+  out.zenith = dull(light.zenith, 0.75 * o, 0.22 * o + 0.2 * storm);
+  out.skyMid = dull(light.skyMid, 0.7 * o, 0.18 * o);
+  out.horizon = dull(light.horizon, 0.7 * o, 0.1 * o + 0.15 * storm);
+  out.sunGlow = dull(light.sunGlow, 0.8 * o, 0.5 * o);
+  out.fog = dull(light.fog, 0.55 * o + 0.2 * falling, 0.08 * o + 0.15 * storm);
+  out.fogDensity = light.fogDensity * (1 + 0.5 * o + 0.9 * falling);
+  out.cloudCover = Math.max(light.cloudCover, 0.3 + 0.7 * o);
+  out.cloudColor = dull(light.cloudColor, 0.7 * o, 0.3 * o + 0.3 * storm);
+  out.stars = light.stars * (1 - smooth(o));
+  out.saturation = light.saturation * (1 - 0.14 * o);
+  out.exposure = light.exposure * (1 + 0.1 * o - 0.12 * storm);
+  // Snow on the ground lights things from below, a little.
+  if (s > 0) out.groundFill = mixColor(light.groundFill, dull(light.skyFill, 0.4), s * 0.55);
+  return out;
+}

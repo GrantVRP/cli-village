@@ -19,7 +19,7 @@ import { AtmospherePass, DepthOfFieldPass, FinishPass, ScenePass } from "./passe
 import { FrameBudget, lower, SETTINGS, tierForRenderer, type Tier } from "./quality.js";
 import { installSoftShadows, MARKER as SOFT_SHADOWS, sunSizeToRadius } from "./shadows.js";
 import { Sky } from "./sky.js";
-import { lightingAt, sunDirection, type Lighting } from "./timeline.js";
+import { lightingAt, sunDirection, withWeather, type Lighting, type SkyCover } from "./timeline.js";
 
 export interface PipelineOptions {
   /** A tier asked for in the page address: used as is, and never stepped down. */
@@ -63,6 +63,9 @@ export class Pipeline {
   readonly gpu: string;
   tier: Tier;
   lighting: Lighting = lightingAt(0);
+  /** What the sky is doing, and how much snow is lying (weather.ts): the light follows them. */
+  weather: SkyCover = { overcast: 0, rain: 0, snowfall: 0 };
+  snow = 0;
 
   private readonly skyScene = new THREE.Scene();
   private readonly budget: FrameBudget;
@@ -82,6 +85,8 @@ export class Pipeline {
   private environment: THREE.WebGLRenderTarget | null = null;
   /** The light level the sky's reflection was made for (-1: none yet). */
   private environmentFor = -1;
+  /** The cloud cover it was made for. */
+  private environmentCloud = -1;
   private environmentAt = -Infinity;
   private night = 0;
 
@@ -145,6 +150,7 @@ export class Pipeline {
     }
     if (!s.environment) this.setEnvironment(null);
     this.environmentFor = -1;
+    this.environmentCloud = -1;
     this.environmentAt = -Infinity;
     this.buildComposer();
     this.setLight(this.night);
@@ -199,7 +205,7 @@ export class Pipeline {
   /** Set the time of day: 0 = midday, 1 = night. Returns the light, for the lamps and windows. */
   setLight(k: number): Lighting {
     this.night = k;
-    const L = (this.lighting = lightingAt(k));
+    const L = (this.lighting = withWeather(lightingAt(k), this.weather, this.snow));
     const [x, y, z] = sunDirection(L);
     const dir = new THREE.Vector3(x, y, z);
     this.sun.position.copy(CENTER).addScaledVector(dir, 90);
@@ -258,11 +264,13 @@ export class Pipeline {
       this.applyTier();
       return;
     }
-    // The sky's reflection follows the time of day: rebuilt when it changed enough, and not
-    // every frame while the light fades (pressing n, or the day-night cycle).
+    // The sky's reflection follows the time of day and the clouds: rebuilt when either changed
+    // enough, and not every frame while the light fades (pressing n, or the day-night cycle).
     const now = performance.now();
-    if (SETTINGS[this.tier].environment && Math.abs(this.night - this.environmentFor) > ENVIRONMENT_STEP && now - this.environmentAt > ENVIRONMENT_EVERY) {
+    const changed = Math.abs(this.night - this.environmentFor) > ENVIRONMENT_STEP || Math.abs(this.weather.overcast - this.environmentCloud) > 0.06;
+    if (SETTINGS[this.tier].environment && changed && now - this.environmentAt > ENVIRONMENT_EVERY) {
       this.environmentFor = this.night;
+      this.environmentCloud = this.weather.overcast;
       this.environmentAt = now;
       this.sky.uniforms.stars.value = 0; // no stars in the reflections
       this.setEnvironment(this.pmrem.fromScene(this.skyScene, 0.02, 0.1, 200));
