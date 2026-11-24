@@ -10,9 +10,13 @@ import { shadows } from "./lowpoly.js";
 import { showNoWebGL } from "./no-webgl.js";
 import { Overlay } from "./overlay.js";
 import { Pipeline } from "./render/pipeline.js";
+import { Precipitation } from "./render/precipitation.js";
 import { SETTINGS, tierFromQuery } from "./render/quality.js";
+import { ambientSky, approachSky, FAIR, groundAfter, isSouthern, pinnedSky, seasonLook, seasonOn, stormier, SUMMER, weatherFromQuery, workSky, type SeasonLook, type Sky } from "./render/weather.js";
+import { setPaths, weatherAll, weatherUniforms } from "./render/weathering.js";
 import { Village } from "./village.js";
 import { createWorld, railGlow } from "./world.js";
+import { HARBOR, SPOTS, TRACK_R } from "./layout.js";
 import { WAITING } from "../../src/events/explain.js";
 import { BUILDINGS, type Building } from "../../src/events/types.js";
 import { CSS_NAMES, shadeAt, type Shade } from "../../src/views/colors.js";
@@ -80,6 +84,97 @@ function setStill(value: boolean): void {
 }
 scene.add(world.group, village.group, effects.group);
 
+// --- Weather and seasons ------------------------------------------------------------------
+// (render/weather.ts decides what the sky does; weathering.ts and precipitation.ts show it.)
+
+const precipitation = new Precipitation();
+scene.add(precipitation.group);
+// Snow is trodden off the plaza, the paths and the harbor's rail branch.
+const route = HARBOR.cartRoute;
+setPaths(
+  [
+    ...BUILDINGS.map((id) => {
+      const s = SPOTS[id];
+      return [s.edge, s.door.clone().add(s.door.clone().sub(s.edge).normalize().multiplyScalar(id === "harbor" ? 0.4 : 1.1))] as const;
+    }),
+    ...route.slice(1).map((p, i) => [route[i]!, p] as const),
+  ],
+  TRACK_R + 0.5,
+);
+weatherAll(scene);
+// ?weather=clear|cloudy|rain|storm|snow pins the sky, ?weather=off turns it all off;
+// ?season=spring|summer|autumn|winter pins the time of year.
+const weatherQuery = weatherFromQuery(params.get("weather"), params.get("season"));
+let weatherOn = weatherQuery.pin !== "off";
+// On the page, for tests and diagnostics (like data-quality).
+document.documentElement.dataset.weather = weatherOn ? "on" : "off";
+const southern = isSouthern(Intl.DateTimeFormat().resolvedOptions().timeZone);
+let sky: Sky = FAIR;
+let look: SeasonLook = SUMMER;
+let ground = { wet: 0, snow: 0 };
+let weatherStarted = false;
+/** True right after the switch changed: the weather jumps there instead of drifting. */
+let weatherJump = false;
+/** The work's health as the weather sees it: a problem clouds over at once, then clears over
+ *  about fifteen seconds after it's fixed, like a shower passing. */
+let workHealth = 1;
+/** In still mode the clouds don't drift either: the sky stays as it was when the page opened. */
+const driftFrozenAt = Date.now() / 1000;
+
+function setWeatherOn(on: boolean, tellApp: boolean): void {
+  if (on === weatherOn) return;
+  weatherOn = on;
+  weatherJump = true;
+  document.documentElement.dataset.weather = on ? "on" : "off";
+  if (tellApp && embedded) parent.postMessage({ type: "cli-village", action: "weather", on }, location.origin);
+}
+let lastWeatherScan = 0;
+const fallingLight = new THREE.Color();
+
+function updateWeather(dt: number, t: number): void {
+  const now = new Date();
+  const lookTarget = !weatherOn ? SUMMER : weatherQuery.season ? seasonLook(weatherQuery.season) : seasonOn(now, southern);
+  let skyTarget = FAIR;
+  if (weatherOn && weatherQuery.pin && weatherQuery.pin !== "off") skyTarget = pinnedSky(weatherQuery.pin);
+  const health = source.getState().health;
+  workHealth = still || health <= workHealth ? health : Math.min(health, workHealth + dt * 0.03);
+  if (weatherOn && !(weatherQuery.pin && weatherQuery.pin !== "off")) skyTarget = stormier(workSky(workHealth, lookTarget), ambientSky(still ? driftFrozenAt : now.getTime() / 1000, lookTarget));
+  // The first frame, still mode and the switch jump straight there; otherwise it changes gently.
+  const step = still || !weatherStarted || weatherJump ? 0 : dt;
+  weatherStarted = true;
+  weatherJump = false;
+  sky = approachSky(sky, skyTarget, step);
+  const k = step <= 0 ? 1 : Math.min(1, step / 3);
+  look = { spring: look.spring + (lookTarget.spring - look.spring) * k, autumn: look.autumn + (lookTarget.autumn - look.autumn) * k, winter: look.winter + (lookTarget.winter - look.winter) * k };
+  ground = groundAfter(ground.wet, ground.snow, sky, look, step);
+
+  pipeline.weather = sky;
+  pipeline.snow = ground.snow;
+  const u = weatherUniforms;
+  u.cvTime.value = t;
+  u.cvCloud.value = sky.overcast;
+  // A cloudless sky (weather off) casts no cloud shadows at all; the gentlest drift (0.08) casts full ones.
+  u.cvCloudShade.value = 0.72 * (1 - pipeline.lighting.moon * 0.6) * Math.min(1, sky.overcast / 0.05);
+  u.cvWet.value = ground.wet;
+  u.cvSnow.value = ground.snow;
+  u.cvSpring.value = look.spring;
+  u.cvAutumn.value = look.autumn;
+  u.cvWinter.value = look.winter;
+
+  // Robots and boats arrive later: weather their materials too (a quick look, twice a second).
+  if (t - lastWeatherScan > 0.5 || t < lastWeatherScan) {
+    lastWeatherScan = t;
+    weatherAll(village.group);
+  }
+
+  // Falling things, seen in the light of the haze. Nothing falls in still mode.
+  const light = pipeline.lighting;
+  fallingLight.set(light.fog).lerp(new THREE.Color(light.skyFill), 0.4).multiplyScalar(0.55 + 0.45 * (1 - light.lamps));
+  precipitation.group.visible = !still;
+  precipitation.setTier(pipeline.tier);
+  precipitation.update(sky.rain, sky.snowfall, look.autumn * (0.35 + 0.65 * Math.min(1, sky.overcast * 1.5)), fallingLight, rig.camera, renderer.domElement.height, t);
+}
+
 function resize(): void {
   const width = root.clientWidth;
   const height = root.clientHeight;
@@ -134,6 +229,8 @@ addEventListener("keydown", (e) => {
       overlay.closePanel();
       village.unpin();
     }
+  } else if (e.key === "w" || e.key === "W") {
+    setWeatherOn(!weatherOn, true);
   } else if (e.key === "n" || e.key === "N") {
     cycleLength = 0;
     nightTarget = nightTarget > 0.5 ? 0 : 1;
@@ -157,7 +254,7 @@ if (embedded) {
   // In the app, the terminal is right below the village, not somewhere else.
   village.waitingHint = { ...WAITING, subtitle: "Waiting for work. In the terminal below, try:" };
   overlay.onSelect = (id) => parent.postMessage({ type: "cli-village", action: "selected", building: id }, location.origin);
-  addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number; seconds?: number; visible?: boolean }>) => {
+  addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number; seconds?: number; visible?: boolean; on?: boolean }>) => {
     // Only the page around us, from our own server, may steer the village.
     if (e.origin !== location.origin || e.source !== parent) return;
     const m = e.data;
@@ -169,6 +266,8 @@ if (embedded) {
       // A whole day and night, over and over, starting from the current light.
       cycleLength = Math.max(10, Number(m.seconds) || 600);
       cycleStart = performance.now() / 1000 - (Math.acos(1 - 2 * night) / (2 * Math.PI)) * cycleLength;
+    } else if (m.action === "weather") {
+      setWeatherOn(m.on !== false, false);
     } else if (m.action === "visible") {
       shown = m.visible !== false;
     } else if (m.action === "home") {
@@ -224,6 +323,7 @@ renderer.setAnimationLoop((time) => {
   const t = still ? STILL_TIME : timer.getElapsed();
   if (cycleLength) nightTarget = 0.5 - 0.5 * Math.cos(((performance.now() / 1000 - cycleStart) / cycleLength) * 2 * Math.PI);
   night += (nightTarget - night) * (still ? 1 : Math.min(1, dt * 1.6));
+  updateWeather(dt, t);
   applyNight(night);
   // When the run has stopped, the village dims a little.
   const wanted = source.getState().stopped ? 0.6 : 1;

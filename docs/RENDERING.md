@@ -136,6 +136,33 @@ Three tricks keep the tens of thousands of blades cheap and in the style:
 
 Boulders, reeds and fences are merged with the rest of the village (no extra draw calls) and cast shadows; reeds sway with the trees.
 
+## Weather and seasons (`weather.ts`, `weathering.ts`, `precipitation.ts`)
+
+**What decides the weather** (`weather.ts`, plain numbers, tested):
+1. The switch: `w`, View › Weather and Seasons in the desktop app, or `?weather=off`. Off is always a clear summer: the village exactly as it was before weather.
+2. A pin for screenshots: `?weather=clear|cloudy|rain|storm|snow` and `?season=spring|summer|autumn|winter`.
+3. The work: an unfixed problem brings cloud and steady rain; a secret stopped at the harbor gate brings a storm. Cloud gathers over a few seconds; once the problem is fixed it clears over about fifteen, like a shower passing.
+4. A gentle drift, from the clock: clouds come and go over several minutes, now and then a light shower. Never more than that. In still mode the sky stays as it was when the page opened.
+
+The work and the drift are combined by taking the stormier of the two, so the village never looks fairer than the work is. In winter, rain falls as snow.
+
+**The season** comes from this computer's calendar, with no network and no location. The time zone only says which half of the world it's in, so July is summer in Ohio and winter in Sydney. Seasons blend over about two weeks around each change (1 March, 1 June, 1 September, 1 December in the north). Summer is the village as it was.
+
+**The light** (`withWeather` in `timeline.ts`): cloud takes the sun's direct light and spreads it over the sky, as on an overcast day. The sun gets weaker and the fill stronger, colours go greyer and a little cooler, the haze thickens, and stars hide. A storm is darker still. Snow lying on the ground throws a little light back up. The sky's reflection is rebuilt when the cloud changes, as it is when the light does.
+
+**The surfaces** (`weathering.ts`), added to the shaders of the materials the village already has, so nothing is rebuilt and there are no extra draw calls:
+- **Cloud shadows:** soft-edged patches of shade drifting with the wind. Half cloud puts about half the land in shade.
+- **Rain:** wet things go darker and glossier, and puddles gather on flat ground. Under thick cloud there's no sharp sun or moon to see in wet things or on the river, only the sky.
+- **Snow:** white on every face that looks up (roofs, fields, the tops of trees and rocks), with ragged edges, and trodden off the plaza, the paths and the rails. Grass comes up out of it as straw. A little snow lies in patches, like a first snowfall (around 1 December, as autumn turns to winter); more joins the patches up.
+- **Seasons:** spring brings fresher greens and pink blossom on about a third of the trees. In autumn, stands of trees turn gold, orange or red together (a slow pattern across the land picks which), and the grass goes golden. Winter dulls the greens. Only green things change: the shader picks them by colour.
+- **Robots** stay as they are in any weather (no snow on their heads, no autumn tint): they get their own copies of the shared materials, which the weather leaves alone (`keepDry`).
+
+The world position each effect uses is taken before the wind moves the leaves, so the patterns stay put on a swaying tree. Every effect is zero in a clear summer, and then the shaders work out exactly the colours they did before.
+
+**Falling things** (`precipitation.ts`): rain as thin streaks, snow as soft dots, and in autumn leaves drifting down. Each is made once, with room for the most it will ever show, and moved entirely on the graphics card from the time and a few random numbers per drop. One layer covers the village; a second, near the camera, has bigger drops that are softly out of focus, like rain past a lens. Snowflakes fade right in front of the lens. With reduced motion nothing falls: the wet ground, the snow and the grey light still show the weather.
+
+Measured on this PC with the frame-rate cap off, alternating clear weather, storm and snow over two rounds: every tier stayed within 0.35 ms of clear weather (Low about 1.7 ms a frame, Medium 2.9, High 7), which is inside the run-to-run noise. Automatic stayed on High in a storm.
+
 ## Finish (`passes.ts`, FinishPass)
 
 This pass runs after tone mapping:
@@ -160,6 +187,7 @@ It uses no lookup-table image (the page loads no textures).
 | Bloom | – | ✓ | ✓ |
 | Bokeh samples | 12 | 24 | 48 |
 | Extra grass | – | ✓ | ✓ |
+| Raindrops, snowflakes | 2,200, 1,400 | 5,000, 3,000 | 9,000, 5,000 |
 
 The starting tier comes from the graphics card's name (`WEBGL_debug_renderer_info`):
 - software renderers (SwiftShader, llvmpipe, WARP, Microsoft Basic Render) start on Low;

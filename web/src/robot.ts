@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { AgentStatus } from "../../src/events/state.js";
 import type { Building } from "../../src/events/types.js";
 import { materials, ModelBuilder } from "./lowpoly.js";
+import { keepDry } from "./render/weathering.js";
 import { P } from "./palette.js";
 
 const HATS = [
@@ -129,6 +130,7 @@ export class Robot {
     head.castShadow = false;
     this.group.add(this.body);
     this.group.scale.setScalar(SCALE);
+    keepDry(this.group);
   }
 
   get walking(): boolean {

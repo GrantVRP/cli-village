@@ -185,3 +185,101 @@ describe("soft shadows", options, async () => {
     assert.ok(Math.abs(penumbra - 4 * Math.tan((2.6 * Math.PI) / 180)) < 1e-9);
   });
 });
+
+describe("weather and seasons", options, async () => {
+  const w = canRunTypeScript ? await load("weather") : null;
+  const tl = canRunTypeScript ? await load("timeline") : null;
+  const on = (y, m, d) => new Date(y, m - 1, d, 12);
+
+  it("reads the season from the calendar, the other way round in the south", () => {
+    assert.deepEqual(w.seasonOn(on(2027, 1, 15)), { winter: 1, spring: 0, autumn: 0 });
+    assert.deepEqual(w.seasonOn(on(2027, 4, 15)), { winter: 0, spring: 1, autumn: 0 });
+    assert.deepEqual(w.seasonOn(on(2027, 7, 15)), { winter: 0, spring: 0, autumn: 0 }); // summer: no effects
+    assert.deepEqual(w.seasonOn(on(2027, 10, 15)), { winter: 0, spring: 0, autumn: 1 });
+    // The south: July is winter, January summer.
+    assert.equal(w.seasonOn(on(2027, 7, 15), true).winter, 1);
+    assert.deepEqual(w.seasonOn(on(2027, 1, 15), true), { winter: 0, spring: 0, autumn: 0 });
+  });
+
+  it("blends the seasons over about two weeks around each change", () => {
+    const late = w.seasonOn(on(2026, 11, 24));
+    assert.ok(late.autumn > 0.95 && late.winter < 0.05, "still autumn on 24 November");
+    const change = w.seasonOn(on(2026, 12, 1));
+    assert.ok(Math.abs(change.winter - 0.5) < 0.05 && Math.abs(change.autumn - 0.5) < 0.05, "half and half on 1 December");
+    assert.ok(w.seasonOn(on(2026, 12, 10)).winter > 0.99, "winter by 10 December");
+    // Every day of the year: each look 0–1, and never two seasons fully at once.
+    for (let day = 0; day < 366; day++) {
+      const look = w.seasonOn(new Date(2027, 0, 1 + day, 12));
+      for (const v of Object.values(look)) assert.ok(v >= 0 && v <= 1);
+      assert.ok(look.winter + look.spring + look.autumn <= 1.0001);
+    }
+  });
+
+  it("knows the southern time zones", () => {
+    for (const zone of ["Australia/Sydney", "Pacific/Auckland", "America/Argentina/Buenos_Aires", "America/Santiago", "Africa/Johannesburg"]) assert.equal(w.isSouthern(zone), true, zone);
+    for (const zone of ["America/New_York", "Europe/London", "Asia/Tokyo", "America/Los_Angeles", "UTC", "", undefined]) assert.equal(w.isSouthern(zone), false, String(zone));
+  });
+
+  it("brings rain when work has problems, a storm for a stopped crate, snow when it's cold", () => {
+    assert.deepEqual(w.workSky(1), w.FAIR);
+    const problem = w.workSky(0.6);
+    assert.ok(problem.overcast > 0.9 && problem.rain > 0.5 && problem.snowfall === 0);
+    const storm = w.workSky(0.4);
+    assert.ok(storm.overcast === 1 && storm.rain > 0.9);
+    const winter = w.workSky(0.6, w.seasonLook("winter"));
+    assert.ok(winter.rain === 0 && winter.snowfall > 0.5);
+  });
+
+  it("drifts gently: never more than a light shower, the same at the same moment", () => {
+    let showers = 0;
+    for (let s = 0; s < 86400; s += 30) {
+      const sky = w.ambientSky(1.8e9 + s);
+      assert.ok(sky.overcast >= 0.08 && sky.overcast <= 0.68 + 1e-9);
+      assert.ok(sky.rain <= 0.3 + 1e-9 && sky.snowfall === 0);
+      if (sky.rain > 0) showers++;
+    }
+    assert.ok(showers > 0 && showers < 86400 / 30 / 4, "showers now and then, not most of the time");
+    assert.deepEqual(w.ambientSky(1.8e9 + 1234), w.ambientSky(1.8e9 + 1234));
+    // The work's weather wins when it's stormier.
+    assert.equal(w.stormier(w.workSky(0.6), w.ambientSky(1.8e9)).rain, w.workSky(0.6).rain);
+  });
+
+  it("reads ?weather= and ?season=, ignoring anything else", () => {
+    assert.deepEqual(w.weatherFromQuery("Rain", "WINTER"), { pin: "rain", season: "winter" });
+    assert.deepEqual(w.weatherFromQuery("off", null), { pin: "off", season: null });
+    assert.deepEqual(w.weatherFromQuery("<script>", "monsoon"), { pin: null, season: null });
+    for (const pin of w.WEATHER_PINS) {
+      const sky = w.pinnedSky(pin);
+      for (const v of Object.values(sky)) assert.ok(v >= 0 && v <= 1);
+    }
+  });
+
+  it("changes like weather: the ground soaks up rain faster than it dries", () => {
+    const rain = { overcast: 0.85, rain: 0.6, snowfall: 0 };
+    assert.deepEqual(w.approachSky(w.FAIR, rain, 0), rain);
+    const halfway = w.approachSky(w.FAIR, rain, 1);
+    assert.ok(halfway.rain > 0 && halfway.rain < rain.rain);
+    const soaking = w.groundAfter(0, 0, rain, w.SUMMER, 5).wet;
+    const drying = 1 - w.groundAfter(1, 0, w.FAIR, w.SUMMER, 5).wet;
+    assert.ok(soaking > drying * 3);
+  });
+
+  it("leaves the light exactly as it was under a clear sky, and greys it under cloud", () => {
+    for (const k of [0, 0.5, 0.85, 0.93, 1]) {
+      const light = tl.lightingAt(k);
+      assert.equal(tl.withWeather(light, w.FAIR, 0), light, `k=${k}`);
+    }
+    const day = tl.lightingAt(0);
+    const grey = tl.withWeather(day, { overcast: 1, rain: 0.6, snowfall: 0 });
+    assert.ok(grey.sunIntensity < day.sunIntensity * 0.6);
+    assert.ok(grey.fillIntensity > day.fillIntensity);
+    assert.ok(grey.fogDensity > day.fogDensity && grey.cloudCover === 1);
+    assert.ok(grey.saturation < day.saturation);
+    // At night, cloud hides the stars.
+    assert.equal(tl.withWeather(tl.lightingAt(1), { overcast: 1, rain: 0, snowfall: 0 }).stars, 0);
+    // A storm is darker than rain.
+    const rain = tl.withWeather(day, { overcast: 0.85, rain: 0.6, snowfall: 0 });
+    const storm = tl.withWeather(day, { overcast: 1, rain: 1, snowfall: 0 });
+    assert.ok(storm.exposure < rain.exposure && storm.sunIntensity < rain.sunIntensity);
+  });
+});

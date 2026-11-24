@@ -119,6 +119,15 @@ function setLighting(mode: Lighting): void {
   applyLight(light);
 }
 
+// Weather and seasons in the village: rain and clouds when work has problems, a gentle drift
+// of clouds otherwise, and the season from this computer's calendar. Off: always a clear summer.
+let weatherOn = store.get("weather") !== "off";
+function setWeather(on: boolean): void {
+  weatherOn = on;
+  store.set("weather", on ? "on" : "off");
+  tellVillage({ action: "weather", on });
+}
+
 // How much the 3D village draws: "auto" lets it pick for this computer (and step down if
 // it runs slow); the others fix a tier. Changing it reloads the village.
 type Graphics = "auto" | "low" | "medium" | "high";
@@ -141,10 +150,11 @@ function setGraphics(mode: Graphics): void {
 
 const frame = $<HTMLIFrameElement>("#village");
 const villageAddress = () =>
-  `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? DUSK : LIGHT_LEVEL[lighting]}${graphics === "auto" ? "" : `&quality=${graphics}`}`;
+  `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? DUSK : LIGHT_LEVEL[lighting]}${graphics === "auto" ? "" : `&quality=${graphics}`}${weatherOn ? "" : "&weather=off"}`;
 frame.src = villageAddress();
 frame.addEventListener("load", () => {
   setLighting(lighting);
+  setWeather(weatherOn);
   tellVillage({ action: "visible", visible: activeTab === "village" });
 });
 const tellVillage = (message: Record<string, unknown>) => frame.contentWindow?.postMessage({ type: "cli-village", ...message }, location.origin);
@@ -152,12 +162,17 @@ const focusBuilding = (id: Building) => {
   showTab("village");
   tellVillage({ action: "focus", building: id });
 };
-addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number }>) => {
+addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number; on?: boolean }>) => {
   if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
   const m = e.data;
   if (m?.type !== "cli-village") return;
   if (m.action === "selected" && (BUILDINGS as readonly string[]).includes(m.building ?? "")) openTab(m.building as Building);
   else if (m.action === "light" && typeof m.night === "number") queueLight(Math.min(1, Math.max(0, m.night)));
+  // w pressed in the village: remember it, and keep View's tick right.
+  else if (m.action === "weather" && typeof m.on === "boolean") {
+    weatherOn = m.on;
+    store.set("weather", m.on ? "on" : "off");
+  }
 });
 
 // --- Editor tabs: Welcome, the village, and any building's log ------------------------------
@@ -519,7 +534,7 @@ function buildSidebar(): void {
             ["Alt", "the menus"],
             ["click", "a building: its log opens as a tab"],
             ["drag · scroll", "look around the village, zoom"],
-            ["n · h", "in the village: night or day, back to the whole village"],
+            ["n · w · h", "in the village: night or day, weather on or off, back to the whole village"],
           ],
           true,
         ),
@@ -936,6 +951,7 @@ const commands = (): Command[] => [
   { id: "test", title: "Tests: run my project's tests", detail: `${CLI} test`, keywords: "lab", run: () => runCli("test") },
   { id: "demo", title: "Village: play the demo (one round)", detail: "pretend robots act out a workday, nothing real runs", run: () => void bridge.playDemo() },
   ...LIGHTINGS.map((mode): Command => ({ id: `light-${mode}`, title: `View: lighting · ${LIGHTING_LABELS[mode]}${lighting === mode ? " ✓" : ""}`, keywords: "night day dusk cycle theme colours", run: () => setLighting(mode) })),
+  { id: "weather", title: `View: weather and seasons · ${weatherOn ? "On ✓ (turn off)" : "Off (turn on)"}`, detail: "rain when work has problems, the season from the calendar", keywords: "rain snow clouds autumn winter spring summer", run: () => setWeather(!weatherOn) },
   ...GRAPHICS.map((mode): Command => ({ id: `graphics-${mode}`, title: `View: graphics quality · ${GRAPHICS_LABELS[mode]}${graphics === mode ? " ✓" : ""}`, keywords: "performance slow fast shadows quality", run: () => setGraphics(mode) })),
   { id: "home", title: "View: the whole village", detail: "the camera goes back out", keywords: "camera home", run: () => { showTab("village"); tellVillage({ action: "home" }); } },
   ...BUILDING_ORDER.map((id): Command => ({ id: `focus-${id}`, title: `View: look at the ${BUILDING_NAMES[id]}`, detail: BUILDING_HELP[id], keywords: "camera building focus", run: () => focusBuilding(id) })),
@@ -1046,6 +1062,7 @@ const menus: Menu[] = [
         label: "Lighting",
         items: () => LIGHTINGS.map((mode): MenuEntry => ({ label: LIGHTING_LABELS[mode], checked: () => lighting === mode, run: () => setLighting(mode) })),
       },
+      { label: "Weather and Seasons", checked: () => weatherOn, run: () => setWeather(!weatherOn) },
       {
         label: "Graphics Quality",
         items: () => GRAPHICS.map((mode): MenuEntry => ({ label: GRAPHICS_LABELS[mode], checked: () => graphics === mode, run: () => setGraphics(mode) })),
