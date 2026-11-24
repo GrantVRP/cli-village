@@ -2,6 +2,15 @@
 
 What changed in CLI Village, newest first. Each step was built and merged as its own pull request.
 
+## Unreleased
+
+- **Step 24:** a new night, designed from how film, painting and games show moonlight ([docs/RENDERING.md](docs/RENDERING.md#the-night)):
+  - a slate-blue moonlit night instead of a dark green one: night vision fades dim colours toward slate blue while the lamps stay warm;
+  - shadows that keep their shape (moonlight to fill about 4:1 instead of 9:1), never black;
+  - a night sky with a thin glow along the horizon, round stars of different brightness and colour down to the horizon, and a faint Milky Way;
+  - the moon behind the river, glittering on the water from the usual view;
+  - day and the dusk default look the same as before.
+
 ## 0.1.0 (22 November 2026)
 
 The first release: desktop installers for Windows, macOS and Linux on GitHub Releases. The command line comes inside the desktop app (its terminal has `cli-village`), or from source; it isn't on npm yet.

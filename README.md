@@ -263,8 +263,9 @@ $ cli-village commit -m "Add payments"
 Everything is built from simple shapes in code (no image textures) with [three.js](https://threejs.org/). The page loads nothing from the internet.
 
 **How it's drawn.** The village is lit like a miniature on a table:
-- a sun that moves with the time of day: soft shadows that sharpen where things touch the ground, long and golden at dusk, a pale moon at night;
-- a sky with clouds and stars, haze in the distance and mist low over the ground;
+- a sun that moves with the time of day: soft shadows that sharpen where things touch the ground, long and golden at dusk, and at night a pale moon behind the river, glittering on the water;
+- a sky with clouds, haze in the distance and mist low over the ground. At night: a slate-blue sky with a thin glow along the horizon, stars of different brightness and colour, and a faint Milky Way;
+- night vision: in the dark, dim colours fade toward slate blue while the lamps stay warm, as your eyes do;
 - a river with waves, sun glints and foam along its banks, and trees that sway in the wind;
 - lamps that light the ground around them after dark;
 - a real depth of field (the tilt-shift look), focused on whatever the camera looks at.

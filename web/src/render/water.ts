@@ -21,6 +21,8 @@ export interface Water {
     skyZenith: THREE.IUniform<THREE.Color>;
     /** How strongly the sky is reflected: lower at night, so the river doesn't glow. */
     skyReflect: THREE.IUniform<number>;
+    /** How bright the sun's or moon's glints are, 0–1: softer for the moon, so they glitter, not glare. */
+    glint: THREE.IUniform<number>;
   };
 }
 
@@ -84,6 +86,7 @@ export function createWater(width: number, depth: number, color: THREE.ColorRepr
     skyHorizon: { value: new THREE.Color(0xdbe6e6) },
     skyZenith: { value: new THREE.Color(0x5f93c6) },
     skyReflect: { value: 1 },
+    glint: { value: 1 },
   };
   const halfDepth = (depth / 2).toFixed(3);
 
@@ -121,6 +124,7 @@ export function createWater(width: number, depth: number, color: THREE.ColorRepr
         uniform vec3 skyHorizon;
         uniform vec3 skyZenith;
         uniform float skyReflect;
+        uniform float glint;
         varying vec3 vRiver;
         varying vec2 vSlope;
         ${noise}
@@ -174,6 +178,11 @@ export function createWater(width: number, depth: number, color: THREE.ColorRepr
           vec3 sky = mix(skyHorizon, skyZenith, pow(clamp(rWorld.y, 0.0, 1.0), 0.35));
           totalEmissiveRadiance += sky * (fresnel * 0.9 + 0.06) * skyReflect * (1.0 - foam);
         }`,
+      )
+      .replace(
+        "#include <lights_fragment_end>",
+        `#include <lights_fragment_end>
+        reflectedLight.directSpecular *= glint;`,
       );
   };
   // Every water material compiles to the same program.
