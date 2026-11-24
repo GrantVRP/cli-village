@@ -7,7 +7,7 @@ What changed in CLI Village, newest first. Each step was built and merged as its
 - **Step 27:** village life ([docs/RENDERING.md](docs/RENDERING.md#village-life-lifets-reactionsts)):
   - robots react: a wave for a job done, a cheer for a fix or a push (the robots resting at home join in, one after another), a slump while their task has failed; robots resting at home chat in pairs;
   - birds circling over the rooftops (until nearly dark), butterflies on the wildflowers on spring and summer days, fireflies on warm evenings (now one kind: the old green ones that blinked all together are gone);
-  - a drake, a hen and three ducklings on the river, a ginger cat that naps on a bench and wanders to a sunny spot, two villagers at the well and the flowers (with lanterns at dusk), and a fisherman in a rowboat tied up on the far bank. Everyone goes home at night and in the rain;
+  - a drake, a hen and three ducklings on the river, a ginger cat that naps on a bench and wanders to a sunny spot, two villagers at the well and the flowers (with lanterns at dusk), and a fisherman who lets his rowboat drift down the far bank while he fishes, then rows back up (it's tied up for the night). Everyone goes home at night and in the rain;
   - a windmill on the far bank; one wind for the trees, the flags, the smoke and the windmill, stronger in a storm; more chimney smoke on cold evenings;
   - still mode holds it all in one pose. Low and Medium draw fewer birds, butterflies and fireflies.
 - **Step 26:** weather and seasons ([docs/RENDERING.md](docs/RENDERING.md#weather-and-seasons-weatherts-weatheringts-precipitationts)):

@@ -271,7 +271,7 @@ Everything is built from simple shapes in code (no image textures) with [three.j
 - grass in patches across the meadows and along the paths, wildflowers, mossy boulders, reeds and cattails at the water's edge, and low fences round the cottage gardens;
 - weather that follows the work: cloud and rain while there's an unfixed problem, a storm when the gate stops a secret, and otherwise clouds that come and go, with drifting cloud shadows;
 - the season from your computer's calendar: blossom in spring, gold and red trees and falling leaves in autumn, snow on the roofs and fields in winter (`w`, or View › Weather and Seasons in the desktop app, turns weather and seasons off);
-- life that isn't about the work: birds circling over the rooftops, butterflies on the wildflowers, fireflies on warm evenings, ducks on the river, a cat on a bench, two villagers going about their day (with lanterns at dusk), a fisherman in a rowboat, and a windmill on the far bank. They follow the light, the season and the weather: everyone goes home at night or in the rain;
+- life that isn't about the work: birds circling over the rooftops, butterflies on the wildflowers, fireflies on warm evenings, ducks on the river, a cat on a bench, two villagers going about their day (with lanterns at dusk), a fisherman who drifts down the far bank fishing and rows back up, and a windmill on the far bank. They follow the light, the season and the weather: everyone goes home at night or in the rain;
 - one wind for everything: the trees, the flags, the chimney smoke and the windmill all move more in a storm. Chimneys smoke more on cold evenings;
 - lamps that light the ground around them after dark;
 - a real depth of field (the tilt-shift look), focused on whatever the camera looks at.
