@@ -175,7 +175,7 @@ Things that aren't about the work, so the village feels lived in. Who is out whe
 | Villagers and the fisherman | day and dusk (lanterns lit at dusk) | night, rain, snow: they go indoors |
 | The cat | day and dusk | asleep on its bench at night and in rain |
 
-- **Birds:** a loose flock on one slow circle over the village, flapping in bursts, then gliding. Drawn half again as big as life so they read from the home view.
+- **Birds:** a loose flock on one slow circle over the town hall and the river, flapping in bursts, then gliding. Drawn half again as big as life so they read from the home view. The circle is set back so the whole flock stays near the home view's focus distance: birds nearer the camera turned into blurred smudges over the plaza. They cast no shadows for the same reason.
 - **Butterflies** visit the real wildflower patches (`nature.ts` tells `life.ts` where they are). **Fireflies** are points that each blink on their own, along the meadows and the river bank.
 - **On the river:** ducks paddle by the near bank upstream of the library, where the home view sees open water; the fisherman drifts down the far bank for about 80 seconds, turns, rows back up and turns again; at night the boat is tied to a post. He keeps close in to the far bank, so the float and the oars stay clear of the boats' lane. From the home view the ducks and the rowboat are small; they're for when you look closer.
 - **The cat and villagers** keep to their own spots (two benches, the well, a flower patch, a sunny spot in the meadow), away from the robots' paths and doors.
