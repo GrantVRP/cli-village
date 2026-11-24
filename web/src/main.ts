@@ -10,11 +10,13 @@ import { Life } from "./life.js";
 import { materials, shadows } from "./lowpoly.js";
 import { showNoWebGL } from "./no-webgl.js";
 import { Overlay } from "./overlay.js";
+import { breeze, hearthFires } from "./render/life-rules.js";
 import { Pipeline } from "./render/pipeline.js";
 import { Precipitation } from "./render/precipitation.js";
 import { SETTINGS, tierFromQuery } from "./render/quality.js";
 import { ambientSky, approachSky, FAIR, groundAfter, isSouthern, pinnedSky, seasonLook, seasonOn, stormier, SUMMER, weatherFromQuery, workSky, type SeasonLook, type Sky } from "./render/weather.js";
 import { setPaths, weatherAll, weatherUniforms } from "./render/weathering.js";
+import { windUniforms } from "./render/wind.js";
 import { Village } from "./village.js";
 import { createWorld, railGlow } from "./world.js";
 import { HARBOR, SPOTS, TRACK_R } from "./layout.js";
@@ -329,12 +331,17 @@ renderer.setAnimationLoop((time) => {
   night += (nightTarget - night) * (still ? 1 : Math.min(1, dt * 1.6));
   updateWeather(dt, t);
   applyNight(night);
+  // One wind for the trees, flags, smoke and the windmill; fires lit in the evening and the cold.
+  const wind = breeze(sky.overcast, sky.rain, sky.snowfall);
+  windUniforms.strength.value = wind;
+  effects.breeze = wind;
+  effects.fires = hearthFires(night, look.autumn, look.winter);
   // When the run has stopped, the village dims a little.
   const wanted = source.getState().stopped ? 0.6 : 1;
   exposure += (wanted - exposure) * (still ? 1 : Math.min(1, dt * 1.5));
 
   world.setDenseGrass(SETTINGS[pipeline.tier].denseGrass);
-  world.update(dt, t);
+  world.update(still ? 0 : dt, t);
   village.update(dt, t);
   effects.update(dt, t);
   life.setTier(pipeline.tier);

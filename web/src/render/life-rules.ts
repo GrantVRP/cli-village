@@ -51,3 +51,13 @@ export function lanternLight(night: number): number {
 export function catAwake(c: LifeConditions): boolean {
   return c.night < 0.92 && c.rain < 0.3 && c.snowfall < 0.3;
 }
+
+/** How windy it is: 1 on a fair day (the usual sway), more under cloud, most in a storm. */
+export function breeze(overcast: number, rain: number, snowfall: number): number {
+  return Math.min(1.7, 1 + 0.25 * overcast + 0.45 * rain + 0.15 * snowfall);
+}
+
+/** How many hearth fires are lit (more chimney smoke): a few by day, more in the evening and in the cold. */
+export function hearthFires(night: number, autumn: number, winter: number): number {
+  return Math.max(smooth(0.45, 0.85, night), winter, autumn * 0.5);
+}
