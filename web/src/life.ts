@@ -85,14 +85,16 @@ class Birds {
         continue;
       }
       // One loose flock: everyone on the same slow circle, spread out along it and up and down.
+      // The circle is flattened and set back over the town hall and the river, so the whole flock
+      // stays near the home view's focus distance (nearer, the depth of field blurs birds into smudges).
       const speed = 0.16 + b2! * 0.03;
       const angle = t * speed + i * 0.42 + Math.sin(t * 0.21 + a! * 6) * 0.25;
-      const radius = 17 + Math.sin(t * 0.13 + i) * 3 + c2! * 3 + away * 55;
+      const radius = 14 + Math.sin(t * 0.13 + i) * 2 + c2! * 2 + away * 55;
       const height = 10 + d! * 3 + Math.sin(t * 0.37 + a! * 9) * 0.8 + away * 10;
       const x = Math.cos(angle) * radius;
-      const z = -3 + Math.sin(angle) * radius * 0.8;
+      const z = -13 + Math.sin(angle) * radius * 0.52;
       // Heading along the circle, banking into the turn.
-      const yaw = Math.atan2(-Math.sin(angle), Math.cos(angle) * 0.8);
+      const yaw = Math.atan2(-Math.sin(angle), Math.cos(angle) * 0.52);
       tmpQ.setFromEuler(tmpE.set(0, yaw, -0.35, "YXZ"));
       tmpM.compose(tmpV.set(x, height, z), tmpQ, BIRD_SIZE);
       this.body.setMatrixAt(i, tmpM);
