@@ -161,7 +161,30 @@ The world position each effect uses is taken before the wind moves the leaves, s
 
 **Falling things** (`precipitation.ts`): rain as thin streaks, snow as soft dots, and in autumn leaves drifting down. Each is made once, with room for the most it will ever show, and moved entirely on the graphics card from the time and a few random numbers per drop. One layer covers the village; a second, near the camera, has bigger drops that are softly out of focus, like rain past a lens. Snowflakes fade right in front of the lens. With reduced motion nothing falls: the wet ground, the snow and the grey light still show the weather.
 
-Measured on this PC with the frame-rate cap off, alternating clear weather, storm and snow over two rounds: every tier stayed within 0.35 ms of clear weather (Low about 1.7 ms a frame, Medium 2.9, High 7), which is inside the run-to-run noise. Automatic stayed on High in a storm.
+Measured on this PC with the frame-rate cap off, alternating clear weather, storm and snow over two rounds: weather made no difference bigger than the run-to-run noise. On High that noise is about a millisecond: weather off 7.1 ms a frame, snow 6.1, storm 7.1. Low took about 1.7 ms with any weather, Medium 2.7 to 3.2. Automatic stayed on High in a storm.
+
+## Village life (`life.ts`, `reactions.ts`)
+
+Things that aren't about the work, so the village feels lived in. Who is out when is decided in `life-rules.ts` (plain numbers, tested):
+
+| | Out when | Gone |
+|---|---|---|
+| Birds | day and dusk | when it's nearly dark; they fly off in rain or snow |
+| Butterflies | spring and summer days (fewer in autumn) | winter, rain, snow, after sunset |
+| Fireflies | evenings and nights, already at the dusk the app opens with | winter, rain, snow |
+| Villagers and the fisherman | day and dusk (lanterns lit at dusk) | night, rain, snow: they go indoors |
+| The cat | day and dusk | asleep on its bench at night and in rain |
+
+- **Birds:** a loose flock on one slow circle over the village, flapping in bursts, then gliding. Drawn half again as big as life so they read from the home view.
+- **Butterflies** visit the real wildflower patches (`nature.ts` tells `life.ts` where they are). **Fireflies** are points that each blink on their own, along the meadows and the river bank.
+- **On the river:** ducks paddle by the near bank upstream of the library, where the home view sees open water; the rowboat is tied to a post on the far bank, close in, so it and the fishing line stay clear of the boats' lane.
+- **The cat and villagers** keep to their own spots (two benches, the well, a flower patch, a sunny spot in the meadow), away from the robots' paths and doors.
+- **The windmill** (`world.ts`) stands in a clearing in the tree line on the far bank. The trees that stood there are still made, into a builder that's thrown away, so they use up the same random numbers and no other tree moves.
+- **One wind** (`breeze` in `life-rules.ts`): 1 on a fair day, so the trees sway as before, up to 1.7 in a storm. The trees, the flags (`flag.ts`), the chimney smoke and the windmill's sails all follow it. The flags' wave adds up its phase over time, so a change in the wind never makes it jump.
+- **Hearth fires** (`hearthFires`): lit at dusk and in winter (half of them in autumn), so chimneys puff more often and the smoke lasts longer. A winter evening has about three times the smoke of a summer day.
+- **Robots react** (`reactions.ts`, tested): only to what happens from now on, never to the history a page catches up on. A cheer beats a wave, and each robot reacts once.
+
+Everything is seeded, so it looks the same every time, and everything follows still mode: one fixed pose, no smoke. Birds, butterflies and fireflies are instanced (one draw each, shared by all of them); Low draws 6 birds, 6 butterflies and about a third of the fireflies, High 12, 14 and 64. Measured on this PC with the cap off, all of it together costs about 0.5 ms a frame on High and 0.2 ms on Low.
 
 ## Finish (`passes.ts`, FinishPass)
 
@@ -205,6 +228,7 @@ The PCSS sample count is fixed when the page starts, because changing it later w
 - `test/render.test.mjs` (no graphics card needed):
   - the quality detection and frame budget;
   - the light over the day (endpoints, continuity, clamping, linear-light blends);
-  - the soft-shadow patch against the installed three.js.
+  - the soft-shadow patch against the installed three.js;
+  - the robots' reactions, and who in the village is out in which light, season and weather.
 - `test/app/app.test.mjs` opens the desktop app. It switches through every graphics quality, checks that each one draws and logs no shader errors, and reports each tier's frame time. On CI's machines, which have no graphics card, that's the only way the Medium and High shaders get compiled. `CLI_VILLAGE_TEST_NO_GPU=1` reproduces that locally (there, Low takes about 37 ms a frame and Medium about 58 ms).
 - Seen only on Windows (Direct3D 11 through ANGLE) so far, with an RTX 3080 and with Microsoft's software renderer. macOS and Linux run the same shaders through CI's app test, but nobody has looked at the picture there yet.
