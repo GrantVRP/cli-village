@@ -106,11 +106,28 @@ weatherAll(scene);
 // ?season=spring|summer|autumn|winter pins the time of year.
 const weatherQuery = weatherFromQuery(params.get("weather"), params.get("season"));
 let weatherOn = weatherQuery.pin !== "off";
+// On the page, for tests and diagnostics (like data-quality).
+document.documentElement.dataset.weather = weatherOn ? "on" : "off";
 const southern = isSouthern(Intl.DateTimeFormat().resolvedOptions().timeZone);
 let sky: Sky = FAIR;
 let look: SeasonLook = SUMMER;
 let ground = { wet: 0, snow: 0 };
 let weatherStarted = false;
+/** True right after the switch changed: the weather jumps there instead of drifting. */
+let weatherJump = false;
+/** The work's health as the weather sees it: a problem clouds over at once, then clears over
+ *  about fifteen seconds after it's fixed, like a shower passing. */
+let workHealth = 1;
+/** In still mode the clouds don't drift either: the sky stays as it was when the page opened. */
+const driftFrozenAt = Date.now() / 1000;
+
+function setWeatherOn(on: boolean, tellApp: boolean): void {
+  if (on === weatherOn) return;
+  weatherOn = on;
+  weatherJump = true;
+  document.documentElement.dataset.weather = on ? "on" : "off";
+  if (tellApp && embedded) parent.postMessage({ type: "cli-village", action: "weather", on }, location.origin);
+}
 let lastWeatherScan = 0;
 const fallingLight = new THREE.Color();
 
@@ -119,10 +136,13 @@ function updateWeather(dt: number, t: number): void {
   const lookTarget = !weatherOn ? SUMMER : weatherQuery.season ? seasonLook(weatherQuery.season) : seasonOn(now, southern);
   let skyTarget = FAIR;
   if (weatherOn && weatherQuery.pin && weatherQuery.pin !== "off") skyTarget = pinnedSky(weatherQuery.pin);
-  else if (weatherOn) skyTarget = stormier(workSky(source.getState().health, lookTarget), ambientSky(now.getTime() / 1000, lookTarget));
-  // The first frame (and still mode) starts in the weather; after that it changes gently.
-  const step = still || !weatherStarted ? 0 : dt;
+  const health = source.getState().health;
+  workHealth = still || health <= workHealth ? health : Math.min(health, workHealth + dt * 0.03);
+  if (weatherOn && !(weatherQuery.pin && weatherQuery.pin !== "off")) skyTarget = stormier(workSky(workHealth, lookTarget), ambientSky(still ? driftFrozenAt : now.getTime() / 1000, lookTarget));
+  // The first frame, still mode and the switch jump straight there; otherwise it changes gently.
+  const step = still || !weatherStarted || weatherJump ? 0 : dt;
   weatherStarted = true;
+  weatherJump = false;
   sky = approachSky(sky, skyTarget, step);
   const k = step <= 0 ? 1 : Math.min(1, step / 3);
   look = { spring: look.spring + (lookTarget.spring - look.spring) * k, autumn: look.autumn + (lookTarget.autumn - look.autumn) * k, winter: look.winter + (lookTarget.winter - look.winter) * k };
@@ -133,7 +153,8 @@ function updateWeather(dt: number, t: number): void {
   const u = weatherUniforms;
   u.cvTime.value = t;
   u.cvCloud.value = sky.overcast;
-  u.cvCloudShade.value = 0.72 * (1 - pipeline.lighting.moon * 0.6);
+  // A cloudless sky (weather off) casts no cloud shadows at all; the gentlest drift (0.08) casts full ones.
+  u.cvCloudShade.value = 0.72 * (1 - pipeline.lighting.moon * 0.6) * Math.min(1, sky.overcast / 0.05);
   u.cvWet.value = ground.wet;
   u.cvSnow.value = ground.snow;
   u.cvSpring.value = look.spring;
@@ -209,7 +230,7 @@ addEventListener("keydown", (e) => {
       village.unpin();
     }
   } else if (e.key === "w" || e.key === "W") {
-    weatherOn = !weatherOn;
+    setWeatherOn(!weatherOn, true);
   } else if (e.key === "n" || e.key === "N") {
     cycleLength = 0;
     nightTarget = nightTarget > 0.5 ? 0 : 1;
@@ -246,7 +267,7 @@ if (embedded) {
       cycleLength = Math.max(10, Number(m.seconds) || 600);
       cycleStart = performance.now() / 1000 - (Math.acos(1 - 2 * night) / (2 * Math.PI)) * cycleLength;
     } else if (m.action === "weather") {
-      weatherOn = m.on !== false;
+      setWeatherOn(m.on !== false, false);
     } else if (m.action === "visible") {
       shown = m.visible !== false;
     } else if (m.action === "home") {

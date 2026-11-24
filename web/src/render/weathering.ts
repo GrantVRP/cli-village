@@ -151,12 +151,14 @@ const surfaceCode = (kind: Kind) => /* glsl */ `
     if (cvSnow > 0.0) {
       float cvLow = 1.0 - smoothstep(0.35, 0.9, vCvWorld.y);
       float cvClear = mix(1.0, cvTrodden(cvP), cvLow);
+      // How much of the land is covered: a little snow lies in patches, more joins them up.
+      float cvRag = cvNoise(cvP * 1.3 + vCvWorld.y);
+      float cvLies = smoothstep(1.0 - cvSnow * 1.2, 1.12 - cvSnow * 1.2, cvNoise(cvP * 0.3 + 2.0) * 0.6 + cvRag * 0.4);
       #if ${kind === "grass" ? 1 : 0}
         // Blades come up out of the snow: white near the ground only.
-        float cvCover = cvSnow * cvClear * (1.0 - smoothstep(0.04, 0.04 + 0.2 * cvSnow, vCvWorld.y));
+        float cvCover = cvLies * cvClear * (1.0 - smoothstep(0.04, 0.04 + 0.2 * cvSnow, vCvWorld.y));
       #else
-        float cvRag = cvNoise(cvP * 1.3 + vCvWorld.y) - 0.5;
-        float cvCover = cvSnow * cvClear * smoothstep(0.42, 0.7, cvUp + cvRag * 0.35 - (1.0 - cvSnow) * 0.35);
+        float cvCover = 0.95 * cvLies * cvClear * smoothstep(0.42, 0.7, cvUp + (cvRag - 0.5) * 0.35);
       #endif
       diffuseColor.rgb = mix(diffuseColor.rgb, cvSnowColor, cvCover);
       roughnessFactor = mix(roughnessFactor, 0.8, cvCover);
@@ -245,5 +247,34 @@ export function weatherAll(root: THREE.Object3D): void {
       }
       weather(material, material.name === "foliage" ? "foliage" : material.name === "grass" ? "grass" : "default");
     }
+  });
+}
+
+/** Dry copies of shared materials, one per material, for keepDry. */
+const dryCopies = new WeakMap<THREE.Material, THREE.Material>();
+
+/**
+ * Characters look the same in any weather: no snow on a robot's head, no autumn tint on its
+ * paint. Their meshes get copies of the shared materials, marked so weatherAll leaves them.
+ * Glowing materials (a robot's head) are never weathered anyway, so they are kept as they are.
+ */
+export function keepDry(root: THREE.Object3D): void {
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const dry = (m: THREE.Material): THREE.Material => {
+      const material = m as THREE.MeshStandardMaterial;
+      if (!material.isMeshStandardMaterial || material.userData.cvDry || material.transparent) return m;
+      if (material.emissiveIntensity > 0.01 && material.emissive.getHex() !== 0) return m;
+      let copy = dryCopies.get(m);
+      if (!copy) {
+        copy = m.clone(); // a plain copy: the weather shader isn't copied with it
+        copy.userData[MARK] = true;
+        copy.userData.cvDry = true;
+        dryCopies.set(m, copy);
+      }
+      return copy;
+    };
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(dry) : dry(mesh.material);
   });
 }

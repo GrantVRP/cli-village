@@ -150,7 +150,7 @@ function setGraphics(mode: Graphics): void {
 
 const frame = $<HTMLIFrameElement>("#village");
 const villageAddress = () =>
-  `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? DUSK : LIGHT_LEVEL[lighting]}${graphics === "auto" ? "" : `&quality=${graphics}`}`;
+  `/?token=${encodeURIComponent(token)}&embed=1&night=${lighting === "cycle" ? DUSK : LIGHT_LEVEL[lighting]}${graphics === "auto" ? "" : `&quality=${graphics}`}${weatherOn ? "" : "&weather=off"}`;
 frame.src = villageAddress();
 frame.addEventListener("load", () => {
   setLighting(lighting);
@@ -162,12 +162,17 @@ const focusBuilding = (id: Building) => {
   showTab("village");
   tellVillage({ action: "focus", building: id });
 };
-addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number }>) => {
+addEventListener("message", (e: MessageEvent<{ type?: string; action?: string; building?: string; night?: number; on?: boolean }>) => {
   if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
   const m = e.data;
   if (m?.type !== "cli-village") return;
   if (m.action === "selected" && (BUILDINGS as readonly string[]).includes(m.building ?? "")) openTab(m.building as Building);
   else if (m.action === "light" && typeof m.night === "number") queueLight(Math.min(1, Math.max(0, m.night)));
+  // w pressed in the village: remember it, and keep View's tick right.
+  else if (m.action === "weather" && typeof m.on === "boolean") {
+    weatherOn = m.on;
+    store.set("weather", m.on ? "on" : "off");
+  }
 });
 
 // --- Editor tabs: Welcome, the village, and any building's log ------------------------------

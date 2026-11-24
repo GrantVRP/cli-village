@@ -175,12 +175,12 @@ export function weatherFromQuery(weather: string | null, season: string | null):
 
 /**
  * Move a sky towards a target at a pace that feels like weather: clouds gather over about
- * twenty seconds, rain starts and stops in a few. `dt` in seconds; 0 or less jumps there.
+ * ten seconds, rain starts and stops in a few. `dt` in seconds; 0 or less jumps there.
  */
 export function approachSky(from: Sky, to: Sky, dt: number): Sky {
   if (dt <= 0) return { ...to };
   const step = (a: number, b: number, seconds: number) => a + (b - a) * Math.min(1, dt / seconds);
-  return { overcast: step(from.overcast, to.overcast, 12), rain: step(from.rain, to.rain, 4), snowfall: step(from.snowfall, to.snowfall, 6) };
+  return { overcast: step(from.overcast, to.overcast, 6), rain: step(from.rain, to.rain, 3), snowfall: step(from.snowfall, to.snowfall, 5) };
 }
 
 /**
