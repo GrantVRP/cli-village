@@ -43,9 +43,21 @@ A day is one number, `k`: 0 is midday, 0.85 is dusk (the desktop app's default: 
 - the sky's zenith, horizon and glow;
 - the fill light;
 - the haze colour and density;
-- the exposure, the lamps, the stars, the clouds, and the final saturation (eyes see less colour in the dark).
+- the exposure, the lamps, the stars, the clouds, and the final saturation (eyes see less colour in the dark);
+- `moon`: how much of the light is the moon's, 0 until sunset and 1 at night. It turns on what only the night has: the night sky's shape and stars, night vision in the finish pass, a less blurred sky, and softer glints on the river. Day and the dusk default never see it (a test checks).
 
 Colours are blended in linear light, and keyframes are eased with smoothstep, so nothing changes speed suddenly. Between sunset and night the sun hands over to the moon. The direct light dips through the swap, so shadows never visibly swing across the village. `test/render.test.mjs` walks the whole day in 1,000 steps and fails if any value jumps.
+
+## The night
+
+The night was designed from how film, painting and games show moonlight:
+- **Moonlight isn't blue.** It's reflected sunlight. Night looks blue because in the dark the eye switches to its rods, which see less colour and are most sensitive to blue-green (the Purkinje shift). Film's "day for night" copies this: darker, bluer, with lamps left warm. So the moon here is a low-colour blue-grey, and the blue comes from night vision (below).
+- **Never black, and shadows keep their shape.** Moonlight to fill light is about 4:1, not 9:1, and the ground bounces a little warm plum light back up, so shadows read as cool and soft, not as holes. (James Gurney's moonlight studies: low colour, unified shadows, not too dark, warm accents.)
+- **Warm against cool.** Lamps and windows are the only warm, bright things, so they lead the eye. Nothing else is allowed to compete with them.
+- **Depth.** The haze lightens with distance, and a thin glow sits on the horizon, so roofs and trees stand out against the sky.
+- **The moon behind the river.** From the usual view, its light glitters on the water instead of being off-screen.
+
+Sources: [day for night](https://en.wikipedia.org/wiki/Day_for_night), [mesopic vision](https://en.wikipedia.org/wiki/Mesopic_vision), [Gurney on moonlight](https://gurneyjourney.blogspot.com/2020/07/seven-tips-for-painting-moonlight.html), [Patry, "Real-Time Samurai Cinema" (Ghost of Tsushima), SIGGRAPH 2021](https://advances.realtimerendering.com/s2021/jpatry_advances2021/index.html), and [stars in a game sky](https://frozenfractal.com/blog/2026/7/21/around-the-world-32-its-full-of-stars/).
 
 ## Soft shadows (`shadows.ts`)
 
@@ -69,6 +81,8 @@ The sky is a dome drawn at the far plane (`gl_Position = p.xyww`), coloured enti
 - clouds from five octaves of value noise, lit on the sun's side;
 - stars, one per cell of a grid on the sky, that twinkle and hide behind clouds.
 
+At night (`moon`) the dome changes shape: a thin glow along the horizon, a deep slate-blue middle (`skyMid`), and the darkest blue straight up. Night stars are round dots, placed anywhere in their cell: many faint ones and a few bright ones, pale blue to warm white, a couple of pixels wide so they don't shimmer, and fainter near the horizon, as through more air. A faint Milky Way is a band of domain-warped noise with darker dust in it. All of this is skipped by day and in the environment map, and only runs for pixels that look above the horizon.
+
 On Medium and High, the same dome is rendered into a prefiltered environment map (PMREM). The scene's materials then pick up the sky's real colour as soft ambient light. It's rebuilt only when the light has changed noticeably, at most every 0.4 seconds while the light fades, and never while the village is hidden.
 
 ## Haze and mist (`passes.ts`, AtmospherePass)
@@ -87,7 +101,7 @@ This is a real lens blur, not the classic tilt-shift bands. The focus is the dis
 2. **Gather.** It samples a golden-angle spiral. A sample counts if its own blur reaches this pixel. Samples behind the pixel may spread only as far as its blur, so a sharp object never gets a halo from the background. Blurred foreground spreads freely, like a real lens. Bright samples weigh more, so lamps open into round bokeh discs.
 3. **Composite.** It blends back over the sharp full-resolution picture, by this pixel's blur and by how much out-of-focus foreground covers it.
 
-Close up, the blur eases off, so the neighbours of the building in view stay readable. `?debug=dof`, `dof-coc` and `dof-blend` show the blur size and blend.
+Close up, the blur eases off, so the neighbours of the building in view stay readable. At night the sky is blurred much less, so stars stay points of light instead of opening into blurred shapes. `?debug=dof`, `dof-coc` and `dof-blend` show the blur size and blend.
 
 ## River (`water.ts`)
 
@@ -114,6 +128,7 @@ The shadow pass uses a depth material with the same displacement, so shadows swa
 This pass runs after tone mapping:
 - an ASC CDL grade (slope, offset, power) and saturation;
 - split toning (cool shadows, warm highlights), normalised so it doesn't darken;
+- night vision: at night, the darker and the less colourful a pixel, the more its colour gives way to the rods' slate blue, at the same brightness. Bright or strongly coloured light (the lamps, the status column, the rails) is left alone, so it keeps its colour and its meaning;
 - a soft vignette that follows the window's shape;
 - film grain, strongest in the midtones;
 - dithering by half an 8-bit step, so the sky's gradients never band.

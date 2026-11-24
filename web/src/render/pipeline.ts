@@ -222,6 +222,8 @@ export class Pipeline {
     u.cloudColor.value.set(L.cloudColor);
     u.cloudCover.value = L.cloudCover;
     u.stars.value = L.stars;
+    u.skyMid.value.set(L.skyMid);
+    u.moon.value = L.moon;
 
     if (this.atmosphere) {
       const a = this.atmosphere.uniforms;
@@ -274,6 +276,9 @@ export class Pipeline {
     this.dof.uniforms.strength.value = 0.032 * THREE.MathUtils.clamp(focus / 72, 0.4, 1);
     this.finish.uniforms.time.value = t;
     this.finish.uniforms.saturation.value = this.lighting.saturation;
+    this.finish.uniforms.nightShift.value = this.lighting.moon;
+    // At night the sky is blurred less, so the stars stay points of light.
+    this.dof.uniforms.skyBlur.value = 1 - this.lighting.moon * 0.94;
     this.composer.render(dt);
   }
 }
