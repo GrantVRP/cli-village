@@ -32,6 +32,6 @@ Only the newest release, and the newest code on the `main` branch, get fixes.
 
 ## Checking what you downloaded
 
-Releases are built only by this repository's release workflow on GitHub Actions, from a tagged commit, and each comes with a build-provenance attestation, SHA-256 checksums and an SBOM. From 0.1.1 on, the npm package is published by the same workflow with provenance; 0.1.0 was published by hand, because npm only lets a workflow publish a package that already exists. The README's **Check a download** section shows how to verify them. A file that doesn't verify didn't come from here: please don't run it, and tell us where you found it.
+Releases are built only by this repository's release workflow on GitHub Actions, from a tagged commit, and each comes with a build-provenance attestation, SHA-256 checksums and an SBOM. CLI Village isn't on npm yet, so a `cli-village` package on npm isn't ours; when it is, the same workflow will publish it, with provenance. The README's **Check a download** section shows how to verify them. A file that doesn't verify didn't come from here: please don't run it, and tell us where you found it.
 
 The desktop installers aren't code-signed yet, so Windows SmartScreen and macOS Gatekeeper warn on the first start. That warning is expected for these files only: never turn off those protections for your whole computer.

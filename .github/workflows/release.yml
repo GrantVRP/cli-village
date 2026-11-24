@@ -144,7 +144,7 @@ jobs:
           cat > notes.md <<EOF
           What changed: see [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/CHANGELOG.md).
 
-          **Install:** the command line with \`npm install -g cli-village\`; the desktop app from the files below.
+          **Install:** the desktop app from the files below; its terminal has the \`cli-village\` command line built in.
           These installers aren't signed yet, so Windows and macOS warn the first time: the README's
           [Install](https://github.com/${GITHUB_REPOSITORY}#install) section says what to click.
 
@@ -155,7 +155,10 @@ jobs:
 
   npm:
     name: Publish to npm
-    if: github.ref_type == 'tag'
+    # Only once npm is set up: the owner publishes the first version by hand, then sets the
+    # repository variable NPM_PUBLISH to true (docs/RELEASING.md, "Publishing to npm").
+    # Until then, releases skip npm instead of waiting for an approval that can't succeed.
+    if: github.ref_type == 'tag' && vars.NPM_PUBLISH == 'true'
     needs: release
     runs-on: ubuntu-latest
     timeout-minutes: 15

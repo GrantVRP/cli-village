@@ -2,7 +2,7 @@
 
 > Watch your agents work in a tiny low-poly village.
 
-[![CI](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml/badge.svg)](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml) [![Release](https://github.com/GrantVRP/cli-village/actions/workflows/release.yml/badge.svg)](https://github.com/GrantVRP/cli-village/actions/workflows/release.yml)
+[![CI](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml/badge.svg)](https://github.com/GrantVRP/cli-village/actions/workflows/ci.yml) [![Latest release](https://img.shields.io/github/v/release/GrantVRP/cli-village)](https://github.com/GrantVRP/cli-village/releases/latest)
 
 CLI Village is a friendly, open-source wrapper around the [Infisical CLI](https://infisical.com/docs/cli/overview). It keeps everything Infisical does, including its privacy guarantees, and lets you *see* the work happening. Each agent is a little robot, each building is a type of task, and commits get carried down to the GitHub Harbor.
 
@@ -23,7 +23,7 @@ It's made for beginners (every action is explained in plain English, next to the
 Two parts, use either or both:
 
 - **The desktop app** (Windows, macOS, Linux): the village, a terminal and the tools in one window. Its terminal has `cli-village` built in, so it's all you need.
-- **The command line** (`npm install -g cli-village`): `cli-village` in any terminal, the terminal view, and the 3D village in your browser.
+- **The command line**: `cli-village` in any terminal, the terminal view, and the 3D village in your browser. It's built into the desktop app's terminal; on its own, build it from source for now (it isn't on npm yet).
 
 ### The desktop app
 
@@ -51,13 +51,19 @@ Started from the Start menu, Launchpad or a shortcut, the app opens in your home
 
 ### The command line
 
+CLI Village isn't on npm yet, so **a `cli-village` package on npm isn't ours**: please don't install one. For now:
+
+- **In the desktop app:** its terminal has `cli-village` built in.
+- **On its own:** build it [from source](#try-it-from-source), then run `npm link` once in that folder to use `cli-village` in any terminal.
+
+Then:
+
 ```bash
-npm install -g cli-village
 cli-village doctor   # check your setup
 cli-village --demo   # watch pretend robots work (Ctrl+C to stop)
 ```
 
-The npm package is only the command line: no native code, no install scripts, and nothing from the desktop app (`cli-village app` says where to download it). Uninstall with `npm uninstall -g cli-village`.
+When it comes to npm, the package will be only the command line: no native code, no install scripts, and nothing from the desktop app.
 
 ### Check a download (optional)
 
@@ -65,7 +71,7 @@ Every release is built by GitHub Actions from a tagged commit of this repository
 
 - **Attestation:** with the [GitHub CLI](https://cli.github.com/), `gh attestation verify <file> -R GrantVRP/cli-village` confirms the file was built by this repository's release workflow and hasn't changed since.
 - **Checksums:** `SHA256SUMS` in the release lists each file's SHA-256. Compare with `sha256sum <file>` (Linux), `shasum -a 256 <file>` (macOS) or `Get-FileHash <file>` (PowerShell).
-- **npm:** from 0.1.1 on, the package is published from the same workflow with [provenance](https://docs.npmjs.com/generating-provenance-statements); `npm audit signatures` checks it. (0.1.0 was published by hand, because npm only lets a workflow publish a package that already exists. It has npm's registry signature, but no provenance.)
+- **npm:** CLI Village isn't on npm yet. When it is, the same workflow will publish it with [provenance](https://docs.npmjs.com/generating-provenance-statements), and `npm audit signatures` will check it.
 - **SBOM:** `sbom.cdx.json` lists every package inside.
 
 ## Try it (from source)
