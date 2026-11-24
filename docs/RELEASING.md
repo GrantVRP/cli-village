@@ -9,21 +9,21 @@ What a release contains:
   macOS (dmg and zip, Apple silicon and Intel), Linux (AppImage and deb).
 - **`SHA256SUMS`**, **`sbom.cdx.json`** (every package inside, CycloneDX) and a
   **build-provenance attestation** for each file (`gh attestation verify`).
-- **The npm package** (`cli-village`, the command line only), published by the workflow with
-  npm trusted publishing: no npm token is stored anywhere, and npm adds provenance.
+- **The npm package** (`cli-village`, the command line only), once npm is set up (see
+  **Publishing to npm**, below): published by the workflow with npm trusted publishing, so no
+  npm token is stored anywhere, and npm adds provenance.
 
 ## Once: before the first release
 
 Do these in order. They're settings on GitHub and npm that only the owner can change. Menu
 names were checked in November 2026 and may move a little.
 
-**The npm name:** 0.1.0 claims `cli-village` on npm (step 6, then "The first release only"
-below).
+**npm: later.** 0.1.0 was released without npm, by the owner's choice. Step 6 and
+**Publishing to npm** (below) are for when you want it. Until then the release workflow skips
+npm: the repository variable `NPM_PUBLISH` isn't set.
 
-**Done on 22 November 2026:** steps 2 to 5 (the repository is public, with the settings,
-rulesets and `npm` environment below), and this repository's own commits now use the
-GitHub noreply address. **Still to do:** the two switches in step 1's **Settings › Emails**,
-and step 6.
+**Done in November 2026:** steps 1 to 5 (email privacy, the repository is public, with the
+settings, rulesets and `npm` environment below). **Still to do, when you want npm:** step 6.
 
 To check the settings later: **Settings › Rules › Rulesets** (`main`, `Version tags`),
 **Settings › Environments › npm**, **Settings › Advanced Security**, and the **Security** tab.
@@ -70,6 +70,8 @@ and npm provenance only work for public repositories, and Actions minutes are fr
 - **Settings › Actions › General:** allow only actions made by GitHub (every workflow uses only
   `actions/…`), and require approval for workflow runs on pull requests from **all outside
   contributors**.
+- **Settings › General › Releases:** **Enable release immutability**: once a release is
+  published, its files and its tag can't be changed.
 - **Settings › General › Features:** wiki off (on a public repository anyone could edit it;
   the docs live in `docs/`).
 - **Settings › Rules › Rulesets**, two rulesets:
@@ -111,15 +113,17 @@ GitHub creates it with no protection.
    the installers, `SHA256SUMS` and `sbom.cdx.json`. Download the installer for your computer,
    check it (`gh attestation verify <file> -R GrantVRP/cli-village`), install it and open it.
    If it's good, **Publish release**. If not, delete the draft and the tag, fix, and start again.
-4. **Approve npm.** The workflow's "Publish to npm" job waits for you (the run's page shows
-   **Review deployments**). Approve it once the release is published.
+4. **Approve npm** (only once npm is set up; until then the workflow skips it). The
+   workflow's "Publish to npm" job waits for you (the run's page shows **Review
+   deployments**). Approve it once the release is published.
 
-### The first release only
+### Publishing to npm (the first time)
 
-npm can only trust the workflow once the package exists, so the very first publish is by
-hand. In step 4, choose **Reject** instead, then:
+npm can only trust the workflow once the package exists, so the first npm version is
+published by hand, from the newest release. First, in a pull request, change the "isn't on
+npm yet" wording back (README, SECURITY.md) and edit the release notes. Then:
 
-1. In a fresh copy of the repository at the tag:
+1. In a fresh copy of the repository at the newest release's tag (here `v0.1.0`):
    ```sh
    git clone https://github.com/GrantVRP/cli-village.git && cd cli-village
    git switch --detach v0.1.0
@@ -132,8 +136,9 @@ hand. In step 4, choose **Reject** instead, then:
 3. Same page, **Publishing access**: **Require two-factor authentication and disallow
    tokens**. From now on, only the workflow (with your approval) or you (with your second
    factor) can publish.
-
-From the second release on, step 4 is just **Approve**.
+4. On GitHub, **Settings › Secrets and variables › Actions › Variables › New repository
+   variable**: name `NPM_PUBLISH`, value `true`. From the next release on, the workflow's npm
+   job runs, and each release's step 4 is just **Approve**.
 
 ## Signing, later
 
