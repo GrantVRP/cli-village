@@ -64,6 +64,8 @@ export interface PartOptions {
   jitter?: number;
   quads?: boolean;
   material?: THREE.Material;
+  /** Random numbers for the colour jitter (default: the shared ones). */
+  rng?: () => number;
 }
 
 const tmpMatrix = new THREE.Matrix4();
@@ -96,7 +98,7 @@ export class ModelBuilder {
 
   add(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation, options: PartOptions = {}): this {
     const quads = options.quads ?? geometry.type === "BoxGeometry";
-    const g = paint(geometry, color, { jitter: options.jitter, quads });
+    const g = paint(geometry, color, { jitter: options.jitter, quads, rng: options.rng });
     const s = options.scale ?? 1;
     tmpMatrix.compose(
       tmpPos.set(...(options.at ?? [0, 0, 0])),

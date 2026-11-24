@@ -267,6 +267,7 @@ Everything is built from simple shapes in code (no image textures) with [three.j
 - a sky with clouds, haze in the distance and mist low over the ground. At night: a slate-blue sky with a thin glow along the horizon, stars of different brightness and colour, and a faint Milky Way;
 - night vision: in the dark, dim colours fade toward slate blue while the lamps stay warm, as your eyes do;
 - a river with waves, sun glints and foam along its banks, and trees that sway in the wind;
+- grass in patches across the meadows and along the paths, wildflowers, mossy boulders, reeds and cattails at the water's edge, and low fences round the cottage gardens;
 - lamps that light the ground around them after dark;
 - a real depth of field (the tilt-shift look), focused on whatever the camera looks at.
 
@@ -349,6 +350,9 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 21. Calmer colours with a clear order in the app, the browser page and the terminal view: one gold accent, a lifted work area, and every text colour passing WCAG AA
 - [x] 22. Ready for others to install: a command-line-only npm package, desktop installers for Windows, macOS and Linux, and a release workflow with checksums, an SBOM, attestations and npm provenance
 - [x] The first release: 0.1.0 (see [docs/RELEASING.md](docs/RELEASING.md))
+- [x] 23. Public, with GitHub's security checks on (see [CHANGELOG.md](CHANGELOG.md))
+- [x] 24. A new night: slate-blue moonlight, night vision, stars and a faint Milky Way, the moon glittering on the river
+- [x] 25. Nature details: grass, wildflowers, mossy boulders, reeds and garden fences
 
 ## License
 

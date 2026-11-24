@@ -1,9 +1,11 @@
 // The ground and everything that doesn't move much: plaza, rails, paths,
-// river, trees and props (barrels, flowers, benches, lamps, notice board, well).
+// river, trees and props (barrels, flowers, benches, lamps, notice board, well),
+// and the nature details in nature.ts.
 
 import * as THREE from "three";
 import { BUILDINGS } from "../../src/events/types.js";
 import { glowMaterials } from "./buildings.js";
+import { addNature, type KeepOut } from "./nature.js";
 import { HARBOR, PLAZA_R, CURB_R, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
@@ -244,6 +246,13 @@ function treeLineTree(b: ModelBuilder, x: number, row: number, random: () => num
   tree(b, x, z, 1.1 + random() * 0.7 + row * 0.15, pick(P.leaf, random), hill - 0.1, random);
 }
 
+/** The trees around the village: x, z and size. */
+const AROUND_TREES: readonly [number, number, number][] = [
+  [-21, 9, 1.4], [-22, -2, 1.2], [-20, 17, 1.1], [-6.5, 21, 1.3], [5.5, 21.5, 1.2],
+  [21, 12, 1.3], [22.5, -5, 1.2], [20, -12, 1.1], [-7.5, -19, 1.2], [-24, 4.5, 1.0],
+  [24, 4, 1.1], [-16, 18.5, 0.9], [16.5, 19, 1.0], [7.5, -18.5, 1.0],
+];
+
 function trees(b: ModelBuilder): void {
   // The tree line beyond the river. It goes on past the sides (out into the fog), with
   // its own random numbers there, so the trees by the village don't depend on how far it goes.
@@ -257,12 +266,7 @@ function trees(b: ModelBuilder): void {
     }
   }
   // A few around the village, plus one orange autumn tree.
-  const around: [number, number, number][] = [
-    [-21, 9, 1.4], [-22, -2, 1.2], [-20, 17, 1.1], [-6.5, 21, 1.3], [5.5, 21.5, 1.2],
-    [21, 12, 1.3], [22.5, -5, 1.2], [20, -12, 1.1], [-7.5, -19, 1.2], [-24, 4.5, 1.0],
-    [24, 4, 1.1], [-16, 18.5, 0.9], [16.5, 19, 1.0], [7.5, -18.5, 1.0],
-  ];
-  for (const [x, z, s] of around) tree(b, x, z, s, pick(P.leaf, rng));
+  for (const [x, z, s] of AROUND_TREES) tree(b, x, z, s, pick(P.leaf, rng));
   // Off to the side of the Library, so it doesn't hide the dome.
   tree(b, -24, -12.5, 1.55, P.autumn);
   // Bushes.
@@ -407,6 +411,9 @@ export function createWorld(): World {
   riverBanks(b);
   trees(b);
   props(b);
+  // Grass, wildflowers, boulders, reeds and garden fences (nature.ts), clear of the trees.
+  const trunks: KeepOut[] = [...AROUND_TREES.map(([x, z, s]): KeepOut => [x, z, 0.9 * s]), [-24, -12.5, 1.4]];
+  group.add(addNature(b, foliage, trunks));
   group.add(b.build("world-static"));
   swayShadows(group, foliage);
 

@@ -4,6 +4,7 @@ What changed in CLI Village, newest first. Each step was built and merged as its
 
 ## Unreleased
 
+- **Step 25:** nature details ([docs/RENDERING.md](docs/RENDERING.md#nature-details-naturets)): grass in patches across the meadows and along the paths and buildings, wildflowers in soft colours, mossy boulders with pebbles, reeds and cattails along both river banks, and low wooden fences round the cottage gardens (open at the front, where the robots walk). The rest of the village is exactly as before.
 - **Step 24:** a new night, designed from how film, painting and games show moonlight ([docs/RENDERING.md](docs/RENDERING.md#the-night)):
   - a slate-blue moonlit night instead of a dark green one: night vision fades dim colours toward slate blue while the lamps stay warm;
   - shadows that keep their shape (moonlight to fill about 4:1 instead of 9:1), never black;
