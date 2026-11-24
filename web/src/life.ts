@@ -188,9 +188,9 @@ const fireflyVertex = /* glsl */ `
     vec4 view = viewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * view;
     // Each one glows for a moment, then rests; not all at once. Fewer show when amount is low.
-    float pulse = smoothstep(0.35, 1.0, sin(time * (0.8 + seed.w * 0.9) + seed.x * 40.0));
+    float pulse = smoothstep(-0.2, 1.0, sin(time * (0.8 + seed.w * 0.9) + seed.x * 40.0));
     vGlow = pulse * step(seed.w, amount) * smoothstep(3.0, 6.0, -view.z);
-    gl_PointSize = clamp(0.2 * pixelsPerUnit / -view.z, 1.5, 7.0) * (0.6 + 0.4 * pulse);
+    gl_PointSize = clamp(0.3 * pixelsPerUnit / -view.z, 2.0, 9.0) * (0.55 + 0.45 * pulse);
   }
 `;
 const fireflyFragment = /* glsl */ `
@@ -238,7 +238,7 @@ class Fireflies {
         time: { value: 0 },
         amount: { value: 0 },
         pixelsPerUnit: { value: 500 },
-        color: { value: new THREE.Color(1.0, 0.82, 0.38).multiplyScalar(2.2) },
+        color: { value: new THREE.Color(1.0, 0.82, 0.38).multiplyScalar(3.0) },
       },
       transparent: true,
       depthWrite: false,
