@@ -6,7 +6,8 @@ import { glowMaterials } from "./buildings.js";
 import { CameraRig } from "./camera.js";
 import { connect } from "./connection.js";
 import { Effects } from "./effects.js";
-import { shadows } from "./lowpoly.js";
+import { Life } from "./life.js";
+import { materials, shadows } from "./lowpoly.js";
 import { showNoWebGL } from "./no-webgl.js";
 import { Overlay } from "./overlay.js";
 import { Pipeline } from "./render/pipeline.js";
@@ -83,6 +84,9 @@ function setStill(value: boolean): void {
   document.body.classList.toggle("still", value);
 }
 scene.add(world.group, village.group, effects.group);
+// Birds, butterflies, fireflies, ducks, a cat and two villagers (life.ts).
+const life = new Life(materials.matte, world.flowers);
+scene.add(life.group);
 
 // --- Weather and seasons ------------------------------------------------------------------
 // (render/weather.ts decides what the sky does; weathering.ts and precipitation.ts show it.)
@@ -333,6 +337,8 @@ renderer.setAnimationLoop((time) => {
   world.update(dt, t);
   village.update(dt, t);
   effects.update(dt, t);
+  life.setTier(pipeline.tier);
+  life.update(dt, t, { night, rain: sky.rain, snowfall: sky.snowfall, spring: look.spring, autumn: look.autumn, winter: look.winter, still }, rig.camera, renderer.domElement.height);
   // With a building's log open on the right, center the picture in the space that's left.
   rig.setInset(overlay.panelInset);
   rig.update(dt);

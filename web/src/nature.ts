@@ -113,7 +113,7 @@ class Blades {
  * that can afford it (it has its own random numbers, so the rest is the same with or without
  * it). `trees` are the trees around the village, so nothing grows through a trunk.
  */
-export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: readonly KeepOut[]): { small: THREE.Group; dense: THREE.Group } {
+export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: readonly KeepOut[]): { small: THREE.Group; dense: THREE.Group; flowers: [number, number][] } {
   const rng = makeRandom(91);
   const small = new Builder();
   const keepOut = [...PROPS, ...trees];
@@ -199,11 +199,13 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     }
   }
 
-  // Wildflowers, in small patches.
+  // Wildflowers, in small patches (where they are is kept: the butterflies visit them).
+  const flowers: [number, number][] = [];
   for (let i = 0, placed = 0; i < 400 && placed < 46; i++) {
     const [x, z] = somewhere();
     if (!clear(x, z, 0.4, true)) continue;
     placed++;
+    flowers.push([x, z]);
     const bloom = pick(MEADOW_FLOWERS, rng);
     const count = 4 + Math.floor(rng() * 5);
     const y = groundAt(x, z);
@@ -330,5 +332,5 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
   const denseGroup = new THREE.Group();
   denseGroup.name = "nature-dense";
   denseGroup.add(dense.build("grass-dense"));
-  return { small: smallGroup, dense: denseGroup };
+  return { small: smallGroup, dense: denseGroup, flowers };
 }
