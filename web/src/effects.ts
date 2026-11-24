@@ -1,5 +1,5 @@
 // Moving decorations: rings rising from busy buildings, chimney smoke,
-// robot trails, wind streaks, lab bubbles, anvil sparks and fireflies.
+// robot trails, wind streaks, lab bubbles and anvil sparks. (Fireflies are in life.ts.)
 // Everything is pooled (made once, reused) so nothing piles up.
 
 import * as THREE from "three";
@@ -64,8 +64,6 @@ export class Effects {
   private readonly wind: Pool;
   private readonly bubbles: Pool;
   private readonly sparks: Pool;
-  private readonly fireflies: THREE.Points;
-  private readonly fireflyBase: Float32Array;
   private windTimer = 2;
   /** 0 = day, 1 = night. */
   night = 0;
@@ -111,22 +109,6 @@ export class Effects {
     this.bubbles = new Pool(this.group, 40, () => new THREE.Mesh(bubbleGeo, additive(0xbfffe0)));
     const sparkGeo = new THREE.BoxGeometry(0.05, 0.05, 0.05);
     this.sparks = new Pool(this.group, 40, () => new THREE.Mesh(sparkGeo, additive(0xffb050)));
-
-    // Fireflies, only visible at night.
-    const n = 70;
-    this.fireflyBase = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 9 + Math.random() * 14;
-      this.fireflyBase.set([Math.cos(a) * r, 0.6 + Math.random() * 2.2, Math.sin(a) * r * 0.8 - 2], i * 3);
-    }
-    const ffGeo = new THREE.BufferGeometry();
-    ffGeo.setAttribute("position", new THREE.BufferAttribute(this.fireflyBase.slice(), 3));
-    this.fireflies = new THREE.Points(
-      ffGeo,
-      new THREE.PointsMaterial({ color: 0xe8ff9a, size: 0.22, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
-    );
-    this.group.add(this.fireflies);
   }
 
   /** A ring rising from a building (cyan when busy, red when there's a problem). */
@@ -257,18 +239,5 @@ export class Effects {
       p.mesh.material.opacity = 1 - p.age / p.life;
       return p.age < p.life;
     });
-
-    // Fireflies drift and blink at night.
-    const ff = this.fireflies.geometry.getAttribute("position");
-    for (let i = 0; i < ff.count; i++) {
-      ff.setXYZ(
-        i,
-        this.fireflyBase[i * 3]! + Math.sin(t * 0.6 + i) * 0.6,
-        this.fireflyBase[i * 3 + 1]! + Math.sin(t * 1.3 + i * 2) * 0.25,
-        this.fireflyBase[i * 3 + 2]! + Math.cos(t * 0.5 + i) * 0.6,
-      );
-    }
-    ff.needsUpdate = true;
-    (this.fireflies.material as THREE.PointsMaterial).opacity = this.night * (0.65 + Math.sin(t * 3) * 0.25);
   }
 }
