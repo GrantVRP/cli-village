@@ -51,7 +51,8 @@ export const HARBOR = {
   gate: new THREE.Vector3(13.6, 0, -18.4),
   dockStart: new THREE.Vector3(13.6, 0, -19.4),
   dockEnd: new THREE.Vector3(13.6, 0, -26.4),
-  boat: new THREE.Vector3(16.4, 0, -23.2),
+  /** Where the cargo ship moors (the middle of the ship), stern-to the dock between two of its posts. */
+  boat: new THREE.Vector3(17.15, 0, -23.7),
   /** The cart's route: ring track → bend → gate → end of the dock. */
   cartRoute: [] as THREE.Vector3[],
 };

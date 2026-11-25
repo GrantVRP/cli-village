@@ -151,12 +151,15 @@ export function glowMesh(geometry: THREE.BufferGeometry, color: THREE.ColorRepre
   return mesh;
 }
 
-/** Make every mesh in an object cast and receive shadows (except ones marked userData.noShadow, which only receive). */
+/**
+ * Make every mesh in an object cast and receive shadows (except ones marked userData.noShadow,
+ * which only receive, and userData.noShadowOnSelf, which only cast).
+ */
 export function shadows(object: THREE.Object3D, cast = true, receive = true): void {
   object.traverse((child) => {
     if ((child as THREE.Mesh).isMesh) {
       child.castShadow = cast && !child.userData.noShadow;
-      child.receiveShadow = receive;
+      child.receiveShadow = receive && !child.userData.noShadowOnSelf;
     }
   });
 }
