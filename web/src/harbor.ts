@@ -22,11 +22,44 @@ import { buildShip, crateSpots, type ShipModel } from "./ship.js";
 
 const rng = makeRandom(88);
 
+/** Pale pine, so the cargo stands out from the dark dock and hull, by day and at dusk. */
+const CRATE_BOARDS = 0xc49d68;
+
+/**
+ * A crate of commits that passed the gate: pale pine panels in a dark frame, brass corners, and
+ * two teal cargo straps crossed over the top with a brass seal where they meet. It looks the same
+ * from every side and from above (crates turn on the cart and aboard), and stays inside
+ * 0.6 × 0.5 × 0.6, so the stacks and the spots aboard still fit.
+ */
 function crateModel(): THREE.Group {
   const b = new ModelBuilder();
-  b.box([0.56, 0.5, 0.56], P.woodLight, { jitter: 0.06 });
-  for (const y of [-0.18, 0.18]) b.box([0.6, 0.07, 0.6], P.wood, { at: [0, y, 0] });
-  b.box([0.07, 0.5, 0.6], P.wood, { at: [0, 0, 0], rot: [0, 0, 0.6] });
+  const w = 0.28; // half its width
+  const h = 0.245; // half its height
+  const t = 0.07; // the frame's thickness
+  const e = w - t / 2;
+  const f = h - t / 2;
+  b.box([2 * w - 0.03, 2 * h - 0.03, 2 * w - 0.03], CRATE_BOARDS, { jitter: 0.05 });
+  for (const x of [-e, e]) for (const z of [-e, e]) b.box([t, 2 * h, t], P.wood, { at: [x, 0, z] });
+  for (const y of [-f, f]) {
+    for (const s of [-e, e]) {
+      b.box([2 * w, t, t], P.wood, { at: [0, y, s] });
+      b.box([t, t, 2 * w], P.wood, { at: [s, y, 0] });
+    }
+  }
+  // Two straps all the way round, crossed on top (the second sits a hair higher where they cross).
+  const strap = 0.1;
+  const k = 0.01;
+  b.box([2 * (w + k), 2 * (h + k), strap], P.teal);
+  b.box([strap, 2 * (h + k) + 0.004, 2 * (w + k)], P.teal);
+  // Brass: the seal where the straps cross, a buckle on each side, and the corners.
+  const brass = { material: materials.metal };
+  b.add(new THREE.CylinderGeometry(0.075, 0.075, 0.02, 10), P.brass, { ...brass, at: [0, h + k + 0.012, 0] });
+  for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    b.box([x ? 0.016 : 0.12, 0.075, z ? 0.016 : 0.12], P.brass, { ...brass, at: [x * (w + k), 0, z * (w + k)] });
+  }
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
+    b.box([0.085, 0.085, 0.085], P.brassDark, { ...brass, at: [x * (w - 0.035), y * (h - 0.035), z * (w - 0.035)] });
+  }
   return b.build("crate");
 }
 
