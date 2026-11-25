@@ -254,7 +254,7 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     }
   }
 
-  // Reeds and cattails at the water's edge, on both banks (not at the dock or the boat).
+  // Reeds and cattails at the water's edge, on both banks (not at the dock or the ship's berth).
   for (const side of [1, -1]) {
     for (let x = -46; x < 46; x += 1.8 + rng() * 3.2) {
       if (x > 11.2 && x < 19.5) continue;
