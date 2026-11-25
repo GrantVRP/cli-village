@@ -138,6 +138,24 @@ export function pickFlower(rng: () => number, kinds: readonly FlowerKind[] = FLO
   return { kind, color: colors[Math.floor(rng() * colors.length)]! };
 }
 
+/** Where a bed's soil lies: its middle, half its length and width, and which way its length runs. */
+export interface FlowerBed {
+  x: number;
+  z: number;
+  rx: number;
+  rz: number;
+  turn: number;
+}
+
+/** How far from a bed's middle its soil reaches, in the direction (dx, dz) (a unit vector). */
+export function bedReach(bed: FlowerBed, dx: number, dz: number): number {
+  const c = Math.cos(bed.turn);
+  const s = Math.sin(bed.turn);
+  const along = dx * c + dz * s;
+  const across = -dx * s + dz * c;
+  return 1 / Math.hypot(along / bed.rx, across / bed.rz);
+}
+
 export interface BedOptions {
   kinds: readonly FlowerKind[];
   /** Half the bed's length and width, and which way its length runs (radians, from +x toward +z). */
@@ -149,8 +167,8 @@ export interface BedOptions {
   skip?: (x: number, z: number) => boolean;
 }
 
-/** A bed of flowers on a patch of dark soil with a soft, uneven edge. */
-export function addBed(b: ModelBuilder, x: number, z: number, o: BedOptions): void {
+/** A bed of flowers on a patch of dark soil with a soft, uneven edge. Returns where its soil lies. */
+export function addBed(b: ModelBuilder, x: number, z: number, o: BedOptions): FlowerBed {
   const { rng } = o;
   const c = Math.cos(o.turn);
   const s = Math.sin(o.turn);
@@ -180,6 +198,8 @@ export function addBed(b: ModelBuilder, x: number, z: number, o: BedOptions): vo
       addFlower(b, fx, 0.015, fz, { ...pickFlower(rng, o.kinds), rng, size: 0.9 + rng() * 0.25 });
     }
   }
+  // (The soil's wavy edge reaches up to about a fifth past its scale.)
+  return { x, z, rx: (o.rx + 0.16) * 1.2, rz: (o.rz + 0.14) * 1.2, turn: o.turn };
 }
 
 /** Flowers in a window box (the box's top middle at x, y, z, `length` along x): a leafy mound and small blooms. */

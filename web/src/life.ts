@@ -6,6 +6,7 @@
 // time, and in still mode (reduced motion) it holds one fixed pose.
 
 import * as THREE from "three";
+import { bedReach, type FlowerBed } from "./flora.js";
 import { RIVER_HALF, RIVER_Z, SPOTS } from "./layout.js";
 import { makeRandom, ModelBuilder } from "./lowpoly.js";
 import { P } from "./palette.js";
@@ -613,7 +614,7 @@ class Villagers {
   readonly group = new THREE.Group();
   private readonly people: (ReturnType<typeof villager> & { errand: Errand })[] = [];
 
-  constructor(flowers: readonly [number, number][]) {
+  constructor(flowers: readonly [number, number][], beds: readonly FlowerBed[]) {
     const bench = (deg: number, r = 9.2) => {
       const a = (deg * Math.PI) / 180;
       return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
@@ -625,15 +626,20 @@ class Villagers {
     for (const [tunic, hat, errand] of errands) {
       errand.benchRot = Math.atan2(-errand.bench.x, -errand.bench.z);
       if (errand.task === "flowers") {
-        // The nearest patch of wildflowers (if one is close), standing just outside it on the bench's
-        // side (a patch spreads about 0.65 from its middle), so he bends to reach them.
+        // He tends the flower bed nearest his bench (if one is close), standing just off its soil
+        // on the bench's side, so he bends to reach the flowers; failing that, the nearest patch
+        // of wildflowers, just outside it (a patch spreads about 0.65 from its middle).
         const b = errand.bench;
-        const patch = [...flowers].sort((p, q) => Math.hypot(p[0] - b.x, p[1] - b.z) - Math.hypot(q[0] - b.x, q[1] - b.z))[0];
-        if (patch && Math.hypot(patch[0] - b.x, patch[1] - b.z) < 8) {
-          const toward = new THREE.Vector3(b.x - patch[0], 0, b.z - patch[1]).normalize().multiplyScalar(1.0);
-          errand.spot.set(patch[0] + toward.x, 0, patch[1] + toward.z);
+        const near = (p: { x: number; z: number }) => Math.hypot(p.x - b.x, p.z - b.z);
+        const bed = [...beds].sort((p, q) => near(p) - near(q))[0];
+        const patch = [...flowers].map(([x, z]) => ({ x, z })).sort((p, q) => near(p) - near(q))[0];
+        const target = bed && near(bed) < 4 ? bed : patch && near(patch) < 8 ? patch : undefined;
+        if (target) {
+          const toward = new THREE.Vector3(b.x - target.x, 0, b.z - target.z).normalize();
+          const reach = target === bed ? bedReach(bed, toward.x, toward.z) + 0.3 : 1.0;
+          errand.spot.set(target.x + toward.x * reach, 0, target.z + toward.z * reach);
         }
-        errand.spotFacing = patch ? Math.atan2(patch[0] - errand.spot.x, patch[1] - errand.spot.z) : 2.2;
+        errand.spotFacing = target ? Math.atan2(target.x - errand.spot.x, target.z - errand.spot.z) : 2.2;
       } else {
         errand.spotFacing = Math.atan2(0 - errand.spot.x, 10.6 - errand.spot.z);
       }
@@ -882,12 +888,12 @@ export class Life {
   private readonly villagers: Villagers;
   private readonly rowboat = new Rowboat();
 
-  /** `flowers`: where the patches of wildflowers are (the butterflies visit them). */
-  constructor(material: THREE.Material, flowers: readonly [number, number][]) {
+  /** `flowers`: where the patches of wildflowers are (the butterflies visit them); `beds`: the flower beds. */
+  constructor(material: THREE.Material, flowers: readonly [number, number][], beds: readonly FlowerBed[]) {
     this.group.name = "life";
     this.birds = new Birds(material);
     this.butterflies = new Butterflies(material, flowers);
-    this.villagers = new Villagers(flowers);
+    this.villagers = new Villagers(flowers, beds);
     this.group.add(this.birds.body, ...this.birds.wings, ...this.butterflies.wings, this.fireflies.points, this.ducks.group, this.cat.group, this.villagers.group, this.rowboat.group);
     // Creatures look the same in any weather (no snow on a duck's back).
     keepDry(this.group);

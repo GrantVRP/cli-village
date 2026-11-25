@@ -7,7 +7,7 @@ import { BUILDINGS } from "../../src/events/types.js";
 import { glowMaterials } from "./buildings.js";
 import { wavingFlag, type Flag } from "./flag.js";
 import { addNature, type KeepOut } from "./nature.js";
-import { addBed, type FlowerKind } from "./flora.js";
+import { addBed, type FlowerBed, type FlowerKind } from "./flora.js";
 import { distanceToPaths, HARBOR, PLAZA_R, CURB_R, pathAngles, RIVER_HALF, RIVER_Z, roomFromProps, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
@@ -65,6 +65,8 @@ export interface World {
   setDenseGrass(on: boolean): void;
   /** Where the patches of wildflowers are (x, z). */
   flowers: readonly [number, number][];
+  /** Where the flower beds' soil lies (so the villagers keep off it). */
+  beds: readonly FlowerBed[];
 }
 
 const rng = makeRandom(7);
@@ -455,6 +457,7 @@ const BEDS: readonly (readonly FlowerKind[])[] = [
   ["cosmos", "lavender"],
 ];
 let bedCount = 0;
+const beds: FlowerBed[] = [];
 
 /**
  * A bed of flowers round (x, z), its length along `turn`. Flowers that would land near a path or
@@ -467,14 +470,14 @@ function flowers(b: ModelBuilder, x: number, z: number, count = 9, planted = tru
   if (!planted) return;
   const kinds = BEDS[bedCount++ % BEDS.length]!;
   const big = count > 6;
-  addBed(b, x, z, {
+  beds.push(addBed(b, x, z, {
     kinds,
     rx: big ? 0.85 : 0.75,
     rz: big ? 0.48 : 0.36,
     turn,
     rng: bloom,
     skip: (fx, fz) => distanceToPaths(fx, fz) < 1.45 || roomFromProps(fx, fz) < 0.3,
-  });
+  }));
 }
 
 /**
@@ -585,6 +588,7 @@ export function createWorld(): World {
   return {
     group,
     flowers: nature.flowers,
+    beds,
     update: (dt, t) => {
       water.uniforms.time.value = t;
       windUniforms.time.value = t;
