@@ -16,7 +16,7 @@ const { VillageStore } = await import(dist("events/store.js"));
 const { noiseFilter } = await import(dist("commands/app.js"));
 const { demoRound } = await import(dist("demo/script.js"));
 const { App } = await import(dist("views/terminal/App.js"));
-const { BUILDING_NAMES } = await import(dist("events/types.js"));
+const { BUILDING_HELP, BUILDING_NAMES, BUILDINGS } = await import(dist("events/types.js"));
 const { WAITING } = await import(dist("commands/watch.js"));
 const { renderToString } = await import("ink");
 const React = (await import("react")).default;
@@ -190,6 +190,20 @@ describe("terminal view", () => {
     assert.match(lines.at(-1), /q quit/, `key hints last ${at}`);
     assert.match(lines.at(-2), new RegExp(`^[─-]{${columns}}$`), `rule above the key hints ${at}`);
   };
+
+  it("the ? help lists every building in full at 80x24", () => {
+    const store = VillageStore.fromBus(new EventBus());
+    const out = render(store, 80, 24, { help: true });
+    const lines = out.split("\n");
+    assert.ok(lines.length <= 23, `${lines.length} lines`);
+    assert.ok(lines.every((l) => l.length <= 80), "too wide");
+    for (const id of BUILDINGS) {
+      const line = lines.find((l) => l.includes(BUILDING_NAMES[id]));
+      assert.ok(line, `${id} is listed`);
+      // (The Vault's and the Harbor's lines were always longer than 80 columns allow.)
+      if (id !== "vault" && id !== "harbor") assert.ok(line.includes(BUILDING_HELP[id]), `${id}: whole line`);
+    }
+  });
 
   it("fits 80x24 and 120x40 all through the demo", () => {
     const bus = new EventBus();

@@ -52,10 +52,10 @@ export const BUILDING_HELP: Record<Building, string> = {
   townhall: "The coordinator that hands out tasks.",
   home: "Where idle robots rest.",
   harbor: "Commits become crates. A gate scans them for leaked secrets, then the ship carries them to GitHub.",
-  launchtower: "Deploys and releases. Its beacon lights up when something ships.",
+  launchtower: "Deploys and releases. Its beacon lights up when one ships.",
   archive: "Databases and data: migrations, backups and queries.",
-  postoffice: "Reviews and messages: pull-request reviews, comments and notifications.",
-  watchtower: "Logs, alerts and monitoring. Its lantern flashes when there is a warning.",
+  postoffice: "Reviews: pull-request reviews, comments and messages.",
+  watchtower: "Logs, alerts and monitoring. Its lantern flashes on warnings.",
 };
 
 export const EVENT_TYPES = ["start", "move", "progress", "done", "fail", "commit", "push"] as const;

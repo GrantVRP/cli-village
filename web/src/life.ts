@@ -674,8 +674,9 @@ class Villagers {
       return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
     };
     const errands: [number, number, Errand][] = [
-      // She draws water at the Archive well, beside it (the robots who work there stand at its front).
-      [0x6f7d3c, 0, { bench: bench(69), benchRot: 0, spot: new THREE.Vector3(SPOTS.archive.pos.x + 1.7, 0, SPOTS.archive.pos.z - 0.2), spotFacing: 0, task: "water", offset: 0 }],
+      // She draws water at the Archive well, at its crank on the side (the robots who work there
+      // stand at its front).
+      [0x6f7d3c, 0, { bench: bench(69), benchRot: 0, spot: new THREE.Vector3(SPOTS.archive.pos.x + 2.1, 0, SPOTS.archive.pos.z), spotFacing: 0, task: "water", offset: 0 }],
       [0xa0522d, 1, { bench: bench(151), benchRot: 0, spot: new THREE.Vector3(-12.4, 0, 7.3), spotFacing: 0, task: "flowers", offset: 31 }],
     ];
     for (const [tunic, hat, errand] of errands) {

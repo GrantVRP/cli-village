@@ -150,7 +150,7 @@ export function addNature(
   const thrownSmall = new Builder();
 
   /** Is this spot clear of everything, with this much room to spare? */
-  const clear = (x: number, z: number, room: number, keepTrees = false): boolean => {
+  const clear = (x: number, z: number, room: number, keepTrees = false, former = true): boolean => {
     if (Math.hypot(x, z) < TRACK_R + 1.1 + room) return false;
     if (Math.abs(z - RIVER_Z) < RIVER_HALF + 1.5 + room) return false;
     for (const id of first) {
@@ -158,7 +158,7 @@ export function addNature(
       if (Math.hypot(x - s.pos.x, z - s.pos.z) < s.radius + 0.6 + room) return false;
     }
     for (const [a, b] of lines) if (distanceToSegment(x, z, a, b) < 1.35 + room) return false;
-    for (const [kx, kz, kr] of keepTrees ? keepOut : PROPS) if (Math.hypot(x - kx, z - kz) < kr + room) return false;
+    for (const [kx, kz, kr] of keepTrees ? keepOut : former ? PROPS : PROP_SPOTS) if (Math.hypot(x - kx, z - kz) < kr + room) return false;
     return true;
   };
   /** Somewhere in the land around the village, on either side of the river. */
@@ -378,6 +378,16 @@ export function addNature(
         const p = a.clone().addScaledVector(dir, t).addScaledVector(out, sideOf * (1.45 + edging() * 0.35));
         if (clear(p.x, p.z, 0)) tuft(p.x, p.z, 0.8 + edging() * 0.3, grass, edging);
       }
+    }
+  }
+  // Grass where the plaza's well and notice board stood, as thick as round about.
+  for (const [fx, fz, fr] of FORMER_PROPS) {
+    for (let k = 0; k < 70; k++) {
+      const a = edging() * Math.PI * 2;
+      const d = Math.sqrt(edging()) * (fr + 0.5);
+      const x = fx + Math.cos(a) * d;
+      const z = fz + Math.sin(a) * d;
+      if (clear(x, z, 0, false, false)) tuft(x, z, 0.75 + edging() * 0.4, k % 5 < 2 ? grass : dense, edging);
     }
   }
   for (const id of later) {

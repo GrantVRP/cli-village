@@ -349,6 +349,13 @@ const AROUND_TREES: readonly [number, number, number][] = [
 ];
 
 /**
+ * Where the lamps round the plaza stand (degrees round it, at 9.0 from the middle), each beside a
+ * path. Three of them stepped aside for the later buildings' paths (they were at -119, -72 and
+ * -168). The pools of light on the ground under them use the same list.
+ */
+const LAMP_ANGLES = [-131, -77, 29, 111, -158] as const;
+
+/**
  * Trees that stepped aside for a later building (by their place in AROUND_TREES), and where they
  * stand now. The scenery seeded round them still keeps clear of where they first stood.
  */
@@ -536,8 +543,7 @@ function bedAngles(): number[] {
 function props(b: ModelBuilder): void {
   const angles = (deg: number) => (deg * Math.PI) / 180;
   const ringPoint = (deg: number, r: number): [number, number] => [Math.cos(angles(deg)) * r, Math.sin(angles(deg)) * r];
-  // (Three of them stand aside from the later buildings' paths.)
-  for (const deg of [-131, -77, 29, 111, -158]) {
+  for (const deg of LAMP_ANGLES) {
     const [x, z] = ringPoint(deg, 9.0);
     lampPost(b, x, z);
   }
@@ -610,7 +616,7 @@ export function createWorld(): World {
 
   // A pool of warm light on the ground under each lamp: added on top of what's there,
   // brightest under the lamp and fading out smoothly, stronger as it gets dark.
-  for (const deg of [-119, -72, 29, 111, -168]) {
+  for (const deg of LAMP_ANGLES) {
     const a = (deg * Math.PI) / 180;
     const pool = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6).rotateX(-Math.PI / 2), lightPool);
     pool.position.set(Math.cos(a) * 9.0 + 0.42, 0.1, Math.sin(a) * 9.0);

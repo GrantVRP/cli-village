@@ -103,17 +103,15 @@ function postoffice(): BuildingModel {
   b.add(new THREE.ConeGeometry(0.88, 0.62, 4), P.roof2, { at: [0, loftY + 1.16, 0], rot: [0, Math.PI / 4, 0], jitter: 0.08 });
   b.add(new THREE.SphereGeometry(0.07, 6, 4), P.brass, { at: [0, loftY + 1.52, 0], material: materials.metal });
 
-  // Front: the door (left), a big counter window (right), a post box and a lantern.
-  const doorX = -0.8;
-  b.push([doorX, BASE, front]);
+  // Front: the door in the middle (where the path arrives), the counter window to its right, a
+  // post box and a lantern to its left.
+  b.push([0, BASE, front]);
   doorOn(b, C.postRed, 0.9, 1.55);
   b.pop();
-  b.push([doorX, 0, 0]);
   steps(b, front + 0.15, 1.3);
-  b.pop();
-  const winX = 0.88;
+  const winX = 1.24;
   const winY = BASE + 0.95;
-  const ww = 1.2;
+  const ww = 0.9;
   const wh = 0.95;
   b.box([ww, wh, 0.04], 0xffffff, { at: [winX, winY, front], material: glowMaterials.window });
   for (const y of [winY - wh / 2 - 0.04, winY + wh / 2 + 0.04]) b.box([ww + 0.16, 0.08, 0.12], P.wood, { at: [winX, y, front + 0.05] });
@@ -121,17 +119,17 @@ function postoffice(): BuildingModel {
   b.box([ww + 0.05, 0.03, 0.06], P.wood, { at: [winX, winY + 0.12, front + 0.04] });
   b.box([ww + 0.34, 0.07, 0.22], P.stone, { at: [winX, winY - wh / 2 - 0.11, front + 0.1] });
   // A striped awning over it.
-  for (let i = 0; i < 6; i++) {
-    const x = winX - 0.7 + 0.14 + i * 0.233;
-    b.box([0.235, 0.04, 0.6], i % 2 ? C.paper : C.postRed, { at: [x, winY + wh / 2 + 0.3, front + 0.28], rot: [0.42, 0, 0], jitter: 0.03 });
+  for (let i = 0; i < 5; i++) {
+    const x = winX - 0.42 + i * 0.21;
+    b.box([0.212, 0.04, 0.6], i % 2 ? C.paper : C.postRed, { at: [x, winY + wh / 2 + 0.3, front + 0.28], rot: [0.42, 0, 0], jitter: 0.03 });
   }
-  b.box([1.42, 0.12, 0.04], C.postRed, { at: [winX, winY + wh / 2 + 0.11, front + 0.56], jitter: 0.03 });
-  addWindowBox(b, winX, winY - wh / 2 - 0.02, front + 0.2, 1.1, makeRandom(7171));
-  b.push([0.04, BASE + 1.95, front]);
+  b.box([1.08, 0.12, 0.04], C.postRed, { at: [winX, winY + wh / 2 + 0.11, front + 0.56], jitter: 0.03 });
+  addWindowBox(b, winX, winY - wh / 2 - 0.02, front + 0.2, 0.85, makeRandom(7171));
+  b.push([-0.9, BASE + 1.95, front]);
   lanternOn(b);
   b.pop();
   // The post box: a red pillar with a domed cap and a slot.
-  const boxAt: [number, number, number] = [-1.72, 0, front + 0.45];
+  const boxAt: [number, number, number] = [-1.5, 0, front + 0.45];
   b.add(new THREE.CylinderGeometry(0.2, 0.22, 0.12, 10), C.postRedDark, { at: [boxAt[0], 0.06, boxAt[2]] });
   b.add(new THREE.CylinderGeometry(0.19, 0.19, 0.82, 10), C.postRed, { at: [boxAt[0], 0.53, boxAt[2]], jitter: 0.03 });
   b.add(new THREE.CylinderGeometry(0.23, 0.23, 0.07, 10), C.postRedDark, { at: [boxAt[0], 0.96, boxAt[2]] });
@@ -234,7 +232,7 @@ function postoffice(): BuildingModel {
         l.mesh.visible = true;
         l.mesh.position.set(loft.x + dx * k * l.reach, loft.y + Math.sin(k * Math.PI * 0.85) * l.rise + k * 0.8, loft.z + dz * k * l.reach);
         // Small near the loft, full size in flight, gone far away.
-        l.mesh.scale.setScalar(1.5 * (0.25 + 0.75 * smooth(clamp01(k * 5)) * smooth(clamp01((1 - k) * 4))) + 0.0001);
+        l.mesh.scale.setScalar(1.5 * (0.25 + 0.75 * smooth(clamp01(k * 5))) * smooth(clamp01((1 - k) * 4)) + 0.0001);
         l.mesh.rotation.set(0.35 + Math.sin(t * 7 + l.spin) * 0.25, l.angle + (l.inbound ? Math.PI : 0), Math.sin(t * 9 + l.spin) * 0.35);
       }
     },
@@ -656,11 +654,12 @@ function archive(): BuildingModel {
   const roofRise = 0.75;
   attic(b, postX * 2 + 0.2, 0.95, roofRise * 0.55, beamY + 0.16, P.woodLight);
   roof(b, { width: postX * 2 + 0.75, depth: 1.5, y: beamY + 0.1, rise: roofRise, overhang: 0.25, rng });
-  // The crank on the right post.
+  // The crank on the left post (seen from the plaza it's on the right, where the villager who
+  // draws water stands).
   const axleY = 1.45;
-  b.add(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 6), P.iron, { at: [postX + 0.2, axleY, 0], rot: [0, 0, Math.PI / 2], material: materials.metal });
-  // Record chests by the left post: the archive's ledgers, kept dry under a lid.
-  for (const [x, z, s, turn] of [[-1.55, -0.45, 1, 0.3], [-1.6, 0.35, 0.85, -0.2]] as const) {
+  b.add(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 6), P.iron, { at: [-(postX + 0.2), axleY, 0], rot: [0, 0, Math.PI / 2], material: materials.metal });
+  // Record chests by the other post: the archive's ledgers, kept dry under a lid.
+  for (const [x, z, s, turn] of [[1.55, -0.45, 1, -0.3], [1.6, 0.35, 0.85, 0.2]] as const) {
     b.push([x, 0, z], turn);
     b.box([0.62 * s, 0.4 * s, 0.42 * s], P.woodLight, { at: [0, 0.2 * s + 0.14, 0], jitter: 0.06 });
     b.box([0.66 * s, 0.08 * s, 0.46 * s], P.wood, { at: [0, 0.42 * s + 0.14, 0] });
@@ -670,7 +669,7 @@ function archive(): BuildingModel {
   }
   // A small stack of ledgers on the bigger chest.
   for (let i = 0; i < 3; i++) {
-    b.box([0.3, 0.07, 0.22], pick([0x7a3e32, 0x3f5a4e, 0x5b4a7a, 0x8a6a3a], rng), { at: [-1.55 + (rng() - 0.5) * 0.04, 0.61 + i * 0.07, -0.45], rot: [0, 0.3 + (rng() - 0.5) * 0.4, 0] });
+    b.box([0.3, 0.07, 0.22], pick([0x7a3e32, 0x3f5a4e, 0x5b4a7a, 0x8a6a3a], rng), { at: [1.55 + (rng() - 0.5) * 0.04, 0.61 + i * 0.07, -0.45], rot: [0, -0.3 + (rng() - 0.5) * 0.4, 0] });
   }
   const group = b.build("archive");
 
@@ -680,8 +679,8 @@ function archive(): BuildingModel {
   const db = new ModelBuilder().useRandom(makeRandom(1102));
   db.add(new THREE.CylinderGeometry(0.13, 0.13, postX * 2 - 0.1, 8), P.woodLight, { rot: [0, 0, Math.PI / 2], jitter: 0.05 });
   for (const x of [-0.2, 0, 0.2]) db.add(new THREE.CylinderGeometry(0.15, 0.15, 0.08, 8), 0xd8c8a0, { at: [x, 0, 0], rot: [0, 0, Math.PI / 2] });
-  db.box([0.05, 0.42, 0.06], P.iron, { at: [postX + 0.34, -0.18, 0], material: materials.metal });
-  db.add(new THREE.CylinderGeometry(0.04, 0.04, 0.2, 6), P.wood, { at: [postX + 0.42, -0.36, 0], rot: [0, 0, Math.PI / 2] });
+  db.box([0.05, 0.42, 0.06], P.iron, { at: [-(postX + 0.34), -0.18, 0], material: materials.metal });
+  db.add(new THREE.CylinderGeometry(0.04, 0.04, 0.2, 6), P.wood, { at: [-(postX + 0.42), -0.36, 0], rot: [0, 0, Math.PI / 2] });
   drum.add(db.build("windlass"));
   group.add(drum);
 
