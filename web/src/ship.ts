@@ -261,15 +261,27 @@ export interface ShipModel {
 }
 
 /** How big a crate is on board (the same size as on the cart, once the ship is scaled). */
-export const CRATE_SCALE = 0.92 / SHIP_SCALE;
-const CRATE_HALF_HEIGHT = 0.25 * CRATE_SCALE;
+export const CRATE_SCALE = 0.9 / SHIP_SCALE;
+/** A crate from its middle down to its bottom (its straps), and its height in a stack. */
+const CRATE_HALF_HEIGHT = 0.257 * CRATE_SCALE;
+const CRATE_STACK = 0.514 * CRATE_SCALE;
+/** Where the crates stand: on the after deck behind the mainmast, clear of its shrouds, the stern cleats and the mainsail when its boom swings out. */
+const CARGO_X = -0.92;
+/** The deck rises toward the stern there: the crates tilt with it (radians, about their own z). */
+export const CARGO_TILT = Math.atan((deckAt(CARGO_X - 0.2).y - deckAt(CARGO_X + 0.2).y) / 0.4);
 
-/** Where `n` crates stand on the after deck (the middle of each), for 1, 2 or 3 of them. */
+/**
+ * Where `n` crates stand on the after deck (the middle of each), for 1, 2 or 3 of them, in the
+ * order the crane sets them down: port first (the far side from the crane), then starboard,
+ * then the third on top, like on the cart.
+ */
 export function crateSpots(n: number): THREE.Vector3[] {
-  const on = (x: number, z: number) => new THREE.Vector3(x, deckAt(x).y + CRATE_HALF_HEIGHT + 0.005, z);
-  if (n <= 1) return [on(-0.85, 0)];
-  if (n === 2) return [on(-0.8, -0.235), on(-0.8, 0.235)];
-  return [on(-0.72, -0.235), on(-0.72, 0.235), on(-1.17, 0)];
+  const y = deckAt(CARGO_X).y + CRATE_HALF_HEIGHT * Math.cos(CARGO_TILT) + 0.005;
+  // One on top sits square on the two below, so it leans with them.
+  const on = (z: number, level = 0) => new THREE.Vector3(CARGO_X + level * CRATE_STACK * Math.sin(CARGO_TILT), y + level * CRATE_STACK * Math.cos(CARGO_TILT), z);
+  if (n <= 1) return [on(0)];
+  if (n === 2) return [on(-0.218), on(0.218)];
+  return [on(-0.218), on(0.218), on(0, 1)];
 }
 
 /** Masts: where they stand, how tall, where the boom and the gaff are, how long they are. */
