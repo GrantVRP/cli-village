@@ -5,8 +5,10 @@
 import * as THREE from "three";
 import { BUILDINGS } from "../../src/events/types.js";
 import { glowMaterials } from "./buildings.js";
+import { wavingFlag, type Flag } from "./flag.js";
 import { addNature, type KeepOut } from "./nature.js";
-import { HARBOR, PLAZA_R, CURB_R, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
+import { addBed, type FlowerBed, type FlowerKind } from "./flora.js";
+import { distanceToPaths, HARBOR, PLAZA_R, CURB_R, pathAngles, RIVER_HALF, RIVER_Z, roomFromProps, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
 import type { Lighting } from "./render/timeline.js";
@@ -61,6 +63,10 @@ export interface World {
   setSky(light: Lighting): void;
   /** Show the extra grass (on the graphics settings that can afford it). */
   setDenseGrass(on: boolean): void;
+  /** Where the patches of wildflowers are (x, z). */
+  flowers: readonly [number, number][];
+  /** Where the flower beds' soil lies (so the villagers keep off it). */
+  beds: readonly FlowerBed[];
 }
 
 const rng = makeRandom(7);
@@ -86,12 +92,24 @@ function groundMesh(geo: THREE.BufferGeometry, name: string, random = rng): THRE
   const pos = geo.getAttribute("position");
   const colors = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
+  const avgY = (from: number, n: number) => {
+    let sum = 0;
+    for (let k = 0; k < n; k++) sum += pos.getY(from + k);
+    return sum / n;
+  };
   for (let i = 0; i < pos.count; i += 3) {
-    const y = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
-    if (y < -0.6) c.set(0x6f6a55);
-    else if (y < -0.12) c.set(P.sand);
-    else c.set(random() < 0.5 ? P.grass : P.grass2);
-    c.offsetHSL(0, 0, (random() - 0.5) * 0.05);
+    // Each triangle draws its random numbers as it always has (so nothing seeded after the
+    // ground moves)...
+    const y = avgY(i, 3);
+    const firstGreen = y >= -0.12 ? random() < 0.5 : (i / 3) % 2 === 0;
+    const shade = (random() - 0.5) * 0.05;
+    // ...but what it's made of goes by its whole square (both of its triangles), so the sandy
+    // banks have straight edges rather than a saw-tooth of sand into the grass.
+    const square = avgY(i - (i % 6), 6);
+    if (square < -0.7) c.set(0x6f6a55);
+    else if (square < -0.06) c.set(P.sand);
+    else c.set(firstGreen ? P.grass : P.grass2);
+    c.offsetHSL(0, 0, shade);
     for (let k = 0; k < 3; k++) colors.set([c.r, c.g, c.b], (i + k) * 3);
   }
   geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -245,7 +263,76 @@ function tree(b: ModelBuilder, x: number, z: number, scale: number, leaf: number
 function treeLineTree(b: ModelBuilder, x: number, row: number, random: () => number): void {
   const z = RIVER_Z - RIVER_HALF - 3.2 - row * 3.4 - random() * 1.5;
   const hill = z < -30 ? Math.min(2.5, (-30 - z) * 0.12) : 0;
-  tree(b, x, z, 1.1 + random() * 0.7 + row * 0.15, pick(P.leaf, random), hill - 0.1, random);
+  // The windmill stands in a clearing. Those trees are still made, into a builder that's
+  // thrown away, so they use up the same random numbers and every other tree stays put.
+  const cleared = row < 2 && Math.hypot(x - WINDMILL.x, z - WINDMILL.z) < 4.2;
+  tree(cleared ? new ModelBuilder() : b, x, z, 1.1 + random() * 0.7 + row * 0.15, pick(P.leaf, random), hill - 0.1, random);
+}
+
+/** The windmill on the far bank, right of the harbor. It faces into the wind (from the front left). */
+const WINDMILL = { x: 22.5, z: -31.4, turn: -Math.PI / 4 };
+
+/**
+ * The windmill: a stone plinth, a cream tower with a timber band, lit windows, a cap with a
+ * pennant, and four lattice sails that turn with the wind. The still parts go into the
+ * world's merged mesh; the sails and the pennant move, so they're returned.
+ */
+function windmill(b: ModelBuilder): { moving: THREE.Group; sails: THREE.Object3D; pennant: Flag } {
+  const { x, z, turn } = WINDMILL;
+  const y = Math.min(2.5, (-30 - z) * 0.12) + Math.sin(x * 0.3) * 0.3 - 0.14;
+  b.push([x, y, z], turn);
+  b.add(new THREE.CylinderGeometry(1.85, 2.0, 0.55, 8), P.stone, { at: [0, 0.27, 0], jitter: 0.04 });
+  b.add(new THREE.CylinderGeometry(1.1, 1.55, 4.4, 8), 0xe6dccb, { at: [0, 2.75, 0], jitter: 0.03 });
+  b.add(new THREE.CylinderGeometry(1.37, 1.37, 0.14, 8), P.wood, { at: [0, 2.6, 0] });
+  b.add(new THREE.CylinderGeometry(1.14, 1.14, 0.12, 8), P.wood, { at: [0, 4.92, 0] });
+  // Door and steps at the front, windows up the tower.
+  b.box([0.66, 1.08, 0.12], P.wood, { at: [0, 1.08, 1.47], rot: [-0.1, 0, 0] });
+  b.box([0.84, 0.12, 0.5], P.stoneDark, { at: [0, 0.58, 1.75] });
+  for (const [wx, wy, wz, ry] of [
+    [0, 3.5, 1.25, 0],
+    [-1.3, 1.9, 0.02, -Math.PI / 2],
+    [0.0, 3.9, -1.2, Math.PI],
+  ] as const) {
+    b.push([wx, wy, wz], ry);
+    b.box([0.44, 0.54, 0.1], P.wood, { at: [0, 0, -0.02] });
+    b.box([0.32, 0.42, 0.05], 0xffffff, { at: [0, 0, 0.04], material: glowMaterials.window });
+    b.pop();
+  }
+  // The cap, the axle and a finial with the pennant's pole.
+  b.add(new THREE.ConeGeometry(1.38, 1.35, 8), P.roof2, { at: [0, 5.66, 0], jitter: 0.05 });
+  b.add(new THREE.CylinderGeometry(0.13, 0.16, 0.9, 6), P.wood, { at: [0, 5.25, 1.25], rot: [Math.PI / 2, 0, 0] });
+  b.add(new THREE.CylinderGeometry(0.03, 0.035, 0.9, 5), P.iron, { at: [0, 6.75, 0], material: materials.metal });
+  b.add(new THREE.SphereGeometry(0.07, 6, 4), P.brass, { at: [0, 7.22, 0], material: materials.metal });
+  b.pop();
+
+  // The sails: a spar each, with a lattice of canvas on one side.
+  const s = new ModelBuilder();
+  s.add(new THREE.CylinderGeometry(0.22, 0.22, 0.2, 8), P.woodLight, { rot: [Math.PI / 2, 0, 0] });
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 2;
+    const along = (side: number, r: number): [number, number, number] => [side * Math.cos(a) - r * Math.sin(a), side * Math.sin(a) + r * Math.cos(a), 0];
+    const at = (side: number, r: number, depth: number): [number, number, number] => [...along(side, r).slice(0, 2), depth] as [number, number, number];
+    s.box([0.13, 3.45, 0.11], P.wood, { at: along(0, 1.75), rot: [0, 0, a] });
+    // Canvas behind a lattice: bars across, and a frame along the outer edge.
+    s.box([0.74, 2.55, 0.025], 0xe9dcc0, { at: at(0.5, 2.0, -0.03), rot: [0, 0, a] });
+    for (const r of [0.75, 1.3, 1.85, 2.4, 2.95, 3.28]) s.box([0.92, 0.05, 0.05], P.wood, { at: at(0.46, r, 0.03), rot: [0, 0, a] });
+    s.box([0.06, 2.6, 0.06], P.wood, { at: at(0.9, 2.0, 0.03), rot: [0, 0, a] });
+  }
+  const sails = s.build("windmill-sails");
+  sails.position.set(0, 5.25, 1.75);
+  sails.rotation.z = 0.35;
+
+  const pennant = wavingFlag(0.85, 0.36, P.purple, true);
+  pennant.mesh.position.set(0, 7.05, 0);
+  // It streams out behind the sails (downwind).
+  pennant.mesh.rotation.y = Math.PI / 2;
+
+  const moving = new THREE.Group();
+  moving.name = "windmill";
+  moving.position.set(x, y, z);
+  moving.rotation.y = turn;
+  moving.add(sails, pennant.mesh);
+  return { moving, sails, pennant };
 }
 
 /** The trees around the village: x, z and size. */
@@ -331,8 +418,12 @@ export function barrel(b: ModelBuilder, x: number, z: number, y = 0): void {
 }
 
 function well(b: ModelBuilder, x: number, z: number): void {
-  b.add(new THREE.CylinderGeometry(0.95, 1.0, 0.8, 12), P.stone, { at: [x, 0.4, z], jitter: 0.08 });
-  b.add(new THREE.CylinderGeometry(0.72, 0.72, 0.05, 12), 0x3c5a6a, { at: [x, 0.72, z] });
+  // A ring of stone (the inside wall turned inward, so it shows), capped with coping stones,
+  // and dark water down inside.
+  b.add(new THREE.CylinderGeometry(0.95, 1.0, 0.8, 14, 1, true), P.stone, { at: [x, 0.4, z], jitter: 0.08 });
+  b.add(new THREE.CylinderGeometry(0.7, 0.7, 0.8, 14, 1, true).scale(-1, 1, 1), P.stoneDark, { at: [x, 0.4, z], jitter: 0.06 });
+  b.add(new THREE.TorusGeometry(0.83, 0.15, 4, 14).rotateX(Math.PI / 2), P.stone, { at: [x, 0.8, z], scale: [1, 0.55, 1], jitter: 0.1 });
+  b.add(new THREE.CircleGeometry(0.7, 14).rotateX(-Math.PI / 2), 0x29404c, { at: [x, 0.42, z], jitter: 0.02 });
   for (const dx of [-0.85, 0.85]) b.box([0.12, 1.9, 0.12], P.wood, { at: [x + dx, 1.3, z] });
   b.add(new THREE.ConeGeometry(1.35, 0.7, 4), P.roof2, { at: [x, 2.55, z], rot: [0, Math.PI / 4, 0], scale: [1, 1, 0.7] });
   b.box([1.8, 0.07, 0.07], P.wood, { at: [x, 1.95, z] });
@@ -354,13 +445,64 @@ function noticeBoard(b: ModelBuilder, x: number, z: number, rotY: number): void 
   b.pop();
 }
 
-function flowers(b: ModelBuilder, x: number, z: number, count = 9): void {
-  for (let i = 0; i < count; i++) {
-    const fx = x + (rng() - 0.5) * 1.4;
-    const fz = z + (rng() - 0.5) * 1.0;
-    b.add(new THREE.ConeGeometry(0.08, 0.3, 4), pick(P.leaf, rng), { at: [fx, 0.15, fz] });
-    b.add(new THREE.IcosahedronGeometry(0.08, 0), pick([0xe85d75, 0xf2d15c, 0xf4f1ea, 0xb070e0, 0xf08c4a], rng), { at: [fx, 0.34, fz] });
+/** The flowers' own random numbers (their detail never moves anything else that's seeded). */
+const bloom = makeRandom(5150);
+/** What each bed is planted with: two kinds that go together. */
+const BEDS: readonly (readonly FlowerKind[])[] = [
+  ["daisy", "poppy"],
+  ["tulip", "lavender"],
+  ["cosmos", "daisy"],
+  ["poppy", "lavender"],
+  ["tulip", "daisy"],
+  ["cosmos", "lavender"],
+];
+let bedCount = 0;
+const beds: FlowerBed[] = [];
+
+/**
+ * A bed of flowers round (x, z), its length along `turn`. Flowers that would land near a path or
+ * a prop are left out.
+ */
+function flowers(b: ModelBuilder, x: number, z: number, count = 9, planted = true, turn = 0): void {
+  // The beds used to take four random numbers a flower; still taken, so everything seeded after
+  // them stays where it was.
+  for (let i = 0; i < count * 4; i++) rng();
+  if (!planted) return;
+  const kinds = BEDS[bedCount++ % BEDS.length]!;
+  const big = count > 6;
+  beds.push(addBed(b, x, z, {
+    kinds,
+    rx: big ? 0.85 : 0.75,
+    rz: big ? 0.48 : 0.36,
+    turn,
+    rng: bloom,
+    skip: (fx, fz) => distanceToPaths(fx, fz) < 1.45 || roomFromProps(fx, fz) < 0.3,
+  }));
+}
+
+/**
+ * Up to eight beds round the plaza, in the gaps between the paths: one in each gap, then more in
+ * the roomiest gaps, spread evenly. No bed goes where a prop stands (the well, the notice board).
+ */
+function bedAngles(): number[] {
+  const R = 10.9;
+  const paths = pathAngles();
+  // (Two paths that leave side by side, like the harbor's walk and its rails, leave no room.)
+  const gaps = paths
+    .map((a, i) => {
+      const next = i + 1 < paths.length ? paths[i + 1]! : paths[0]! + Math.PI * 2;
+      return { from: a, width: next - a };
+    })
+    .filter((g) => g.width > 0.35);
+  const at = (g: { from: number; width: number }, n: number) => Array.from({ length: n }, (_, j) => g.from + (g.width * (j + 1)) / (n + 1));
+  const clearOfProps = (a: number) => roomFromProps(Math.cos(a) * R, Math.sin(a) * R) > 1.15;
+  const open = gaps.map((g) => ({ ...g, n: 1 }));
+  const placed = () => open.flatMap((g) => at(g, g.n)).filter(clearOfProps);
+  for (let tries = 0; placed().length < 8 && tries < 24; tries++) {
+    const roomiest = open.reduce((w, g) => (g.width / (g.n + 1) > w.width / (w.n + 1) ? g : w));
+    roomiest.n++;
   }
+  return placed().slice(0, 8);
 }
 
 function props(b: ModelBuilder): void {
@@ -382,17 +524,21 @@ function props(b: ModelBuilder): void {
   barrel(b, -13.2, 14.8, 0);
   barrel(b, 11.2, -17.2);
   barrel(b, 10.6, -17.8);
-  // Flowers along the plaza and by the cottages.
-  for (const deg of [-40, 10, 60, 100, 140, 190, -140, -100]) {
-    const [x, z] = ringPoint(deg, 10.4 + rng());
-    flowers(b, x, z);
+  // Flower beds round the plaza, in the gaps between the paths (see bedAngles), and by the
+  // cottages.
+  const beds = bedAngles();
+  for (let i = 0; i < 8; i++) {
+    const r = 10.4 + rng();
+    const a = beds[i];
+    // (Fewer places than beds: the spare ones still use up their random numbers.)
+    flowers(b, Math.cos(a ?? 0) * r, Math.sin(a ?? 0) * r, 9, a !== undefined, (a ?? 0) + Math.PI / 2);
   }
   for (const id of ["home", "lab", "workshop"] as const) {
     const s = SPOTS[id];
     const side = new THREE.Vector3(Math.cos(s.rotY), 0, -Math.sin(s.rotY));
     for (const k of [-1, 1]) {
       const p = s.door.clone().addScaledVector(side, k * 2.6);
-      flowers(b, p.x, p.z, 6);
+      flowers(b, p.x, p.z, 6, true, Math.atan2(side.z, side.x));
     }
   }
   // Stacked crates waiting at the harbor.
@@ -413,6 +559,8 @@ export function createWorld(): World {
   riverBanks(b);
   trees(b);
   props(b);
+  const mill = windmill(b);
+  group.add(mill.moving);
   // Grass, wildflowers, boulders, reeds and garden fences (nature.ts), clear of the trees.
   const trunks: KeepOut[] = [...AROUND_TREES.map(([x, z, s]): KeepOut => [x, z, 0.9 * s]), [-24, -12.5, 1.4]];
   const nature = addNature(b, foliage, trunks);
@@ -439,9 +587,14 @@ export function createWorld(): World {
 
   return {
     group,
-    update: (_dt, t) => {
+    flowers: nature.flowers,
+    beds,
+    update: (dt, t) => {
       water.uniforms.time.value = t;
       windUniforms.time.value = t;
+      // The sails turn with the wind (dt is 0 in still mode, so they hold still).
+      mill.sails.rotation.z += dt * 0.55 * windUniforms.strength.value;
+      mill.pennant.update(dt, dt === 0);
     },
     setSky: (light) => {
       water.uniforms.skyHorizon.value.set(light.horizon);

@@ -1,18 +1,20 @@
 // Nature details: the small things that make the diorama feel lived-in.
 //   - grass tufts across the meadows, thicker in some places than others;
-//   - patches of wildflowers in soft colours;
+//   - patches of wildflowers, mostly one kind to a patch (the flowers themselves are in flora.ts);
 //   - mossy boulders with pebbles around them;
 //   - reeds and cattails along both river banks, swaying with the trees;
 //   - low wooden fences around the cottage gardens (open at the front, where the robots walk).
 //
 // Everything is placed from its own random numbers, so the rest of the village looks exactly
 // as before, and kept clear of the plaza, the paths and rails, the buildings, the props, the
-// trees and the river. It's merged into a few meshes. The tiny things (grass, flowers,
-// pebbles) don't cast shadows: theirs would be too small to see, and they'd cost the most.
+// trees and the river. It's merged into a few meshes. The tiny things (grass, pebbles) don't
+// cast shadows: theirs would be too small to see, and they'd cost the most. The wildflowers go
+// in with the bigger things: they're solid little plants, and they cast shadows.
 
 import * as THREE from "three";
 import { BUILDINGS } from "../../src/events/types.js";
-import { HARBOR, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
+import { addFlower, type FlowerKind, pickFlower } from "./flora.js";
+import { HARBOR, PROP_SPOTS, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, type ModelBuilder, ModelBuilder as Builder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
 
@@ -20,7 +22,7 @@ import { P } from "./palette.js";
  * Grass is lit as if it faced straight up, like the ground it grows from (as stylized games
  * do): thin blades lit by their own steep faces would look dark from above.
  *
- * The tiny things (grass, flowers, pebbles) don't write depth, and are drawn after the other
+ * The tiny things (grass, pebbles) don't write depth, and are drawn after the other
  * solid things, so everything still hides them correctly. The effects that read the depth
  * (ambient occlusion, depth of field, haze) then see the ground under them, as for a decal:
  * otherwise the occlusion would find a crease around every blade and turn the grass black.
@@ -38,19 +40,15 @@ export type KeepOut = readonly [number, number, number];
 /** A little lighter and warmer than the ground, like blades catching the light. */
 const GRASS = [0x8fbc5a, 0x9cc463, 0x84b152, 0xa9c76c, 0x7fae4e] as const;
 const MEADOW_FLOWERS = [0xf1ead8, 0xe9cf6a, 0xd98a9a, 0xa898d0, 0xf4f1ea, 0xe3a86b] as const;
+/** Wildflowers: mostly one kind to a patch. */
+const WILD_KINDS: readonly FlowerKind[] = ["daisy", "daisy", "cosmos", "poppy", "lavender"];
 const REEDS = [0x6f8a3e, 0x82964a, 0x5f7a36, 0x99a056] as const;
 const ROCKS = [P.stone, P.stoneDark, 0x8f8a7c, 0x9a9484] as const;
 const MOSS = [0x5f7d3a, 0x6b8a40, 0x58743a] as const;
 const FENCE = [P.woodLight, 0x8a7458, 0x76603f] as const;
 
-/** Props and spots that aren't buildings or paths. */
-const PROPS: readonly KeepOut[] = [
-  [0, 10.6, 1.7], // well
-  [3.2, -9.6, 1.4], // notice board
-  [-13.1, 14.2, 1.3], // barrels by the workshop
-  [10.9, -17.5, 1.1], // barrels by the harbor
-  [11.2, -15.5, 1.1], // crates at the harbor
-];
+/** Props and spots that aren't buildings or paths (layout.ts). */
+const PROPS: readonly KeepOut[] = PROP_SPOTS;
 
 function distanceToSegment(x: number, z: number, a: THREE.Vector3, b: THREE.Vector3): number {
   const dx = b.x - a.x;
@@ -113,9 +111,11 @@ class Blades {
  * that can afford it (it has its own random numbers, so the rest is the same with or without
  * it). `trees` are the trees around the village, so nothing grows through a trunk.
  */
-export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: readonly KeepOut[]): { small: THREE.Group; dense: THREE.Group } {
+export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: readonly KeepOut[]): { small: THREE.Group; dense: THREE.Group; flowers: [number, number][] } {
   const rng = makeRandom(91);
   const small = new Builder();
+  // The wildflowers have their own random numbers (how detailed they are shifts nothing else).
+  const wild = makeRandom(4242);
   const keepOut = [...PROPS, ...trees];
   const lines: [THREE.Vector3, THREE.Vector3][] = BUILDINGS.map((id) => [SPOTS[id].edge, SPOTS[id].door]);
   const route = HARBOR.cartRoute;
@@ -199,20 +199,30 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     }
   }
 
-  // Wildflowers, in small patches.
+  // Wildflowers, in small patches (where they are is kept: the butterflies visit them).
+  const flowers: [number, number][] = [];
   for (let i = 0, placed = 0; i < 400 && placed < 46; i++) {
     const [x, z] = somewhere();
     if (!clear(x, z, 0.4, true)) continue;
     placed++;
-    const bloom = pick(MEADOW_FLOWERS, rng);
+    flowers.push([x, z]);
+    pick(MEADOW_FLOWERS, rng);
     const count = 4 + Math.floor(rng() * 5);
     const y = groundAt(x, z);
+    const patch = pickFlower(wild, WILD_KINDS);
     for (let k = 0; k < count; k++) {
       const fx = x + (rng() - 0.5) * 1.3;
       const fz = z + (rng() - 0.5) * 1.0;
-      const h = 0.18 + rng() * 0.14;
-      grass.add(fx, y, fz, h, 0.03, 0, 0, color.set(pick(GRASS, rng)), rng);
-      small.add(new THREE.IcosahedronGeometry(0.06 + rng() * 0.025, 0), rng() < 0.85 ? bloom : pick(MEADOW_FLOWERS, rng), { at: [fx, y + h + 0.02, fz], material: smallMaterial, rng });
+      rng();
+      // (The random numbers the old flowers' stems and heads took are still drawn, so the
+      // rocks and grass placed after them stay where they were.)
+      pick(GRASS, rng);
+      rng();
+      rng();
+      if (rng() >= 0.85) pick(MEADOW_FLOWERS, rng);
+      for (let j = 0; j < 60; j++) rng();
+      const odd = wild() < 0.15 ? pickFlower(wild, WILD_KINDS) : { ...patch, color: pickFlower(wild, [patch.kind]).color };
+      addFlower(big, fx, y, fz, { ...odd, rng: wild, size: 0.75 + wild() * 0.2, detail: "low" });
     }
   }
 
@@ -330,5 +340,5 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
   const denseGroup = new THREE.Group();
   denseGroup.name = "nature-dense";
   denseGroup.add(dense.build("grass-dense"));
-  return { small: smallGroup, dense: denseGroup };
+  return { small: smallGroup, dense: denseGroup, flowers };
 }
