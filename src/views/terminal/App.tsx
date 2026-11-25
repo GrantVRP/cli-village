@@ -46,7 +46,7 @@ const keyMessageRows = (compact: boolean) => (compact ? 2 : 6);
 /** The stacked log always keeps this many lines, even with lots of robots. */
 const MIN_LOG_LINES = 3;
 
-const HELP_ORDER: Building[] = ["vault", "library", "workshop", "lab", "townhall", "home", "harbor"];
+const HELP_ORDER: Building[] = ["vault", "library", "workshop", "lab", "postoffice", "archive", "launchtower", "watchtower", "townhall", "home", "harbor"];
 
 /** Tab and Shift+Tab: the next (or previous) building to look at. */
 function nextBuilding(current: Building | null, by: 1 | -1): Building {

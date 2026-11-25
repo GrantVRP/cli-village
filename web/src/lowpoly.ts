@@ -78,6 +78,13 @@ const tmpScale = new THREE.Vector3();
 export class ModelBuilder {
   private readonly parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
   private readonly frames: THREE.Matrix4[] = [];
+  private random: (() => number) | undefined;
+
+  /** Take the colour jitter of the parts added from now on from these random numbers (none: the shared ones). */
+  useRandom(rng?: () => number): this {
+    this.random = rng;
+    return this;
+  }
 
   /** Place the next parts relative to a spot (e.g. a wall), until pop(). */
   push(at: Vec3, rotY = 0): this {
@@ -98,7 +105,7 @@ export class ModelBuilder {
 
   add(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation, options: PartOptions = {}): this {
     const quads = options.quads ?? geometry.type === "BoxGeometry";
-    const g = paint(geometry, color, { jitter: options.jitter, quads, rng: options.rng });
+    const g = paint(geometry, color, { jitter: options.jitter, quads, rng: options.rng ?? this.random });
     const s = options.scale ?? 1;
     tmpMatrix.compose(
       tmpPos.set(...(options.at ?? [0, 0, 0])),

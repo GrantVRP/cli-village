@@ -262,7 +262,7 @@ export class Overlay {
 
   private buildHelp(): void {
     const list = $("#help-buildings");
-    const order: Building[] = ["vault", "library", "workshop", "lab", "townhall", "home", "harbor"];
+    const order: Building[] = ["vault", "library", "workshop", "lab", "postoffice", "archive", "launchtower", "watchtower", "townhall", "home", "harbor"];
     for (const id of order) {
       const row = el("div", "help-row");
       row.append(el("b", undefined, BUILDING_NAMES[id]), el("span", undefined, BUILDING_HELP[id]));

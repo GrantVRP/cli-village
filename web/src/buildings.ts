@@ -33,11 +33,19 @@ export interface BuildingModel {
   chimneys: THREE.Vector3[];
   /** Spots for effects such as bubbling flasks, in the building's own space. */
   extras: Record<string, THREE.Vector3[]>;
-  /** Called every frame. `still` = nothing should move (--no-animation or reduced motion). */
-  update(dt: number, t: number, active: boolean, still: boolean): void;
+  /**
+   * Called every frame. `still` = nothing should move (--no-animation or reduced motion);
+   * `problem` = something here failed and isn't fixed yet.
+   */
+  update(dt: number, t: number, active: boolean, still: boolean, problem: boolean): void;
+  /** A job here just finished, or just failed (only for what happens live, never when catching up). */
+  cue?(what: "done" | "fail"): void;
 }
 
-const shadeOf = (hex: number, amount: number) => new THREE.Color(hex).offsetHSL(0, 0, amount).getHex();
+/** The first six buildings (the harbor is its own thing, in harbor.ts). */
+export type FirstBuilding = "home" | "workshop" | "lab" | "townhall" | "library" | "vault";
+
+export const shadeOf = (hex: number, amount: number) => new THREE.Color(hex).offsetHSL(0, 0, amount).getHex();
 const ROOF_TILES = [P.roof, P.roof, P.roof2, P.roof3];
 
 // ---------------------------------------------------------------------------
@@ -45,7 +53,7 @@ const ROOF_TILES = [P.roof, P.roof, P.roof2, P.roof3];
 // ---------------------------------------------------------------------------
 
 /** A window on a wall. The wall surface is at z = 0, outside is +z. */
-function windowOn(b: ModelBuilder, shutter: number, w = 0.5, h = 0.64): void {
+export function windowOn(b: ModelBuilder, shutter: number, w = 0.5, h = 0.64): void {
   b.box([w + 0.16, 0.08, 0.1], P.wood, { at: [0, h / 2 + 0.04, 0.04] });
   b.box([w + 0.16, 0.08, 0.1], P.wood, { at: [0, -h / 2 - 0.04, 0.04] });
   b.box([0.08, h, 0.1], P.wood, { at: [-w / 2 - 0.04, 0, 0.04] });
@@ -58,7 +66,7 @@ function windowOn(b: ModelBuilder, shutter: number, w = 0.5, h = 0.64): void {
 }
 
 /** A door with a frame. Its bottom is at y = 0, on a wall at z = 0. */
-function doorOn(b: ModelBuilder, color: number, w = 0.9, h = 1.6): void {
+export function doorOn(b: ModelBuilder, color: number, w = 0.9, h = 1.6): void {
   b.box([w + 0.24, 0.15, 0.16], P.wood, { at: [0, h + 0.075, 0.06] });
   b.box([0.12, h, 0.14], P.wood, { at: [-w / 2 - 0.06, h / 2, 0.05] });
   b.box([0.12, h, 0.14], P.wood, { at: [w / 2 + 0.06, h / 2, 0.05] });
@@ -68,7 +76,7 @@ function doorOn(b: ModelBuilder, color: number, w = 0.9, h = 1.6): void {
 }
 
 /** A lantern hanging from a bracket on a wall. */
-function lanternOn(b: ModelBuilder): void {
+export function lanternOn(b: ModelBuilder): void {
   const metal = materials.metal;
   b.box([0.05, 0.05, 0.36], P.iron, { at: [0, 0, 0.18], material: metal });
   b.box([0.04, 0.26, 0.04], P.iron, { at: [0, -0.13, 0.03], rot: [0.6, 0, 0], material: metal });
@@ -78,14 +86,14 @@ function lanternOn(b: ModelBuilder): void {
 }
 
 /** Stone steps leading up to a door. */
-function steps(b: ModelBuilder, z: number, width = 1.5): void {
+export function steps(b: ModelBuilder, z: number, width = 1.5): void {
   b.box([width, 0.15, 0.32], P.stone, { at: [0, 0.075, z + 0.62] });
   b.box([width - 0.15, 0.15, 0.3], P.stone, { at: [0, 0.225, z + 0.36] });
   b.box([width - 0.3, 0.15, 0.24], P.stone, { at: [0, 0.375, z + 0.14] });
 }
 
 /** The triangle-shaped attic under a gable roof (ridge runs left to right). */
-function attic(b: ModelBuilder, w: number, d: number, rise: number, y: number, color: number): void {
+export function attic(b: ModelBuilder, w: number, d: number, rise: number, y: number, color: number): void {
   const shape = new THREE.Shape();
   shape.moveTo(-d / 2, 0);
   shape.lineTo(d / 2, 0);
@@ -98,7 +106,7 @@ function attic(b: ModelBuilder, w: number, d: number, rise: number, y: number, c
 }
 
 /** A gable roof made of offset rows of tiles, each a slightly different color. */
-function roof(
+export function roof(
   b: ModelBuilder,
   o: { width: number; depth: number; y: number; rise: number; overhang: number; rng: () => number },
 ): void {
@@ -155,7 +163,7 @@ interface CottageInfo {
   front: number;
 }
 
-const BASE = 0.45;
+export const BASE = 0.45;
 
 /** A two-storey cottage: stone base, trim band, tiled gable roof, chimney, windows with shutters, door, steps and a lantern. */
 function cottage(b: ModelBuilder, s: CottageSpec): CottageInfo {
@@ -571,7 +579,7 @@ function vault(): BuildingModel {
   };
 }
 
-export function createBuildingModels(): Record<Exclude<Building, "harbor">, BuildingModel> {
+export function createBuildingModels(): Record<FirstBuilding, BuildingModel> {
   return {
     home: home(),
     workshop: workshop(),

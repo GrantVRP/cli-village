@@ -11,6 +11,7 @@ import type { CameraRig } from "./camera.js";
 import { Column } from "./column.js";
 import type { Effects } from "./effects.js";
 import { Harbor } from "./harbor.js";
+import { createLaterModels } from "./later-buildings.js";
 import { HARBOR, route, SPOTS, standPoint } from "./layout.js";
 import type { BubbleMode, Overlay } from "./overlay.js";
 import { P } from "./palette.js";
@@ -67,7 +68,7 @@ export class Village {
     private readonly rig: CameraRig,
   ) {
     this.group.name = "village";
-    this.models = createBuildingModels();
+    this.models = { ...createBuildingModels(), ...createLaterModels() };
     for (const id of BUILDINGS) {
       const spot = SPOTS[id];
       if (id !== "harbor") {
@@ -165,6 +166,13 @@ export class Village {
     if (!snap && this.reactedTo >= 0) {
       for (const r of reactionsTo(state.log, this.reactedTo, this.problems, problems, this.resting())) {
         this.robots.get(r.agent)?.robot.react(r.gesture, r.delay);
+      }
+    }
+    // Cues for the buildings that show a job ending (the Launch tower's rocket goes up when a
+    // deploy ships), from the same new log entries.
+    if (!snap && this.reactedTo >= 0) {
+      for (const e of state.log) {
+        if (e.seq > this.reactedTo && e.building && e.building !== "harbor" && (e.type === "done" || e.type === "fail")) this.models[e.building].cue?.(e.type);
       }
     }
     this.reactedTo = Math.max(this.reactedTo, state.lastSeq);
@@ -282,7 +290,7 @@ export class Village {
       const center = id === "harbor" ? HARBOR.gate : spot.pos;
       if (id !== "harbor") {
         const model = this.models[id];
-        model.update(dt, t, active, this.still);
+        model.update(dt, t, active, this.still, problem);
         // Chimney smoke: always a little, more when busy, and in the evening and the cold.
         model.chimneys.forEach((c, i) => {
           if (this.every(`smoke-${id}-${i}`, active ? (id === "workshop" ? 0.18 : 0.3) : 0.8 / (1 + 1.2 * this.effects.fires), dt)) {

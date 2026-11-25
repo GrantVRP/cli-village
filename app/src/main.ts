@@ -61,7 +61,7 @@ const VIEW_TIPS: Record<View, string> = {
   agents: "Any program becomes a robot by sending start, progress, done and fail events. The demo plays pretend robots so you can see how it looks.",
   help: "The side bar explains the buildings, the words and the keys. The Guide on the right follows you around.",
 };
-const BUILDING_ORDER: Building[] = ["townhall", "vault", "library", "workshop", "lab", "harbor", "home"];
+const BUILDING_ORDER: Building[] = ["townhall", "vault", "library", "workshop", "lab", "postoffice", "archive", "launchtower", "watchtower", "harbor", "home"];
 
 let info: AppInfo | null = null;
 let state: VillageState | null = null;

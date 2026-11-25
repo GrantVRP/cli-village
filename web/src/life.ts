@@ -7,7 +7,7 @@
 
 import * as THREE from "three";
 import { bedReach, type FlowerBed } from "./flora.js";
-import { RIVER_HALF, RIVER_Z, SPOTS } from "./layout.js";
+import { isLater, RIVER_HALF, RIVER_Z, SPOTS } from "./layout.js";
 import { makeRandom, ModelBuilder } from "./lowpoly.js";
 import { P } from "./palette.js";
 import { birdsWanted, butterfliesWanted, catAwake, firefliesWanted, lanternLight, type LifeConditions, smooth, villagersOut } from "./render/life-rules.js";
@@ -225,8 +225,19 @@ class Fireflies {
       const x = Math.cos(angle) * r;
       const z = Math.sin(angle) * r;
       if (z < RIVER_Z + RIVER_HALF + 0.6) continue;
-      if (Object.values(SPOTS).some((s) => Math.hypot(x - s.pos.x, z - s.pos.z) < s.radius + 1.2)) continue;
-      positions.push(x, 0.3 + rng() * 1.0, z);
+      if (Object.values(SPOTS).some((s) => !isLater(s.id) && Math.hypot(x - s.pos.x, z - s.pos.z) < s.radius + 1.2)) continue;
+      // One that would be inside a later building waits just outside it instead (so the random
+      // numbers, and every other firefly, stay the same).
+      let fx = x;
+      let fz = z;
+      for (const s of Object.values(SPOTS)) {
+        const d = Math.hypot(fx - s.pos.x, fz - s.pos.z);
+        if (!isLater(s.id) || d >= s.radius + 1.2) continue;
+        const k = (s.radius + 1.2) / Math.max(d, 0.01);
+        fx = s.pos.x + (fx - s.pos.x) * k;
+        fz = s.pos.z + (fz - s.pos.z) * k;
+      }
+      positions.push(fx, 0.3 + rng() * 1.0, fz);
       seeds.push(rng(), rng(), rng(), rng());
     }
     // The bank of the river, where they gather most.
@@ -596,7 +607,7 @@ class Cat {
   }
 }
 
-// --- Villagers: one draws water at the well, one picks flowers; indoors at night or in rain ---
+// --- Villagers: one draws water at the Archive well, one picks flowers; indoors at night or in rain ---
 
 interface Errand {
   /** Where they sit, and the bench's turn. */
@@ -663,7 +674,8 @@ class Villagers {
       return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
     };
     const errands: [number, number, Errand][] = [
-      [0x6f7d3c, 0, { bench: bench(69), benchRot: 0, spot: new THREE.Vector3(1.45, 0, 9.85), spotFacing: 0, task: "water", offset: 0 }],
+      // She draws water at the Archive well, beside it (the robots who work there stand at its front).
+      [0x6f7d3c, 0, { bench: bench(69), benchRot: 0, spot: new THREE.Vector3(SPOTS.archive.pos.x + 1.7, 0, SPOTS.archive.pos.z - 0.2), spotFacing: 0, task: "water", offset: 0 }],
       [0xa0522d, 1, { bench: bench(151), benchRot: 0, spot: new THREE.Vector3(-12.4, 0, 7.3), spotFacing: 0, task: "flowers", offset: 31 }],
     ];
     for (const [tunic, hat, errand] of errands) {
@@ -684,7 +696,7 @@ class Villagers {
         }
         errand.spotFacing = target ? Math.atan2(target.x - errand.spot.x, target.z - errand.spot.z) : 2.2;
       } else {
-        errand.spotFacing = Math.atan2(0 - errand.spot.x, 10.6 - errand.spot.z);
+        errand.spotFacing = Math.atan2(SPOTS.archive.pos.x - errand.spot.x, SPOTS.archive.pos.z - errand.spot.z);
       }
       const v = villager(tunic, hat === 0 ? "straw" : "cap");
       this.group.add(v.group);

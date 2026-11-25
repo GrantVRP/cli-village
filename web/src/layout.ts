@@ -44,7 +44,22 @@ export const SPOTS: Record<Building, Spot> = {
   home: spot("home", 15, 2.5, 1.9, 7.2, 3.2),
   // The harbor "building" is the checkpoint gate and the dock across the river.
   harbor: spot("harbor", 12.2, -16.8, 0, 4.4, 3.0),
+  // Four added later, in the gaps the first seven left: the two towers at the back and the
+  // side, where they hide nothing from the usual view, and the Archive well where the plaza's
+  // well stood.
+  postoffice: spot("postoffice", -8, -13.86, 1.7, 7.6, 2.8),
+  launchtower: spot("launchtower", 8.24, -16.9, 1.3, 11.6, 2.0),
+  watchtower: spot("watchtower", -18.16, -3.53, 1.2, 10.6, 1.8),
+  archive: spot("archive", 0, 12.2, 1.1, 4.4, 1.9),
 };
+
+/**
+ * The buildings added after the village was laid out. The scenery placed with random numbers
+ * (path stones, grass, flowers, rocks, fireflies) was laid out round the first seven; these four
+ * use random numbers of their own and only clear room where they stand, so nothing else moves.
+ */
+export const LATER_BUILDINGS: readonly Building[] = ["postoffice", "launchtower", "watchtower", "archive"];
+export const isLater = (id: Building) => LATER_BUILDINGS.includes(id);
 
 // The harbor's rail branch: from the ring track, through the gate, along the dock.
 export const HARBOR = {
@@ -125,9 +140,11 @@ export function distanceToPaths(x: number, z: number): number {
   return best;
 }
 
-/** The directions (radians, atan2(z, x)) in which paths leave the plaza, sorted. */
-export function pathAngles(): number[] {
-  const angles = Object.values(SPOTS).map((s) => Math.atan2(s.door.z, s.door.x));
+/** The directions (radians, atan2(z, x)) in which paths leave the plaza, sorted: every path, or the first seven buildings' (and the harbor's rails). */
+export function pathAngles(firstSevenOnly = false): number[] {
+  const angles = Object.values(SPOTS)
+    .filter((s) => !firstSevenOnly || !isLater(s.id))
+    .map((s) => Math.atan2(s.door.z, s.door.x));
   const route = HARBOR.cartRoute;
   if (route.length > 1) angles.push(Math.atan2(route[1]!.z, route[1]!.x));
   return angles.sort((a, b) => a - b);
@@ -135,16 +152,24 @@ export function pathAngles(): number[] {
 
 /** Props and spots that aren't buildings or paths: x, z and how much room they take. */
 export const PROP_SPOTS: readonly (readonly [number, number, number])[] = [
-  [0, 10.6, 1.7], // well
-  [3.2, -9.6, 1.4], // notice board
   [-13.1, 14.2, 1.3], // barrels by the workshop
   [10.9, -17.5, 1.1], // barrels by the harbor
   [11.2, -15.5, 1.1], // crates at the harbor
 ];
 
-/** How much room (x, z) has before it reaches a prop (negative: inside one). */
-export function roomFromProps(x: number, z: number): number {
+/**
+ * Where the plaza's well and notice board stood, before the Archive well and the Launch tower's
+ * path took their places (the notice board went to the Post office). The scenery laid out round
+ * the first seven buildings still keeps clear of them, so it stays where it was.
+ */
+export const FORMER_PROPS: readonly (readonly [number, number, number])[] = [
+  [0, 10.6, 1.7],
+  [3.2, -9.6, 1.4],
+];
+
+/** How much room (x, z) has before it reaches a prop (negative: inside one); with `former`, the former props count too. */
+export function roomFromProps(x: number, z: number, former = false): number {
   let best = Infinity;
-  for (const [px, pz, r] of PROP_SPOTS) best = Math.min(best, Math.hypot(x - px, z - pz) - r);
+  for (const [px, pz, r] of former ? [...PROP_SPOTS, ...FORMER_PROPS] : PROP_SPOTS) best = Math.min(best, Math.hypot(x - px, z - pz) - r);
   return best;
 }
