@@ -260,7 +260,7 @@ export interface ShipModel {
   cleats: [THREE.Vector3, THREE.Vector3];
 }
 
-/** How big a crate is on board (the same size as on the cart, once the ship is scaled). */
+/** How big a crate is on board, once the ship is scaled: a touch smaller than on the cart (90%), so a stack of three fits inside the rail. */
 export const CRATE_SCALE = 0.9 / SHIP_SCALE;
 /** A crate from its middle down to its bottom (its straps), and its height in a stack. */
 const CRATE_HALF_HEIGHT = 0.257 * CRATE_SCALE;

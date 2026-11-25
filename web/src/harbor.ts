@@ -136,8 +136,8 @@ const AWAY = 1.5;
 const GLIDE = 11;
 const TURNING = 5.5;
 const BERTHING = 4;
-/** How far out the booms swing when the ship runs before the wind (radians: out to port, away from the crane and the village side). */
-const RUNNING_BOOM = -1.0;
+/** How far out the booms swing when the ship runs before the wind (radians: out to starboard, the village side, so the sails face the village and belly downwind). */
+const RUNNING_BOOM = 1.0;
 /** How full the sails are when there's no way on the ship: slack, flapping a little. */
 const SLACK = 0.12;
 
@@ -753,7 +753,7 @@ export class Harbor {
     let boom = 0;
     switch (this.shipState) {
       case "loading":
-        // The booms swing out of the crane's way (to where they'll be when it sails).
+        // The booms swing out over the village side, clear of the stack on the after deck (to where they'll be when it sails).
         boom = RUNNING_BOOM * smooth(k / 1.2);
         break;
       case "sailing":
