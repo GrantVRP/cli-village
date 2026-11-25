@@ -115,7 +115,7 @@ export function createFormatter(detail: Detail = "full"): (event: VillageEvent) 
         const command = `git push ${remote} ${branch}`;
         const shown = shownBefore((c) => c.startsWith("git push"));
         return [
-          line(`${green(`${symbols.push} pushed`)} ${n} commit${n === 1 ? "" : "s"} to ${remote}/${branch}. The boat sails!`),
+          line(`${green(`${symbols.push} pushed`)} ${n} commit${n === 1 ? "" : "s"} to ${remote}/${branch}. The ship sails!`),
           ...extras(shown ? undefined : command, explainCommand("git push")),
         ];
       }

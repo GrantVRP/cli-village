@@ -240,7 +240,7 @@ export class Overlay {
       : b.working.length
         ? `▶ Working here: ${b.working.join(", ")}`
         : "○ Quiet right now";
-    // At the harbor: what's at the gate, what's waiting, or the last boat.
+    // At the harbor: what's at the gate, what's waiting, or the last ship.
     const harbor = id === "harbor" ? describeHarbor(state) : null;
     const note = $("#panel-note");
     note.hidden = !harbor;
