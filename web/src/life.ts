@@ -511,11 +511,12 @@ class Villagers {
     for (const [tunic, hat, errand] of errands) {
       errand.benchRot = Math.atan2(-errand.bench.x, -errand.bench.z);
       if (errand.task === "flowers") {
-        // The nearest patch of wildflowers (if one is close), standing on the bench's side of it.
+        // The nearest patch of wildflowers (if one is close), standing just outside it on the bench's
+        // side (a patch spreads about 0.65 from its middle), so he bends to reach them.
         const b = errand.bench;
         const patch = [...flowers].sort((p, q) => Math.hypot(p[0] - b.x, p[1] - b.z) - Math.hypot(q[0] - b.x, q[1] - b.z))[0];
         if (patch && Math.hypot(patch[0] - b.x, patch[1] - b.z) < 8) {
-          const toward = new THREE.Vector3(b.x - patch[0], 0, b.z - patch[1]).normalize().multiplyScalar(0.75);
+          const toward = new THREE.Vector3(b.x - patch[0], 0, b.z - patch[1]).normalize().multiplyScalar(1.0);
           errand.spot.set(patch[0] + toward.x, 0, patch[1] + toward.z);
         }
         errand.spotFacing = patch ? Math.atan2(patch[0] - errand.spot.x, patch[1] - errand.spot.z) : 2.2;

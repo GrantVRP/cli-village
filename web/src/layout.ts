@@ -104,3 +104,46 @@ export function route(from: THREE.Vector3, fromBuilding: Building | null, to: Bu
   points.push(entry, dest.clone());
   return points;
 }
+
+/**
+ * How far (x, z) is from the nearest path: the walks from the plaza to each door, and the
+ * cart's rails out to the harbor. Things that grow or stand about (flower beds, villagers'
+ * spots) keep clear of them by this.
+ */
+export function distanceToPaths(x: number, z: number): number {
+  const segment = (ax: number, az: number, bx: number, bz: number) => {
+    const dx = bx - ax;
+    const dz = bz - az;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+    return Math.hypot(x - (ax + dx * t), z - (az + dz * t));
+  };
+  let best = Infinity;
+  for (const s of Object.values(SPOTS)) best = Math.min(best, segment(s.edge.x, s.edge.z, s.door.x, s.door.z));
+  const route = HARBOR.cartRoute;
+  for (let i = 0; i < route.length - 1; i++) best = Math.min(best, segment(route[i]!.x, route[i]!.z, route[i + 1]!.x, route[i + 1]!.z));
+  return best;
+}
+
+/** The directions (radians, atan2(z, x)) in which paths leave the plaza, sorted. */
+export function pathAngles(): number[] {
+  const angles = Object.values(SPOTS).map((s) => Math.atan2(s.door.z, s.door.x));
+  const route = HARBOR.cartRoute;
+  if (route.length > 1) angles.push(Math.atan2(route[1]!.z, route[1]!.x));
+  return angles.sort((a, b) => a - b);
+}
+
+/** Props and spots that aren't buildings or paths: x, z and how much room they take. */
+export const PROP_SPOTS: readonly (readonly [number, number, number])[] = [
+  [0, 10.6, 1.7], // well
+  [3.2, -9.6, 1.4], // notice board
+  [-13.1, 14.2, 1.3], // barrels by the workshop
+  [10.9, -17.5, 1.1], // barrels by the harbor
+  [11.2, -15.5, 1.1], // crates at the harbor
+];
+
+/** How much room (x, z) has before it reaches a prop (negative: inside one). */
+export function roomFromProps(x: number, z: number): number {
+  let best = Infinity;
+  for (const [px, pz, r] of PROP_SPOTS) best = Math.min(best, Math.hypot(x - px, z - pz) - r);
+  return best;
+}

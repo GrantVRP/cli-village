@@ -7,7 +7,8 @@ import { BUILDINGS } from "../../src/events/types.js";
 import { glowMaterials } from "./buildings.js";
 import { wavingFlag, type Flag } from "./flag.js";
 import { addNature, type KeepOut } from "./nature.js";
-import { HARBOR, PLAZA_R, CURB_R, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
+import { addBed, type FlowerKind } from "./flora.js";
+import { distanceToPaths, HARBOR, PLAZA_R, CURB_R, pathAngles, RIVER_HALF, RIVER_Z, roomFromProps, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
 import type { Lighting } from "./render/timeline.js";
@@ -426,13 +427,63 @@ function noticeBoard(b: ModelBuilder, x: number, z: number, rotY: number): void 
   b.pop();
 }
 
-function flowers(b: ModelBuilder, x: number, z: number, count = 9): void {
-  for (let i = 0; i < count; i++) {
-    const fx = x + (rng() - 0.5) * 1.4;
-    const fz = z + (rng() - 0.5) * 1.0;
-    b.add(new THREE.ConeGeometry(0.08, 0.3, 4), pick(P.leaf, rng), { at: [fx, 0.15, fz] });
-    b.add(new THREE.IcosahedronGeometry(0.08, 0), pick([0xe85d75, 0xf2d15c, 0xf4f1ea, 0xb070e0, 0xf08c4a], rng), { at: [fx, 0.34, fz] });
+/** The flowers' own random numbers (their detail never moves anything else that's seeded). */
+const bloom = makeRandom(5150);
+/** What each bed is planted with: two kinds that go together. */
+const BEDS: readonly (readonly FlowerKind[])[] = [
+  ["daisy", "poppy"],
+  ["tulip", "lavender"],
+  ["cosmos", "daisy"],
+  ["poppy", "lavender"],
+  ["tulip", "daisy"],
+  ["cosmos", "lavender"],
+];
+let bedCount = 0;
+
+/**
+ * A bed of flowers round (x, z), its length along `turn`. Flowers that would land near a path or
+ * a prop are left out.
+ */
+function flowers(b: ModelBuilder, x: number, z: number, count = 9, planted = true, turn = 0): void {
+  // The beds used to take four random numbers a flower; still taken, so everything seeded after
+  // them stays where it was.
+  for (let i = 0; i < count * 4; i++) rng();
+  if (!planted) return;
+  const kinds = BEDS[bedCount++ % BEDS.length]!;
+  const big = count > 6;
+  addBed(b, x, z, {
+    kinds,
+    rx: big ? 0.85 : 0.75,
+    rz: big ? 0.48 : 0.36,
+    turn,
+    rng: bloom,
+    skip: (fx, fz) => distanceToPaths(fx, fz) < 1.45 || roomFromProps(fx, fz) < 0.3,
+  });
+}
+
+/**
+ * Up to eight beds round the plaza, in the gaps between the paths: one in each gap, then more in
+ * the roomiest gaps, spread evenly. No bed goes where a prop stands (the well, the notice board).
+ */
+function bedAngles(): number[] {
+  const R = 10.9;
+  const paths = pathAngles();
+  // (Two paths that leave side by side, like the harbor's walk and its rails, leave no room.)
+  const gaps = paths
+    .map((a, i) => {
+      const next = i + 1 < paths.length ? paths[i + 1]! : paths[0]! + Math.PI * 2;
+      return { from: a, width: next - a };
+    })
+    .filter((g) => g.width > 0.35);
+  const at = (g: { from: number; width: number }, n: number) => Array.from({ length: n }, (_, j) => g.from + (g.width * (j + 1)) / (n + 1));
+  const clearOfProps = (a: number) => roomFromProps(Math.cos(a) * R, Math.sin(a) * R) > 1.15;
+  const open = gaps.map((g) => ({ ...g, n: 1 }));
+  const placed = () => open.flatMap((g) => at(g, g.n)).filter(clearOfProps);
+  for (let tries = 0; placed().length < 8 && tries < 24; tries++) {
+    const roomiest = open.reduce((w, g) => (g.width / (g.n + 1) > w.width / (w.n + 1) ? g : w));
+    roomiest.n++;
   }
+  return placed().slice(0, 8);
 }
 
 function props(b: ModelBuilder): void {
@@ -454,17 +505,21 @@ function props(b: ModelBuilder): void {
   barrel(b, -13.2, 14.8, 0);
   barrel(b, 11.2, -17.2);
   barrel(b, 10.6, -17.8);
-  // Flowers along the plaza and by the cottages.
-  for (const deg of [-40, 10, 60, 100, 140, 190, -140, -100]) {
-    const [x, z] = ringPoint(deg, 10.4 + rng());
-    flowers(b, x, z);
+  // Flower beds round the plaza, in the gaps between the paths (see bedAngles), and by the
+  // cottages.
+  const beds = bedAngles();
+  for (let i = 0; i < 8; i++) {
+    const r = 10.4 + rng();
+    const a = beds[i];
+    // (Fewer places than beds: the spare ones still use up their random numbers.)
+    flowers(b, Math.cos(a ?? 0) * r, Math.sin(a ?? 0) * r, 9, a !== undefined, (a ?? 0) + Math.PI / 2);
   }
   for (const id of ["home", "lab", "workshop"] as const) {
     const s = SPOTS[id];
     const side = new THREE.Vector3(Math.cos(s.rotY), 0, -Math.sin(s.rotY));
     for (const k of [-1, 1]) {
       const p = s.door.clone().addScaledVector(side, k * 2.6);
-      flowers(b, p.x, p.z, 6);
+      flowers(b, p.x, p.z, 6, true, Math.atan2(side.z, side.x));
     }
   }
   // Stacked crates waiting at the harbor.

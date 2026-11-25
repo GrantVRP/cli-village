@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import type { Building } from "../../src/events/types.js";
 import { wavingFlag } from "./flag.js";
+import { addWindowBox } from "./flora.js";
 import { glowMesh, makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
 
@@ -238,13 +239,15 @@ function cottage(b: ModelBuilder, s: CottageSpec): CottageInfo {
   return { chimneyTop, ridgeY: wallTop + rise, wallTop, front };
 }
 
+/** The window boxes' flowers have their own random numbers (see flora.ts). */
+const boxBloom = makeRandom(6161);
+
 function flowerBox(b: ModelBuilder, x: number, y: number, z: number, rng: () => number): void {
   b.box([0.8, 0.18, 0.22], P.woodLight, { at: [x, y, z] });
-  for (let i = 0; i < 5; i++) {
-    b.add(new THREE.IcosahedronGeometry(0.07, 0), pick([0xe85d75, 0xf2d15c, 0xf4f1ea, 0xb070e0], rng), {
-      at: [x - 0.32 + i * 0.16, y + 0.14, z + (rng() - 0.5) * 0.08],
-    });
-  }
+  b.box([0.72, 0.02, 0.16], 0x5b4634, { at: [x, y + 0.085, z] });
+  // (Ten random numbers, as the old flowers took, so the rest of the building stays the same.)
+  for (let i = 0; i < 10; i++) rng();
+  addWindowBox(b, x, y + 0.09, z, 0.8, boxBloom);
 }
 
 const noop = () => {};
