@@ -4,7 +4,7 @@
 // (`rng`), so how detailed they are never shifts anything else that's seeded.
 
 import * as THREE from "three";
-import type { ModelBuilder } from "./lowpoly.js";
+import { materials, type ModelBuilder } from "./lowpoly.js";
 
 export type FlowerKind = "daisy" | "cosmos" | "poppy" | "tulip" | "lavender";
 
@@ -24,13 +24,19 @@ const LEAVES = [0x5f9440, 0x6ca24a, 0x57893b] as const;
 const LAVENDER_LEAF = 0x8aa57a;
 const SOIL = 0x5b4634;
 
+/**
+ * The flower heads (petals, centres, buds) have a material of their own, so winter can put
+ * them away all at once: from winter's snow only the stalks show (main.ts hides it).
+ */
+export const bloomMaterial = materials.matte.clone();
+bloomMaterial.name = "blooms";
+
 export interface FlowerOptions {
   kind: FlowerKind;
   color: number;
   /** 1 = a garden flower about knee-high to a villager. */
   size?: number;
   rng: () => number;
-  material?: THREE.Material;
   /** "low": fewer leaves and petals, for the hundreds of wildflowers in the meadows. */
   detail?: "full" | "low";
 }
@@ -59,7 +65,6 @@ function petal(width: number, length: number, thickness: number): THREE.BufferGe
 export function addFlower(b: ModelBuilder, x: number, y: number, z: number, o: FlowerOptions): void {
   const { kind, rng } = o;
   const s = o.size ?? 1;
-  const material = o.material;
   const low = o.detail === "low";
   // The whole plant turns at random, and its stem leans a little.
   const base = place(x, y, z, 0, rng() * Math.PI * 2, 0);
@@ -67,7 +72,12 @@ export function addFlower(b: ModelBuilder, x: number, y: number, z: number, o: F
   const add = (geometry: THREE.BufferGeometry, color: number, ...frames: THREE.Matrix4[]) => {
     for (const f of frames) geometry.applyMatrix4(f);
     geometry.applyMatrix4(base);
-    b.add(geometry, color, { rng, jitter: 0.05, material });
+    b.add(geometry, color, { rng, jitter: 0.05 });
+  };
+  const bloom = (geometry: THREE.BufferGeometry, color: number, ...frames: THREE.Matrix4[]) => {
+    for (const f of frames) geometry.applyMatrix4(f);
+    geometry.applyMatrix4(base);
+    b.add(geometry, color, { rng, jitter: 0.05, material: bloomMaterial });
   };
 
   // A rosette of leaves round the foot of the stem.
@@ -92,22 +102,22 @@ export function addFlower(b: ModelBuilder, x: number, y: number, z: number, o: F
   if (kind === "daisy" || kind === "cosmos") {
     const n = low ? (kind === "daisy" ? 8 : 6) : kind === "daisy" ? 11 : 8;
     const [w, l] = kind === "daisy" ? [0.03, 0.085] : [0.05, 0.08];
-    add(new THREE.IcosahedronGeometry(kind === "daisy" ? 0.034 * s : 0.026 * s, 0).scale(1, 0.6, 1), kind === "daisy" ? 0xe9b43a : 0xd9a23c, head, lean);
+    bloom(new THREE.IcosahedronGeometry(kind === "daisy" ? 0.034 * s : 0.026 * s, 0).scale(1, 0.6, 1), kind === "daisy" ? 0xe9b43a : 0xd9a23c, head, lean);
     for (let i = 0; i < n; i++) {
-      add(petal(w * s, l * s, 0.008 * s), color, place(0, 0, 0.02 * s, -0.12 - rng() * 0.1, 0, 0), place(0, 0, 0, 0, (i / n) * Math.PI * 2 + rng() * 0.12, 0), head, lean);
+      bloom(petal(w * s, l * s, 0.008 * s), color, place(0, 0, 0.02 * s, -0.12 - rng() * 0.1, 0, 0), place(0, 0, 0, 0, (i / n) * Math.PI * 2 + rng() * 0.12, 0), head, lean);
     }
   } else if (kind === "poppy") {
     // Five broad petals cupped round a dark centre.
-    add(new THREE.IcosahedronGeometry(0.026 * s, 0).scale(1, 0.8, 1), 0x2f2b28, head, lean);
+    bloom(new THREE.IcosahedronGeometry(0.026 * s, 0).scale(1, 0.8, 1), 0x2f2b28, head, lean);
     for (let i = 0; i < 5; i++) {
-      add(petal(0.085 * s, 0.075 * s, 0.009 * s), color, place(0, 0, 0.012 * s, -0.62, 0, 0), place(0, 0, 0, 0, (i / 5) * Math.PI * 2 + rng() * 0.2, 0), head, lean);
+      bloom(petal(0.085 * s, 0.075 * s, 0.009 * s), color, place(0, 0, 0.012 * s, -0.62, 0, 0), place(0, 0, 0, 0, (i / 5) * Math.PI * 2 + rng() * 0.2, 0), head, lean);
     }
   } else if (kind === "tulip") {
     // Six petals standing up round the top of the stem: a closed cup.
     for (let i = 0; i < 6; i++) {
       const inner = i % 2 === 0;
       const cup = new THREE.SphereGeometry(1, 6, 3).scale(0.036 * s, 0.065 * s, 0.014 * s).translate(0, 0.055 * s, 0);
-      add(cup, color, place(0, -0.01 * s, (inner ? 0.016 : 0.026) * s, inner ? 0.06 : 0.16, 0, 0), place(0, 0, 0, 0, (i / 6) * Math.PI * 2, 0), place(0, h, 0), lean);
+      bloom(cup, color, place(0, -0.01 * s, (inner ? 0.016 : 0.026) * s, inner ? 0.06 : 0.16, 0, 0), place(0, 0, 0, 0, (i / 6) * Math.PI * 2, 0), place(0, h, 0), lean);
     }
   } else {
     // Lavender: a spike of little buds up the top of the stem.
@@ -116,7 +126,7 @@ export function addFlower(b: ModelBuilder, x: number, y: number, z: number, o: F
       const a = i * 2.4;
       const r = 0.014 * s * (1 - i / buds / 2);
       const gap = (0.016 * 13) / buds;
-      add(new THREE.OctahedronGeometry(0.021 * s * (1 - i / buds / 3), 0).scale(1, 1.4, 1), color, place(Math.cos(a) * r, h + 0.03 * s - i * gap * s, Math.sin(a) * r), lean);
+      bloom(new THREE.OctahedronGeometry(0.021 * s * (1 - i / buds / 3), 0).scale(1, 1.4, 1), color, place(Math.cos(a) * r, h + 0.03 * s - i * gap * s, Math.sin(a) * r), lean);
     }
   }
 }

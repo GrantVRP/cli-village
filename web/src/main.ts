@@ -6,6 +6,7 @@ import { glowMaterials } from "./buildings.js";
 import { CameraRig } from "./camera.js";
 import { connect } from "./connection.js";
 import { Effects } from "./effects.js";
+import { bloomMaterial } from "./flora.js";
 import { Life } from "./life.js";
 import { materials, shadows } from "./lowpoly.js";
 import { showNoWebGL } from "./no-webgl.js";
@@ -166,6 +167,8 @@ function updateWeather(dt: number, t: number): void {
   u.cvSpring.value = look.spring;
   u.cvAutumn.value = look.autumn;
   u.cvWinter.value = look.winter;
+  // Flowers are over by winter: only their stalks stand in the snow.
+  bloomMaterial.visible = look.winter < 0.5;
 
   // Robots and boats arrive later: weather their materials too (a quick look, twice a second).
   if (t - lastWeatherScan > 0.5 || t < lastWeatherScan) {
