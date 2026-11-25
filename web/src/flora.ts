@@ -1,10 +1,11 @@
 // Low-poly flowers: a rosette of leaves, a stem and a real head (rounded petals round a
 // centre), in a few kinds; beds of them on a patch of dark soil; and window boxes. They're
 // merged into whatever builder they're added to. Flowers take their own random numbers
-// (`rng`), so how detailed they are never shifts anything else that's seeded.
+// (`rng`), so how detailed they are never shifts anything else that's seeded. In winter the
+// flowers are over and snowdrops come up in the beds and window boxes instead.
 
 import * as THREE from "three";
-import { materials, type ModelBuilder } from "./lowpoly.js";
+import { makeRandom, materials, type ModelBuilder } from "./lowpoly.js";
 
 export type FlowerKind = "daisy" | "cosmos" | "poppy" | "tulip" | "lavender";
 
@@ -25,11 +26,23 @@ const LAVENDER_LEAF = 0x8aa57a;
 const SOIL = 0x5b4634;
 
 /**
- * The flower heads (petals, centres, buds) have a material of their own, so winter can put
- * them away all at once: from winter's snow only the stalks show (main.ts hides it).
+ * Flowers and snowdrops have materials of their own, so the seasons can swap them all at once
+ * (see showWinterFlowers): the summer flowers' heads, their leaves and stems, and the snowdrops.
  */
-export const bloomMaterial = materials.matte.clone();
+const bloomMaterial = materials.matte.clone();
 bloomMaterial.name = "blooms";
+const stalkMaterial = materials.matte.clone();
+stalkMaterial.name = "flower-stalks";
+const snowdropMaterial = materials.matte.clone();
+snowdropMaterial.name = "snowdrops";
+snowdropMaterial.visible = false;
+
+/** Winter: the flowers are over and snowdrops are out. Otherwise the other way round. */
+export function showWinterFlowers(winter: boolean): void {
+  bloomMaterial.visible = !winter;
+  stalkMaterial.visible = !winter;
+  snowdropMaterial.visible = winter;
+}
 
 export interface FlowerOptions {
   kind: FlowerKind;
@@ -72,7 +85,7 @@ export function addFlower(b: ModelBuilder, x: number, y: number, z: number, o: F
   const add = (geometry: THREE.BufferGeometry, color: number, ...frames: THREE.Matrix4[]) => {
     for (const f of frames) geometry.applyMatrix4(f);
     geometry.applyMatrix4(base);
-    b.add(geometry, color, { rng, jitter: 0.05 });
+    b.add(geometry, color, { rng, jitter: 0.05, material: stalkMaterial });
   };
   const bloom = (geometry: THREE.BufferGeometry, color: number, ...frames: THREE.Matrix4[]) => {
     for (const f of frames) geometry.applyMatrix4(f);
@@ -129,6 +142,53 @@ export function addFlower(b: ModelBuilder, x: number, y: number, z: number, o: F
       bloom(new THREE.OctahedronGeometry(0.021 * s * (1 - i / buds / 3), 0).scale(1, 1.4, 1), color, place(Math.cos(a) * r, h + 0.03 * s - i * gap * s, Math.sin(a) * r), lean);
     }
   }
+}
+
+// Snowdrops' grey-blue green, which winter's look leaves alone (it turns brighter greens to straw).
+const SNOWDROP_LEAF = 0x7c9e9a;
+const SNOWDROP_STEM = 0x84a2a0;
+const SNOWDROP_WHITE = 0xf6f6f0;
+
+/**
+ * A clump of snowdrops standing on the ground at (x, y, z): a few stems, each with two narrow
+ * grey-green leaves and a white flower nodding from a little arch at its top (three petals
+ * hanging round a small green-tipped cup). `size` 1 is about half as tall as a garden flower.
+ */
+export function addSnowdrops(b: ModelBuilder, x: number, y: number, z: number, rng: () => number, size = 1): void {
+  const s = size;
+  const stems = 2 + Math.floor(rng() * 3);
+  for (let i = 0; i < stems; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = i === 0 ? 0 : 0.03 * s * (0.6 + rng() * 0.6);
+    const base = place(x + Math.cos(a) * r, y, z + Math.sin(a) * r, 0, rng() * Math.PI * 2, 0);
+    const lean = place(0, 0, 0, (rng() - 0.5) * 0.2, 0, (rng() - 0.5) * 0.2);
+    const add = (geometry: THREE.BufferGeometry, color: number, ...frames: THREE.Matrix4[]) => {
+      for (const f of frames) geometry.applyMatrix4(f);
+      geometry.applyMatrix4(base);
+      b.add(geometry, color, { rng, jitter: 0.04, material: snowdropMaterial });
+    };
+    for (const side of [0, Math.PI]) {
+      add(leaf(0.016 * s, (0.09 + rng() * 0.03) * s, 0.005 * s), SNOWDROP_LEAF, place(0, 0, 0, -1.15 - rng() * 0.2, side + (rng() - 0.5) * 0.6, 0, "YXZ"));
+    }
+    const h = 0.13 * s * (0.85 + rng() * 0.3);
+    add(new THREE.CylinderGeometry(0.0045 * s, 0.006 * s, h, 4, 1, true).translate(0, h / 2, 0), SNOWDROP_STEM, lean);
+    // The arch: a short stalk from the top of the stem, out and a little down.
+    const arch = 0.026 * s;
+    const tilt = 1.85;
+    add(new THREE.CylinderGeometry(0.0035 * s, 0.0045 * s, arch, 4, 1, true).translate(0, arch / 2, 0), SNOWDROP_STEM, place(0, h, 0, tilt, 0, 0), lean);
+    const tip = place(0, h + Math.cos(tilt) * arch, Math.sin(tilt) * arch);
+    add(new THREE.OctahedronGeometry(0.0075 * s, 0), SNOWDROP_STEM, tip, lean);
+    // The flower hangs below it: a small cup, and three petals round it, flared a little.
+    add(new THREE.OctahedronGeometry(0.011 * s, 0).scale(1, 1.5, 1).translate(0, -0.019 * s, 0), 0xe4ecd8, tip, lean);
+    for (let k = 0; k < 3; k++) {
+      add(petal(0.027 * s, 0.056 * s, 0.007 * s), SNOWDROP_WHITE, place(0, -0.004 * s, 0, Math.PI / 2 - 0.3, 0, 0), place(0, 0, 0, 0, (k / 3) * Math.PI * 2 + 0.5, 0), tip, lean);
+    }
+  }
+}
+
+/** Their own random numbers for a spot, so snowdrops never shift anything else that's seeded. */
+function snowdropRandom(x: number, z: number): () => number {
+  return makeRandom(7717 + Math.round(x * 100) * 131 + Math.round(z * 100) * 7);
 }
 
 /** Pick a kind and a colour (two random numbers). */
@@ -196,6 +256,7 @@ export function addBed(b: ModelBuilder, x: number, z: number, o: BedOptions): Fl
       const fz = z + s * uu + c * ww;
       if (o.skip?.(fx, fz)) continue;
       addFlower(b, fx, 0.015, fz, { ...pickFlower(rng, o.kinds), rng, size: 0.9 + rng() * 0.25 });
+      addSnowdrops(b, fx, 0.015, fz, snowdropRandom(fx, fz), 1.1);
     }
   }
   // (The soil's wavy edge reaches up to about a fifth past its scale.)
@@ -212,4 +273,7 @@ export function addWindowBox(b: ModelBuilder, x: number, y: number, z: number, l
     const fx = x - length * 0.4 + (i * length * 0.8) / (n - 1) + (rng() - 0.5) * 0.04;
     addFlower(b, fx, y, z + (rng() - 0.5) * 0.08, { ...pickFlower(rng, ["cosmos", "poppy", "daisy"]), rng, size: 0.72 });
   }
+  // Snowdrops for winter, between the mounds.
+  const drops = snowdropRandom(x, z + y);
+  for (let i = 0; i < 4; i++) addSnowdrops(b, x - length * 0.33 + (i * length * 0.66) / 3, y + 0.01, z + (drops() - 0.5) * 0.06, drops, 0.85);
 }
