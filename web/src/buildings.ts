@@ -3,6 +3,8 @@
 
 import * as THREE from "three";
 import type { Building } from "../../src/events/types.js";
+import { wavingFlag } from "./flag.js";
+import { addWindowBox } from "./flora.js";
 import { glowMesh, makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
 
@@ -202,7 +204,8 @@ function cottage(b: ModelBuilder, s: CottageSpec): CottageInfo {
     b.pop();
   }
 
-  // Windows: front (both floors), plus one on each side upstairs.
+  // Windows: front and back (both floors), and one on each floor of each side, so no wall is
+  // left blank whichever way it's seen from.
   const n = Math.max(2, Math.round(w / 1.45));
   const clear = s.clearCenter ?? 0.95;
   for (let i = 0; i < n; i++) {
@@ -218,10 +221,20 @@ function cottage(b: ModelBuilder, s: CottageSpec): CottageInfo {
       b.pop();
     }
   }
+  for (let i = 0; i < n; i++) {
+    const x = -w / 2 + ((i + 0.5) * w) / n;
+    for (const y of [BASE + h * 0.56, upperY + h2 * 0.52]) {
+      b.push([x, y, -front], Math.PI);
+      windowOn(b, s.shutter);
+      b.pop();
+    }
+  }
   for (const side of [-1, 1]) {
-    b.push([side * (w / 2), upperY + h2 * 0.52, 0], (side * Math.PI) / 2);
-    windowOn(b, s.shutter);
-    b.pop();
+    for (const y of [BASE + h * 0.56, upperY + h2 * 0.52]) {
+      b.push([side * (w / 2), y, 0], (side * Math.PI) / 2);
+      windowOn(b, s.shutter);
+      b.pop();
+    }
   }
 
   // Chimney on the back slope.
@@ -237,13 +250,15 @@ function cottage(b: ModelBuilder, s: CottageSpec): CottageInfo {
   return { chimneyTop, ridgeY: wallTop + rise, wallTop, front };
 }
 
+/** The window boxes' flowers have their own random numbers (see flora.ts). */
+const boxBloom = makeRandom(6161);
+
 function flowerBox(b: ModelBuilder, x: number, y: number, z: number, rng: () => number): void {
   b.box([0.8, 0.18, 0.22], P.woodLight, { at: [x, y, z] });
-  for (let i = 0; i < 5; i++) {
-    b.add(new THREE.IcosahedronGeometry(0.07, 0), pick([0xe85d75, 0xf2d15c, 0xf4f1ea, 0xb070e0], rng), {
-      at: [x - 0.32 + i * 0.16, y + 0.14, z + (rng() - 0.5) * 0.08],
-    });
-  }
+  b.box([0.72, 0.02, 0.16], 0x5b4634, { at: [x, y + 0.085, z] });
+  // (Ten random numbers, as the old flowers took, so the rest of the building stays the same.)
+  for (let i = 0; i < 10; i++) rng();
+  addWindowBox(b, x, y + 0.09, z, 0.8, boxBloom);
 }
 
 const noop = () => {};
@@ -301,15 +316,15 @@ function lab(): BuildingModel {
   const b = new ModelBuilder();
   const info = cottage(b, { w: 4.4, d: 3.6, h: 1.45, wall: P.warmGrey, shutter: P.purple, rng });
   const group = b.build("lab");
-  // Flasks on the steps, with glowing liquid.
+  // Flasks at the ends of the top and bottom steps (wholly on them), with glowing liquid.
   const glassMat = new THREE.MeshStandardMaterial({ color: 0xdff4f2, transparent: true, opacity: 0.35, roughness: 0.1, flatShading: true });
   const spots: THREE.Vector3[] = [];
   const liquids: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[] = [];
   const flasks: [number, number, number, number][] = [
-    [-0.55, 0.45, info.front + 0.2, 0x7cf06a],
-    [0.55, 0.45, info.front + 0.22, 0x6fe3ff],
-    [-0.62, 0.3, info.front + 0.5, 0xd46bf0],
-    [0.68, 0.15, info.front + 0.78, 0xf2e16b],
+    [-0.42, 0.45, info.front + 0.29, 0x7cf06a],
+    [0.42, 0.45, info.front + 0.29, 0x6fe3ff],
+    [-0.57, 0.15, info.front + 0.79, 0xd46bf0],
+    [0.57, 0.15, info.front + 0.79, 0xf2e16b],
   ];
   for (const [x, y, z, color] of flasks) {
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), glassMat);
@@ -383,32 +398,16 @@ function townhall(): BuildingModel {
   b.add(new THREE.SphereGeometry(0.09, 6, 4), P.brass, { at: [0, roofY + 4.38, tz], material: materials.metal });
   const group = b.build("townhall");
 
-  // The flag waves (its shape changes every frame).
-  const flagGeo = new THREE.PlaneGeometry(1.5, 0.85, 10, 4);
-  flagGeo.translate(0.75, 0, 0);
-  const flag = new THREE.Mesh(
-    flagGeo,
-    new THREE.MeshStandardMaterial({ color: P.purple, flatShading: true, side: THREE.DoubleSide, roughness: 0.8 }),
-  );
-  flag.position.set(0.05, roofY + 3.85, tz);
-  flag.castShadow = true;
-  group.add(flag);
-  const base = (flagGeo.getAttribute("position").array as Float32Array).slice();
-  const pos = flagGeo.getAttribute("position");
+  // The flag waves in the wind (flag.ts), faster while the village is busy.
+  const flag = wavingFlag(1.5, 0.85, P.purple);
+  flag.mesh.position.set(0.05, roofY + 3.85, tz);
+  group.add(flag.mesh);
   return {
     id: "townhall",
     group,
     chimneys: info.chimneyTop ? [info.chimneyTop] : [],
     extras: {},
-    update: (_dt, t, active) => {
-      const speed = active ? 6 : 3.5;
-      for (let i = 0; i < pos.count; i++) {
-        const x = base[i * 3]!;
-        pos.setZ(i, Math.sin(x * 3 - t * speed) * 0.12 * x);
-      }
-      pos.needsUpdate = true;
-      flagGeo.computeVertexNormals();
-    },
+    update: (dt, _t, active, still) => flag.update(dt, still, active),
   };
 }
 

@@ -6,14 +6,18 @@ import { glowMaterials } from "./buildings.js";
 import { CameraRig } from "./camera.js";
 import { connect } from "./connection.js";
 import { Effects } from "./effects.js";
-import { shadows } from "./lowpoly.js";
+import { showWinterFlowers } from "./flora.js";
+import { Life } from "./life.js";
+import { materials, shadows } from "./lowpoly.js";
 import { showNoWebGL } from "./no-webgl.js";
 import { Overlay } from "./overlay.js";
+import { breeze, hearthFires } from "./render/life-rules.js";
 import { Pipeline } from "./render/pipeline.js";
 import { Precipitation } from "./render/precipitation.js";
 import { SETTINGS, tierFromQuery } from "./render/quality.js";
 import { ambientSky, approachSky, FAIR, groundAfter, isSouthern, pinnedSky, seasonLook, seasonOn, stormier, SUMMER, weatherFromQuery, workSky, type SeasonLook, type Sky } from "./render/weather.js";
 import { setPaths, weatherAll, weatherUniforms } from "./render/weathering.js";
+import { windUniforms } from "./render/wind.js";
 import { Village } from "./village.js";
 import { createWorld, railGlow } from "./world.js";
 import { HARBOR, SPOTS, TRACK_R } from "./layout.js";
@@ -83,6 +87,9 @@ function setStill(value: boolean): void {
   document.body.classList.toggle("still", value);
 }
 scene.add(world.group, village.group, effects.group);
+// Birds, butterflies, fireflies, ducks, a cat and two villagers (life.ts).
+const life = new Life(materials.matte, world.flowers, world.beds);
+scene.add(life.group);
 
 // --- Weather and seasons ------------------------------------------------------------------
 // (render/weather.ts decides what the sky does; weathering.ts and precipitation.ts show it.)
@@ -160,6 +167,8 @@ function updateWeather(dt: number, t: number): void {
   u.cvSpring.value = look.spring;
   u.cvAutumn.value = look.autumn;
   u.cvWinter.value = look.winter;
+  // Flowers are over by winter: snowdrops come up in the beds and window boxes instead.
+  showWinterFlowers(look.winter >= 0.5);
 
   // Robots and boats arrive later: weather their materials too (a quick look, twice a second).
   if (t - lastWeatherScan > 0.5 || t < lastWeatherScan) {
@@ -325,14 +334,21 @@ renderer.setAnimationLoop((time) => {
   night += (nightTarget - night) * (still ? 1 : Math.min(1, dt * 1.6));
   updateWeather(dt, t);
   applyNight(night);
+  // One wind for the trees, flags, smoke and the windmill; fires lit in the evening and the cold.
+  const wind = breeze(sky.overcast, sky.rain, sky.snowfall);
+  windUniforms.strength.value = wind;
+  effects.breeze = wind;
+  effects.fires = hearthFires(night, look.autumn, look.winter);
   // When the run has stopped, the village dims a little.
   const wanted = source.getState().stopped ? 0.6 : 1;
   exposure += (wanted - exposure) * (still ? 1 : Math.min(1, dt * 1.5));
 
   world.setDenseGrass(SETTINGS[pipeline.tier].denseGrass);
-  world.update(dt, t);
+  world.update(still ? 0 : dt, t);
   village.update(dt, t);
   effects.update(dt, t);
+  life.setTier(pipeline.tier);
+  life.update(dt, t, { night, rain: sky.rain, snowfall: sky.snowfall, spring: look.spring, autumn: look.autumn, winter: look.winter, still }, rig.camera, renderer.domElement.height);
   // With a building's log open on the right, center the picture in the space that's left.
   rig.setInset(overlay.panelInset);
   rig.update(dt);

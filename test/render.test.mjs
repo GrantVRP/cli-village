@@ -283,3 +283,108 @@ describe("weather and seasons", options, async () => {
     assert.ok(storm.exposure < rain.exposure && storm.sunIntensity < rain.sunIntensity);
   });
 });
+
+describe("robot reactions", options, async () => {
+  const r = canRunTypeScript ? await load("reactions") : null;
+  const none = new Set();
+
+  it("waves for a job done, cheers for a fix, and acts out nothing from before", () => {
+    const log = [
+      { seq: 1, type: "done", agent: "Bolt", building: "vault" },
+      { seq: 2, type: "fail", agent: "Sprocket", building: "lab" },
+      { seq: 3, type: "done", agent: "Rivet", building: "lab" },
+      { seq: 4, type: "start", agent: "Pip", building: "library" },
+    ];
+    // Rivet's done cleared the lab's problem; Bolt's done was already seen.
+    assert.deepEqual(r.reactionsTo(log, 1, new Set(["lab"]), none), [{ agent: "Rivet", gesture: "cheer", delay: 0 }]);
+    // The same done with the problem still there is a plain wave; a failure is no gesture (the slump is a pose).
+    assert.deepEqual(r.reactionsTo(log, 0, new Set(["lab"]), new Set(["lab"])), [
+      { agent: "Bolt", gesture: "wave", delay: 0 },
+      { agent: "Rivet", gesture: "wave", delay: 0 },
+    ]);
+    assert.deepEqual(r.reactionsTo(log, 4, none, none), []);
+  });
+
+  it("cheers a push: the robot that pushed, then the ones resting at home, one after another", () => {
+    const log = [
+      { seq: 7, type: "done", agent: "Rivet", building: "harbor" },
+      { seq: 8, type: "push", agent: "Rivet", building: "harbor" },
+    ];
+    const out = r.reactionsTo(log, 6, none, none, ["Bolt", "Pip", "Rivet"]);
+    // The cheer wins over the wave for Rivet; nobody reacts twice.
+    assert.deepEqual(out.map((x) => [x.agent, x.gesture]), [["Rivet", "cheer"], ["Bolt", "cheer"], ["Pip", "cheer"]]);
+    assert.equal(out[0].delay, 0);
+    assert.ok(out[1].delay > 0 && out[2].delay > out[1].delay);
+  });
+
+  it("pairs resting robots and lets each pair talk in turns, not all at once", () => {
+    assert.deepEqual(r.chatPairs(["Bolt", "Mayor", "Pip"]), [["Bolt", "Mayor"]]);
+    assert.deepEqual(r.chatPairs(["A", "B", "C", "D"]), [["A", "B"], ["C", "D"]]);
+    const seconds = Array.from({ length: 220 }, (_, i) => i * 0.05);
+    const talking = seconds.filter((t) => r.chatAt(t, 0).chatting).length / seconds.length;
+    assert.ok(talking > 0.3 && talking < 0.45, `talks ${Math.round(talking * 100)}% of the time`);
+    const speakers = new Set(seconds.filter((t) => r.chatAt(t, 0).chatting).map((t) => r.chatAt(t, 0).speaker));
+    assert.deepEqual([...speakers].sort(), [0, 1]);
+    // Two pairs don't start together.
+    assert.notDeepEqual(seconds.map((t) => r.chatAt(t, 0).chatting), seconds.map((t) => r.chatAt(t, 1).chatting));
+  });
+});
+
+describe("village life", options, async () => {
+  const l = canRunTypeScript ? await load("life-rules") : null;
+  const at = (night, more = {}) => ({ night, rain: 0, snowfall: 0, spring: 0, autumn: 0, winter: 0, still: false, ...more });
+  const DUSK = 0.85; // the app opens at dusk
+
+  it("fills the default dusk: birds still flying, fireflies out, villagers out with lit lanterns", () => {
+    assert.ok(l.birdsWanted(at(DUSK)) > 0.9);
+    assert.ok(l.firefliesWanted(at(DUSK)) > 0.9);
+    assert.equal(l.villagersOut(at(DUSK)), true);
+    assert.ok(l.lanternLight(DUSK) > 0.9);
+    assert.equal(l.catAwake(at(DUSK)), true);
+    // Butterflies are a daytime thing.
+    assert.equal(l.butterfliesWanted(at(DUSK)), 0);
+  });
+
+  it("by day: birds and butterflies, no fireflies, no lanterns", () => {
+    assert.equal(l.birdsWanted(at(0)), 1);
+    assert.equal(l.butterfliesWanted(at(0)), 1);
+    assert.equal(l.firefliesWanted(at(0)), 0);
+    assert.equal(l.lanternLight(0), 0);
+  });
+
+  it("at night everyone is home: no birds or villagers, the cat asleep, fireflies out", () => {
+    assert.equal(l.birdsWanted(at(1)), 0);
+    assert.equal(l.villagersOut(at(1)), false);
+    assert.equal(l.catAwake(at(1)), false);
+    assert.equal(l.firefliesWanted(at(1)), 1);
+  });
+
+  it("shelters from the weather and follows the seasons", () => {
+    for (const wet of [{ rain: 1 }, { snowfall: 1 }]) {
+      assert.equal(l.birdsWanted(at(0, wet)), 0);
+      assert.equal(l.butterfliesWanted(at(0, wet)), 0);
+      assert.equal(l.firefliesWanted(at(1, wet)), 0);
+      assert.equal(l.villagersOut(at(0, wet)), false);
+      assert.equal(l.catAwake(at(0, wet)), false);
+    }
+    // No butterflies or fireflies in winter; fewer butterflies in autumn.
+    assert.equal(l.butterfliesWanted(at(0, { winter: 1 })), 0);
+    assert.equal(l.firefliesWanted(at(1, { winter: 1 })), 0);
+    const autumn = l.butterfliesWanted(at(0, { autumn: 1 }));
+    assert.ok(autumn > 0 && autumn < 0.5);
+  });
+
+  it("blows harder in a storm, and keeps the usual sway on a fair day", () => {
+    assert.equal(l.breeze(0, 0, 0), 1);
+    assert.ok(l.breeze(1, 0, 0) > 1);
+    assert.ok(l.breeze(1, 1, 0) > l.breeze(1, 0, 0));
+    assert.ok(l.breeze(1, 1, 1) <= 1.7);
+  });
+
+  it("lights more hearth fires in the evening and in the cold", () => {
+    assert.equal(l.hearthFires(0, 0, 0), 0);
+    assert.ok(l.hearthFires(0.85, 0, 0) > 0.9);
+    assert.equal(l.hearthFires(0, 0, 1), 1);
+    assert.ok(l.hearthFires(0, 1, 0) > 0 && l.hearthFires(0, 1, 0) < 1);
+  });
+});
