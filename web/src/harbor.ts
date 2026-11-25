@@ -192,6 +192,9 @@ function wakeMesh(): THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial
   );
   mesh.name = "wake";
   mesh.renderOrder = 1;
+  // Foam on the water casts no shadow (the shadow helper would give it a solid one).
+  mesh.castShadow = false;
+  mesh.userData.noShadow = true;
   return mesh;
 }
 
