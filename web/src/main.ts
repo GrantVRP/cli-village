@@ -88,7 +88,7 @@ function setStill(value: boolean): void {
 }
 scene.add(world.group, village.group, effects.group);
 // Birds, butterflies, fireflies, ducks, a cat and two villagers (life.ts).
-const life = new Life(materials.matte, world.flowers);
+const life = new Life(materials.matte, world.flowers, world.beds);
 scene.add(life.group);
 
 // --- Weather and seasons ------------------------------------------------------------------
