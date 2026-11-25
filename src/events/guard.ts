@@ -10,7 +10,14 @@ const MIN_SECRET_LENGTH = 4;
 // that, so cleaning twice doesn't swallow the text after it.)
 const VALUE = String.raw`("[^"]*"|'[^']*'|\[hidden\]|\S+)`;
 const ASSIGNMENT = new RegExp(String.raw`\b([A-Z][A-Z0-9_]{2,})=${VALUE}`, "g");
-const NAMED_SECRET = new RegExp(String.raw`\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)(\s*[:=]\s*)${VALUE}`, "gi");
+const NAMED_SECRET = new RegExp(String.raw`\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|(?:access|auth|refresh)[_-]?token|private[_-]?key|client[_-]?secret)(\s*[:=]\s*)${VALUE}`, "gi");
+// The same as a command-line flag with a space before its value, like `--password hunter2` or
+// `--token abc` (deploy and database tools take these). The value is whatever follows, unless
+// it's the next flag. (`--password-stdin` and the like are other flags, so they don't count.)
+const SECRET_FLAG = new RegExp(
+  String.raw`(--?(?:password|passwd|token|api[_-]?key|access[_-]?key|(?:access|auth|refresh)[_-]?token|private[_-]?key|secret[_-]?key|client[_-]?secret))(\s+)("[^"]*"|'[^']*'|\[hidden\]|[^\s-]\S*)`,
+  "gi",
+);
 // Terminal codes (colors, "clear screen", window titles), then any other control characters.
 const ANSI_CODES = /\u001B(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001B]*(?:\u0007|\u001B\\)?|[@-Z\\-_])/g;
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
@@ -64,6 +71,7 @@ export class SecretGuard {
     out = maskTokens(out);
     out = out.replace(ASSIGNMENT, `$1=${HIDDEN}`);
     out = out.replace(NAMED_SECRET, `$1$2${HIDDEN}`);
+    out = out.replace(SECRET_FLAG, `$1$2${HIDDEN}`);
     return out.replace(/\s+/g, " ").trim();
   }
 }
