@@ -8,9 +8,10 @@
 // crate that hasn't passed yet waits at the gate on its own, until it passes and
 // joins the cart (or the cart comes back for it).
 //
-// The ship moors stern-to the dock, facing downstream. On push the crates hop
-// over its stern onto the after deck, one by one; then it casts off, fills its
-// sails and runs away east with the wind and the current. A while later it
+// The ship moors stern-to the dock, facing downstream. On push the dock crane
+// lifts the crates off the cart one by one and swings them aboard onto the after
+// deck, while the ship swings its booms out of the way; then it casts off, fills
+// its sails and runs away east with the wind and the current. A while later it
 // comes back up the river, turns round clear of the dock and backs onto its berth.
 
 import * as THREE from "three";
@@ -18,7 +19,8 @@ import type { HarborLoad, LastPush } from "../../src/events/state.js";
 import { HARBOR } from "./layout.js";
 import { glowMesh, makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
-import { buildShip, crateSpots, type ShipModel } from "./ship.js";
+import { aimAt, Crane, CRANE_ROPE, mixPose, type CranePose } from "./crane.js";
+import { buildShip, CARGO_TILT, CRATE_SCALE, crateSpots, SHIP_SCALE, type ShipModel } from "./ship.js";
 
 const rng = makeRandom(88);
 
@@ -71,13 +73,13 @@ const MAX_LOAD = 3;
 const CART_SPOTS: [number, number, number][][] = [
   [[0, 0.83, 0]],
   [
-    [0, 0.83, -0.29],
-    [0, 0.83, 0.29],
+    [0, 0.83, -0.3],
+    [0, 0.83, 0.3],
   ],
   [
-    [0, 0.83, -0.29],
-    [0, 0.83, 0.29],
-    [0.02, 1.3, 0],
+    [0, 0.83, -0.3],
+    [0, 0.83, 0.3],
+    [0.02, 1.345, 0],
   ],
 ];
 /** Crates waiting at the gate without the cart sit on a pallet, this much lower than on the cart. */
@@ -105,17 +107,27 @@ const TURN = { x: 18.8, z: -23.0 };
 /** Far enough down the river to be out of sight. */
 const FAR_X = 62;
 /**
- * One crate's hop aboard, and the pause before the next one (seconds), and how high a crate from
- * the cart bed hops: it has to stay under the main boom, so the one on top just slides down.
+ * The crane's timing (seconds). For each crate the hook goes `down` to it, takes hold (`grab`),
+ * lifts it (`up`), swings it aboard (starting as the lift ends, by `lift`), lowers it (starting as
+ * the swing ends, by `land`), lets go (`release`), and swings `back` for the next one, starting
+ * down as it gets there (by `reach`). `lead`: from where it waits to over the first crate; `rise`:
+ * how long after the last crate the ship casts off; `home`: back to where it waits, as it leaves.
+ * Every move eases in and out, and the moves overlap, so the crane never jerks.
  */
-const HOP = 0.8;
-const HOP_GAP = 0.25;
-const HOP_HEIGHT = 0.4;
+const CRANE_TIME = { lead: 0.6, down: 0.5, grab: 0.15, up: 0.5, lift: 0.15, swing: 1.05, land: 0.25, lower: 0.55, release: 0.15, back: 0.85, reach: 0.2, rise: 0.45, home: 1.4 };
+/** A crate's size about its middle: down to its bottom, up to the top of its seal; and the slings above it. */
+const CRATE_BOTTOM = 0.257;
+const CRATE_TOP = 0.277;
+const SLING = 0.3;
+/** How big a crate is aboard (in the village's units). */
+const ON_SHIP = CRATE_SCALE * SHIP_SCALE;
+/** How high the hook carries a crate: its bottom well clear of the cart's stack, the dock's posts and the ship's rail. */
+const CARRY_HOOK = 1.8 + CRATE_BOTTOM + CRATE_TOP + SLING;
 /**
- * Which cart crate hops aboard first, second, third (for 1, 2 or 3 of them): the top one first.
- * They fill the ship's spots in order, the far ones first, so no crate hops over another.
+ * Which cart crate goes aboard first, second, third (for 1, 2 or 3 of them): the top one first.
+ * They fill the ship's spots in order: the far side first, then the near side, then on top.
  */
-const HOP_ORDER: number[][] = [[0], [1, 0], [2, 0, 1]];
+const LOAD_ORDER: number[][] = [[0], [1, 0], [2, 0, 1]];
 /** How far the ship runs off before it's out of sight: it speeds up as its sails fill. */
 const runOff = (seconds: number) => 1.1 * seconds ** 1.9;
 const SAILING = ((FAR_X - BERTH.x) / 1.1) ** (1 / 1.9);
@@ -124,8 +136,8 @@ const AWAY = 1.5;
 const GLIDE = 11;
 const TURNING = 5.5;
 const BERTHING = 4;
-/** How far out the booms swing when the ship runs before the wind (radians). */
-const RUNNING_BOOM = 1.0;
+/** How far out the booms swing when the ship runs before the wind (radians: out to port, away from the crane and the village side). */
+const RUNNING_BOOM = -1.0;
 /** How full the sails are when there's no way on the ship: slack, flapping a little. */
 const SLACK = 0.12;
 
@@ -135,38 +147,89 @@ const smooth = (k: number) => {
   const c = Math.min(1, Math.max(0, k));
   return c * c * (3 - 2 * c);
 };
+/** Easing that also starts and ends with no acceleration, so moves blend into each other. */
+const ease = (k: number) => {
+  const c = Math.min(1, Math.max(0, k));
+  return c * c * c * (c * (c * 6 - 15) + 10);
+};
 
-/** The two stern lines, from the dock's posts to the ship's quarters: rope that sags a little. */
-class MooringLines {
+/** One move of the crane: from one value to another between two moments. */
+interface Move<T> {
+  start: number;
+  end: number;
+  from: T;
+  to: T;
+}
+
+/** Where a channel of moves is at moment `k` (before the first, at its start; after the last, at its end). */
+function along<T>(moves: Move<T>[], k: number, mix: (a: T, b: T, e: number) => T, first: T): T {
+  let at = first;
+  for (const m of moves) {
+    if (k < m.start) break;
+    if (k < m.end) return mix(m.from, m.to, ease((k - m.start) / (m.end - m.start)));
+    at = m.to;
+  }
+  return at;
+}
+
+/** The crane's whole loading of `n` crates, planned once: where it points, how high the hook is, and when it holds each crate. */
+interface CranePlan {
+  aim: Move<CranePose>[];
+  hook: Move<number>[];
+  grab: number[];
+  release: number[];
+  swing: Move<number>[];
+  lower: Move<number>[];
+  length: number;
+}
+
+/**
+ * Pieces of rope: the stern lines (which sag a little) and the crane's ropes (pulled tight).
+ * Each is two crossed ribbons, so it looks round from any side.
+ */
+class Ropes {
   readonly mesh: THREE.Mesh;
   private readonly position: THREE.BufferAttribute;
-  private static readonly SEGMENTS = 6;
 
-  constructor() {
-    // Each piece of rope is two crossed ribbons, so it looks round from any side.
-    const vertices = 2 * MooringLines.SEGMENTS * 2 * 6;
+  constructor(
+    name: string,
+    private readonly count: number,
+    private readonly segments: number,
+    private readonly width: number,
+    color: number,
+    private readonly sags: boolean,
+  ) {
+    const vertices = count * segments * 2 * 6;
     this.position = new THREE.BufferAttribute(new Float32Array(vertices * 3), 3);
     this.position.setUsage(THREE.DynamicDrawUsage);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", this.position);
-    this.mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0xcbb88e, flatShading: true, roughness: 0.95, side: THREE.DoubleSide }));
-    this.mesh.name = "stern-lines";
+    this.mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.95, side: THREE.DoubleSide }));
+    this.mesh.name = name;
     this.mesh.castShadow = true;
     this.mesh.frustumCulled = false;
   }
 
+  /** Draw these ropes; any left over aren't drawn. */
   set(lines: readonly (readonly [THREE.Vector3, THREE.Vector3])[]): void {
-    const n = MooringLines.SEGMENTS;
-    const w = 0.02;
+    const n = this.segments;
+    const w = this.width;
     const p = new THREE.Vector3();
     const q = new THREE.Vector3();
     const side = new THREE.Vector3();
-    const lift = new THREE.Vector3(0, w, 0);
+    const along = new THREE.Vector3();
+    const lift = new THREE.Vector3();
     const at = (a: THREE.Vector3, b: THREE.Vector3, sag: number, s: number, out: THREE.Vector3) => out.lerpVectors(a, b, s).setY(out.y - 4 * sag * s * (1 - s));
     let o = 0;
-    for (const [a, b] of lines) {
-      const sag = 0.05 + a.distanceTo(b) * 0.05;
-      side.set(-(b.z - a.z), 0, b.x - a.x).normalize().multiplyScalar(w);
+    for (const [a, b] of lines.slice(0, this.count)) {
+      const sag = this.sags ? 0.05 + a.distanceTo(b) * 0.05 : 0;
+      // Two ribbons at right angles, both along the rope (which may hang straight down).
+      along.subVectors(b, a).normalize();
+      side.set(0, 1, 0).cross(along);
+      if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+      side.normalize();
+      lift.crossVectors(side, along).normalize().multiplyScalar(w);
+      side.multiplyScalar(w);
       for (let i = 0; i < n; i++) {
         at(a, b, sag, i / n, p);
         at(a, b, sag, (i + 1) / n, q);
@@ -176,9 +239,24 @@ class MooringLines {
         }
       }
     }
+    // The ones not used fold away to a point out of sight.
+    for (; o < this.position.count; o++) this.position.setXYZ(o, 0, -50, 0);
     this.position.needsUpdate = true;
     this.mesh.geometry.computeVertexNormals();
   }
+}
+
+/** What the crane is doing at a moment of the loading. */
+interface CraneStep {
+  pose: CranePose;
+  /** The crate on its hook (counting in the order they go aboard), or -1. */
+  held: number;
+  /** How far round it has swung the crate (0 over the cart, 1 over its spot), and how far down onto its spot. */
+  swing: number;
+  settle: number;
+  /** How many crates it has taken off the cart, and how many it has set down aboard. */
+  picked: number;
+  landed: number;
 }
 
 /**
@@ -241,7 +319,16 @@ export class Harbor {
   private readonly ship: ShipModel;
   /** The crate in the air on its way aboard. */
   private readonly flying = crateModel();
-  private readonly lines = new MooringLines();
+  private readonly lines = new Ropes("stern-lines", 2, 6, 0.02, 0xcbb88e, true);
+  private readonly crane = new Crane();
+  /** The crane's ropes: the hoist (from the winch up to the tip, and down to the hook), the topping lift, and four slings. */
+  private readonly craneRopes = new Ropes("crane-ropes", 7, 1, 0.014, CRANE_ROPE, false);
+  /** Where it waits: its hook over the middle of the cart where the cart stops on the dock. */
+  private readonly craneRest: CranePose;
+  /** Where the crates sit on the cart when it's stopped on the dock (for 1, 2 or 3 of them), and how they're turned. */
+  private readonly cartSpotsAtDock: THREE.Vector3[][] = [];
+  private readonly cartQuaternion = new THREE.Quaternion();
+  private readonly cranePlans = new Map<number, CranePlan>();
   private readonly wake = wakeMesh();
   /** Where the ship was last frame, for how fast it's going. */
   private readonly lastShipAt = new THREE.Vector3();
@@ -267,7 +354,7 @@ export class Harbor {
   private shipping = 0;
   private shipState: ShipState = "docked";
   private shipTimer = 0;
-  /** Crates on board (or hopping aboard) this trip. */
+  /** Crates on board (or on their way aboard) this trip. */
   private cargo = 0;
   private barrierOpen = 0;
   /** The ship's own clock for bobbing and flapping: it stands still in still mode. */
@@ -356,12 +443,19 @@ export class Harbor {
     this.gateStack.visible = false;
     this.group.add(this.gateStack);
 
-    // The ship, moored at its berth, and the crate that hops aboard.
+    // The ship, moored at its berth; the crane beside it, and the crate on its hook.
     this.ship = buildShip(crateModel);
     this.group.add(this.ship.group);
     this.flying.visible = false;
     this.group.add(this.flying);
     this.group.add(this.lines.mesh, this.wake);
+    this.group.add(this.crane.group, this.crane.hook, this.craneRopes.mesh);
+    const stop = new THREE.Object3D();
+    this.place(stop, this.dockStop);
+    stop.updateMatrixWorld(true);
+    this.cartQuaternion.copy(stop.quaternion);
+    for (const spots of CART_SPOTS) this.cartSpotsAtDock.push(spots.map(([x, y, z]) => stop.localToWorld(new THREE.Vector3(x, y, z))));
+    this.craneRest = { ...aimAt(stop.position.x, stop.position.z), hook: CARRY_HOOK };
     this.poseShip(0, true);
   }
 
@@ -439,7 +533,7 @@ export class Harbor {
   }
 
   private goal(): CartGoal {
-    // The cart stays at the dock while its crates hop aboard.
+    // The cart stays at the dock while the crane takes its crates aboard.
     if (this.shipState === "loading") return "end";
     if (this.shipPending && this.shipping > 0) return "end";
     // Crates that passed the gate wait at the dock; ones that haven't wait at the gate.
@@ -478,7 +572,7 @@ export class Harbor {
         const crate = this.ship.crates[i]!;
         crate.position.copy(spot);
         // Turned like they were on the cart, so they don't spin round on the way.
-        crate.rotation.y = Math.PI + (i - 1) * 0.07;
+        crate.rotation.set(0, Math.PI + [0.03, -0.04, 0.02][i]!, CARGO_TILT);
       });
       this.setShipState(this.cargo > 0 ? "loading" : "sailing");
     }
@@ -489,11 +583,11 @@ export class Harbor {
     const passed = this.cartAt > gate + 0.05;
     const onPallet = this.shipPending || passed ? this.load.atGate : 0;
     if (this.shipState === "loading") {
-      // The cart keeps its load where it was, less the crates that have hopped off.
+      // The cart keeps its load where it was, less the crates the crane has taken.
       arrange(this.cartCrates, this.cargo);
-      const order = HOP_ORDER[this.cargo - 1]!;
-      order.forEach((from, k) => {
-        if (this.shipTimer >= k * (HOP + HOP_GAP)) this.cartCrates[from]!.visible = false;
+      const picked = this.craneStep(this.shipTimer, this.cargo).picked;
+      LOAD_ORDER[this.cargo - 1]!.forEach((from, k) => {
+        if (k < picked) this.cartCrates[from]!.visible = false;
       });
     } else {
       arrange(this.cartCrates, this.shipPending ? this.shipping : this.load.atDock + (passed ? 0 : this.load.atGate));
@@ -536,7 +630,7 @@ export class Harbor {
       case "docked":
         return Infinity;
       case "loading":
-        return this.cargo * (HOP + HOP_GAP);
+        return this.cranePlan(this.cargo).length;
       case "sailing":
         return SAILING;
       case "away":
@@ -572,6 +666,83 @@ export class Harbor {
     }
   }
 
+  /** Where the `j`th crate to go aboard sits on the cart, and where it goes on the ship (moored, not rocking). */
+  private cartCrate(n: number, j: number): THREE.Vector3 {
+    return this.cartSpotsAtDock[n - 1]![LOAD_ORDER[n - 1]![j]!]!;
+  }
+
+  private shipSpot(n: number, j: number): THREE.Vector3 {
+    const spot = crateSpots(n)[j]!;
+    return new THREE.Vector3(BERTH.x + spot.x * SHIP_SCALE, WATER_Y + spot.y * SHIP_SCALE, BERTH.z + spot.z * SHIP_SCALE);
+  }
+
+  /** Plan the crane's loading of `n` crates (once for each `n`: it never changes). */
+  private cranePlan(n: number): CranePlan {
+    const known = this.cranePlans.get(n);
+    if (known) return known;
+    const T = CRANE_TIME;
+    const rest = this.craneRest;
+    const plan: CranePlan = { aim: [], hook: [], grab: [], release: [], swing: [], lower: [], length: 0 };
+    if (n > 0) {
+      const from = (j: number): CranePose => {
+        const p = this.cartCrate(n, j);
+        return { ...aimAt(p.x, p.z), hook: p.y + CRATE_TOP + SLING };
+      };
+      const to = (j: number): CranePose => {
+        const p = this.shipSpot(n, j);
+        return { ...aimAt(p.x, p.z), hook: p.y + (CRATE_TOP + SLING) * ON_SHIP };
+      };
+      plan.aim.push({ start: 0, end: T.lead, from: rest, to: from(0) });
+      let there = T.lead; // when the hook gets over the next crate
+      for (let j = 0; j < n; j++) {
+        const a = from(j);
+        const b = to(j);
+        const down = there - (j === 0 ? 0.1 : T.reach);
+        plan.hook.push({ start: down, end: down + T.down, from: CARRY_HOOK, to: a.hook });
+        const grab = down + T.down;
+        const up = grab + T.grab;
+        plan.hook.push({ start: up, end: up + T.up, from: a.hook, to: CARRY_HOOK });
+        const swing = up + T.up - T.lift;
+        plan.aim.push({ start: swing, end: swing + T.swing, from: a, to: b });
+        const lower = swing + T.swing - T.land;
+        plan.hook.push({ start: lower, end: lower + T.lower, from: CARRY_HOOK, to: b.hook });
+        const release = lower + T.lower + T.release;
+        plan.hook.push({ start: release, end: release + 0.5, from: b.hook, to: CARRY_HOOK });
+        const last = j + 1 >= n;
+        const back = release + 0.15;
+        plan.aim.push({ start: back, end: back + (last ? T.home : T.back), from: b, to: last ? rest : from(j + 1) });
+        plan.grab.push(grab);
+        plan.release.push(release);
+        plan.swing.push({ start: swing, end: swing + T.swing, from: 0, to: 1 });
+        plan.lower.push({ start: lower, end: lower + T.lower, from: 0, to: 1 });
+        there = back + T.back;
+        plan.length = release + T.rise;
+      }
+    }
+    this.cranePlans.set(n, plan);
+    return plan;
+  }
+
+  /**
+   * What the crane does `k` seconds into loading `n` crates (and on, as the ship leaves): it
+   * depends only on these, so a page that catches up, still mode and a jump to any moment agree.
+   */
+  private craneStep(k: number, n: number): CraneStep {
+    const plan = this.cranePlan(n);
+    const aim = along(plan.aim, k, mixPose, this.craneRest);
+    const hook = along(plan.hook, k, (a, b, e) => a + (b - a) * e, CARRY_HOOK);
+    const held = plan.grab.findIndex((g, j) => k >= g && k < plan.release[j]!);
+    const progress = (m: Move<number> | undefined) => (m ? ease((k - m.start) / (m.end - m.start)) : 0);
+    return {
+      pose: { slew: aim.slew, reach: aim.reach, hook },
+      held,
+      swing: held >= 0 ? progress(plan.swing[held]) : 0,
+      settle: held >= 0 ? progress(plan.lower[held]) : 0,
+      picked: plan.grab.filter((g) => k >= g).length,
+      landed: plan.release.filter((r) => k >= r).length,
+    };
+  }
+
   /** Put the ship where its story says, with its sails, flags, crates and lines. */
   private poseShip(dt: number, still: boolean): void {
     const k = this.shipTimer;
@@ -581,10 +752,14 @@ export class Harbor {
     let full = SLACK;
     let boom = 0;
     switch (this.shipState) {
+      case "loading":
+        // The booms swing out of the crane's way (to where they'll be when it sails).
+        boom = RUNNING_BOOM * smooth(k / 1.2);
+        break;
       case "sailing":
         x += runOff(k);
         full = SLACK + (1 - SLACK) * smooth(k / 1.5);
-        boom = RUNNING_BOOM * smooth(k / 2.2);
+        boom = this.cargo > 0 ? RUNNING_BOOM : RUNNING_BOOM * smooth(k / 2.2);
         break;
       case "away":
         x = FAR_X;
@@ -634,27 +809,42 @@ export class Harbor {
       flag.update(Math.min(dt, 0.1), still);
     }
 
-    // Crates on board: the ones that have landed.
+    // The crane: loading, then going back to where it waits as the ship leaves.
     const loading = this.shipState === "loading";
-    const landed = loading ? Math.min(this.cargo, Math.floor((k + HOP_GAP) / (HOP + HOP_GAP))) : this.shipState === "sailing" ? this.cargo : 0;
-    ship.crates.forEach((crate, i) => (crate.visible = i < landed));
+    const step: CraneStep = loading
+      ? this.craneStep(k, this.cargo)
+      : this.shipState === "sailing" && this.cargo > 0 && k < CRANE_TIME.home
+        ? this.craneStep(this.cranePlan(this.cargo).length + k, this.cargo)
+        : { pose: this.craneRest, held: -1, swing: 0, settle: 0, picked: 0, landed: this.shipState === "sailing" ? this.cargo : 0 };
+    this.crane.pose(step.pose);
 
-    // The crate in the air: from its place on the cart, over the stern, down onto its spot.
-    const hop = loading ? Math.floor(k / (HOP + HOP_GAP)) : -1;
-    const s = loading ? (k - hop * (HOP + HOP_GAP)) / HOP : 1;
-    this.flying.visible = loading && hop < this.cargo && s < 1;
+    // Crates on board: the ones the crane has set down.
+    ship.crates.forEach((crate, i) => (crate.visible = i < step.landed));
+
+    // The crate on the hook: hanging under it on its slings, turning and settling onto its spot.
+    this.flying.visible = step.held >= 0;
+    const hook = this.crane.hook.position;
     if (this.flying.visible) {
-      const from = this.cartCrates[HOP_ORDER[this.cargo - 1]![hop]!]!;
-      const to = ship.crates[hop]!;
-      const a = from.getWorldPosition(new THREE.Vector3());
-      const b = to.getWorldPosition(new THREE.Vector3());
-      // It gets across early and drops onto its spot from above, so it clears the stern rail.
-      const across = 1 - (1 - s) ** 2;
-      const lift = Math.max(0, HOP_HEIGHT - (a.y - CART_SPOTS[0]![0]![1]));
-      this.flying.position.lerpVectors(a, b, across).setY(THREE.MathUtils.lerp(a.y, b.y, s) + 4 * lift * s * (1 - s));
-      this.flying.quaternion.slerpQuaternions(from.getWorldQuaternion(new THREE.Quaternion()), to.getWorldQuaternion(new THREE.Quaternion()), s);
-      this.flying.scale.setScalar(THREE.MathUtils.lerp(from.getWorldScale(new THREE.Vector3()).x, to.getWorldScale(new THREE.Vector3()).x, s));
+      const to = ship.crates[step.held]!;
+      const scale = THREE.MathUtils.lerp(1, ON_SHIP, step.swing);
+      this.flying.position.copy(hook).setY(hook.y - (CRATE_TOP + SLING) * scale);
+      this.flying.position.lerp(to.getWorldPosition(new THREE.Vector3()), step.settle);
+      this.flying.quaternion.slerpQuaternions(this.cartQuaternion, to.getWorldQuaternion(new THREE.Quaternion()), step.swing);
+      this.flying.scale.setScalar(scale);
     }
+    const cr = this.crane;
+    const ropes: [THREE.Vector3, THREE.Vector3][] = [
+      [cr.drum, cr.tip],
+      [cr.tip, hook.clone().setY(hook.y + 0.23)],
+      [cr.apex, cr.tip],
+    ];
+    if (this.flying.visible) {
+      this.flying.updateMatrixWorld();
+      for (const [x, z] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+        ropes.push([hook, this.flying.localToWorld(new THREE.Vector3(x * 0.24, CRATE_TOP - 0.03, z * 0.24))]);
+      }
+    }
+    this.craneRopes.set(ropes);
 
     // Stern lines while it's moored.
     const moored = this.shipState === "docked" || loading;
