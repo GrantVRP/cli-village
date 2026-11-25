@@ -345,8 +345,8 @@ export class Village {
       this.overlay.setBubble(bubble.name, bubble.text, mode, bubble.failed);
     }
 
-    // Still mode: one big time step, so the column fills at once and the cart and boat go straight to where they end up.
+    // Still mode: one big time step, so the column fills at once and the cart and the ship go straight to where they end up.
     this.column.update(this.still ? 60 : dt, t);
-    this.harbor.update(this.still ? 60 : dt, t);
+    this.harbor.update(this.still ? 60 : dt, t, this.still);
   }
 }
