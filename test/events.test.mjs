@@ -285,28 +285,28 @@ describe("village state", () => {
       assert.equal(describeHarbor(state).text, "1 crate at the dock, ready to push");
     });
 
-    it("commit --push: the check before the push leaves the crate at the dock, and the boat takes it", () => {
+    it("commit --push: the check before the push leaves the crate at the dock, and the ship takes it", () => {
       let state = play([...saved(), scan("u1", UNSENT)]);
       assert.deepEqual(statuses(state), ["cleared"], "already checked, so it isn't sent back to the gate");
       assert.deepEqual(harborLoad(state), { atGate: 0, atDock: 1, gate: "scanning" });
       state = play([...saved(), scan("u1", UNSENT), done("u1"), job("p1", "git push"), push(), done("p1")]);
       assert.deepEqual(statuses(state), ["shipped"]);
       assert.deepEqual([state.lastPush.crates, state.lastPush.commits], [1, 1]);
-      assert.equal(describeHarbor(state).text, "Last boat: 1 commit to origin/main");
+      assert.equal(describeHarbor(state).text, "Last ship: 1 commit to origin/main");
     });
 
-    it("the demo's pretend robots are marked, and their boat never hides your real one", () => {
+    it("the demo's pretend robots are marked, and their ship never hides your real one", () => {
       const bus = new EventBus();
       let state = createVillageState();
       bus.subscribe((e) => (state = reduce(state, e)));
       const pretend = { type: "push", agent: "Bolt", remote: "origin", branch: "demo", commits: 3 };
       bus.emit(pretend, "demo");
-      assert.equal(describeHarbor(state).text, "Last boat (demo): 3 commits to origin/demo");
+      assert.equal(describeHarbor(state).text, "Last ship (demo): 3 commits to origin/demo");
       assert.equal(state.log.at(-1).demo, true);
       for (const e of [...saved(), push()]) bus.emit(e);
       assert.equal(state.log.at(-1).demo, undefined, "your own work isn't marked");
       bus.emit(pretend, "demo");
-      assert.equal(describeHarbor(state).text, "Last boat: 1 commit to origin/main");
+      assert.equal(describeHarbor(state).text, "Last ship: 1 commit to origin/main");
     });
 
     it("a leak keeps the crate at the gate, and the harbor stays a problem until a scan passes", () => {
@@ -348,7 +348,7 @@ describe("village state", () => {
       assert.deepEqual(state.crates.map((c) => [c.status, c.draft]), [["scanning", "snapshots"]]);
       state = play([scan("u1", UNSENT), done("u1"), push(2)]);
       assert.deepEqual([state.crates[0].status, state.lastPush.crates], ["shipped", 1]);
-      assert.match(describeHarbor(state).text, /Last boat: 2 commits/);
+      assert.match(describeHarbor(state).text, /Last ship: 2 commits/);
       // A push that only publishes the branch says so, and takes no crates.
       state = play([push(0)]);
       assert.equal(state.headline.title, "Sent to GitHub: the branch to origin/main");

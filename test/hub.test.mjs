@@ -323,7 +323,7 @@ describe("cli-village emit", () => {
     assert.equal(describeHarbor(state).level, "attention");
     assert.ok(state.buildings.harbor.problem);
 
-    // Fixed: the same crate passes the gate, gets the snapshot, and the boat takes it.
+    // Fixed: the same crate passes the gate, gets the snapshot, and the ship takes it.
     writeFileSync(path.join(work, "pay.js"), "const key = process.env.STRIPE_KEY;\n");
     const sent = await cliAsync(["commit", "-q", "-m", "Add payments", "--push"], { cwd: work, env });
     assert.equal(sent.code, 0, sent.stderr);
@@ -333,7 +333,7 @@ describe("cli-village emit", () => {
     assert.match(state.crates[0].sha, /^[0-9a-f]{7,}$/);
     assert.equal(state.buildings.harbor.problem, undefined);
     assert.deepEqual([state.lastPush.crates, state.lastPush.branch], [1, "main"]);
-    assert.equal(describeHarbor(state).text, "Last boat: 1 commit to origin/main");
+    assert.equal(describeHarbor(state).text, "Last ship: 1 commit to origin/main");
     assert.deepEqual(leaks(JSON.stringify(state)), []);
     await hub.close();
   });

@@ -169,7 +169,7 @@ q quit · ? what the buildings mean · d more detail · tab one building
 
 - The one thing that matters most right now is at the top, with the real command under it.
 - Problems turn the message red (with a ✖, so it doesn't rely on color) until they're fixed.
-- The **Harbor** line says where your snapshots are: being scanned at the gate, stopped there, waiting at the dock for a push, or sent on the last boat.
+- The **Harbor** line says where your snapshots are: being scanned at the gate, stopped there, waiting at the dock for a push, or sent on the last ship.
 - Keys: `q` quit (robots walk home first), `?` explains the buildings, words and symbols, `d` shows every detail, `Tab` looks at one building up close (its log and how it's doing; `Shift+Tab` goes back one, `Esc` back to everything).
 - No interactive terminal (a pipe, CI), or `--quiet` / `--no-animation`? You get plain lines instead. `NO_COLOR` is respected.
 
@@ -248,7 +248,7 @@ $ cli-village commit -m "Add payments"
 - Robots react: a wave when they finish a job, a cheer when they fix a problem or push (the robots resting at home join in), a slump while their task has failed. Robots resting at home chat in pairs.
 - Busy buildings send up cyan rings. Problems glow red and get a ✖ on their label.
 - The glass column in the plaza shows the village's health: green → yellow → orange → red.
-- At the GITHUB HARBOR, each snapshot is a crate on a rail cart. The cart stops at the gate while it's scanned: a leak keeps it there under a red light, a clean scan lifts the barrier, and the cart waits at the dock (up to 3 crates drawn) until a push sails the boat away. A snapshot saved without a scan waits on a pallet beside the gate until the check before the next push.
+- At the GITHUB HARBOR, each snapshot is a crate on a rail cart. The cart stops at the gate while it's scanned: a leak keeps it there under a red light, a clean scan lifts the barrier, and the cart waits on the dock behind a little two-masted cargo ship (up to 3 crates drawn). On a push a dock crane swings the crates aboard one by one and the ship sails away down the river to GitHub; a while later it comes back up the river, turns round and moors again. A snapshot saved without a scan waits on a pallet beside the gate until the check before the next push.
 
   ![A real commit with a secret in it, stopped at the gate](docs/screenshots/village-harbor-stopped.jpg)
 - The camera drifts slowly and glides to wherever the most important thing is happening, turning to show that building from the front. The caption at the top says what that is (and the real command).

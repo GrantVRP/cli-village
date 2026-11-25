@@ -282,12 +282,12 @@ function Robots({ state, now, width, fit, wide }: { state: VillageState; now: nu
   );
 }
 
-/** The crates on their way to GitHub: at the gate, waiting at the dock, or the last boat. */
+/** The crates on their way to GitHub: at the gate, waiting at the dock, or the last ship. */
 function HarborLine({ state, spaced }: { state: VillageState; spaced: boolean }) {
   const harbor = describeHarbor(state);
   if (!harbor) return null;
   const color = harbor.level === "attention" ? theme.bad : harbor.level === "active" ? theme.active : undefined;
-  // The same colors as in the ? help: a crate is yellow, the boat green.
+  // The same colors as in the ? help: a crate is yellow, the ship green.
   const iconColor = color ?? (harbor.icon === "boat" ? theme.good : theme.warn);
   return (
     <>
@@ -382,7 +382,7 @@ const robotSymbols = (
 );
 const crateSymbols = (
   <>
-    <Text color={theme.warn}>{icons.commit}</Text> commit (a crate) <Text color={theme.good}>{icons.push}</Text> push (the boat
+    <Text color={theme.warn}>{icons.commit}</Text> commit (a crate) <Text color={theme.good}>{icons.push}</Text> push (the ship
     sails)
   </>
 );

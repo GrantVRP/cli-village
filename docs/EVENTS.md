@@ -66,11 +66,11 @@ Every event has a `type` and an `agent` (a short name: letters, numbers, spaces,
 | `fail` | `task`, `message` | A problem: the building glows red and the key message says what went wrong. |
 | `move` | `to`, optional `from` | The robot walks somewhere (a building, or `home`). |
 | `commit` | `message`, optional `sha`, `files` | A snapshot was saved: a crate appears at the GITHUB HARBOR. |
-| `push` | optional `remote`, `branch`, `commits` | The snapshots went to GitHub: the boat sails. |
+| `push` | optional `remote`, `branch`, `commits` | The snapshots went to GitHub: the ship sails. |
 
 `task` is an id you make up, like `"r1"` or `"tests-3"` (letters, numbers, `. _ : # -`). Use the same one for a task's `start`, `progress` and `done` or `fail`.
 
-At the harbor, a `scan` task can come before or after its `commit`. Scan first (as `cli-village commit` does): the gate packs a crate for your changes, and the `commit` fills it in. Commit first: the crate waits at the gate for the next scan. A failed scan stops the crate at the gate under a red light, a passed one lets it through to the dock, and `push` sails the boat with every saved crate.
+At the harbor, a `scan` task can come before or after its `commit`. Scan first (as `cli-village commit` does): the gate packs a crate for your changes, and the `commit` fills it in. Commit first: the crate waits at the gate for the next scan. A failed scan stops the crate at the gate under a red light, a passed one lets it through to the dock, and `push` sails the ship with every saved crate.
 
 The scan's `command` says what it checks. `infisical scan git-changes …` checks your changes before they're saved, so it never moves a crate that's already saved. `infisical scan --log-opts=…` checks what a push would send: the saved crates that haven't passed the gate yet (or, if there are none, the snapshots made outside CLI Village). A scan with no command checks saved crates waiting at the gate, or else your changes. A `commit` started by a task whose command has `--amend` replaces the newest crate instead of adding one. If the gate had stopped that crate, the harbor keeps its problem until a scan passes, and pushing the redone crate without a scan gives the same warning as pushing a stopped one.
 
