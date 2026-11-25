@@ -132,9 +132,16 @@ On Medium and High a second layer of grass, with its own random numbers, fills t
 Three tricks keep the tens of thousands of blades cheap and in the style:
 - **Blades go straight into one buffer.** A blade is a thin three-sided spike, three triangles, darker at the root and lighter at the tip, written as numbers. With a shape object and a matrix per blade, building the grass took over half a second at start-up.
 - **Grass is lit as if it faced up**, like the ground it grows from. Thin blades lit by their own steep faces look dark from above.
-- **The tiny things don't write depth** and are drawn after the other solid things, so everything still hides them correctly, but ambient occlusion, depth of field and the haze see the ground under them, as they would a decal. Otherwise the occlusion finds a crease round every blade and turns the grass black. They cast no shadows either: theirs would be too small to see.
+- **The tiny things (grass and pebbles) don't write depth** and are drawn after the other solid things, so everything still hides them correctly, but ambient occlusion, depth of field and the haze see the ground under them, as they would a decal. Otherwise the occlusion finds a crease round every blade and turns the grass black. They cast no shadows either: theirs would be too small to see.
 
 Boulders, reeds and fences are merged with the rest of the village (no extra draw calls) and cast shadows; reeds sway with the trees.
+
+**Flowers** (`flora.ts`) are little plants, not dots: a rosette of leaves, a stem with a leaf on it, and a head made for its kind. Daisies and cosmos have petals round a centre, poppies five cupped petals round a dark middle, tulips a closed cup, lavender a spike of buds. They go in three places:
+- **Beds** round the plaza and by the cottages: a patch of dark soil with a soft, uneven edge, flowers on a loose staggered grid. A bed goes in a gap between paths, and is placed with its whole width clear of the well and the notice board. Any flower that would land within 1.45 of a path is left out (`distanceToPaths` and `roomFromProps` in `layout.ts`), so nothing grows where the robots walk.
+- **Window boxes:** a low leafy mound with seven small blooms.
+- **The meadows:** the wildflower patches, mostly one kind to a patch, in a lighter version (fewer leaves and petals), since there are about 300 of them.
+
+Flowers are solid, write depth and cast shadows, merged into the village's meshes, so they add no draw calls. They have their own random numbers, and the old flowers' random numbers are still drawn, so no rock, tuft or tree moved. They cost triangles rather than draws: the home view went from about 570,000 to 735,000 triangles a frame (counting the shadow and depth passes), with no more draw calls. Measured on this PC with the cap off, at the dusk the app opens with, against the version before them, two rounds each: High went from about 4.2 to 4.4 ms a frame; Low stayed at about 1.65 ms.
 
 ## Weather and seasons (`weather.ts`, `weathering.ts`, `precipitation.ts`)
 
@@ -175,10 +182,10 @@ Things that aren't about the work, so the village feels lived in. Who is out whe
 | Villagers and the fisherman | day and dusk (lanterns lit at dusk) | night, rain, snow: they go indoors |
 | The cat | day and dusk | asleep on its bench at night and in rain |
 
-- **Birds:** a loose flock on one slow circle over the town hall and the river, flapping in bursts, then gliding. Drawn half again as big as life so they read from the home view. The circle is set back so the whole flock stays near the home view's focus distance: birds nearer the camera turned into blurred smudges over the plaza. They cast no shadows for the same reason.
+- **Birds:** a loose flock on one slow circle over the town hall and the river, flapping in bursts, then gliding. Drawn half again as big as life so they read from the home view. The circle is set back so the whole flock stays near the home view's focus distance: birds nearer the camera turned into blurred smudges over the plaza. They cast no shadows: from that height a bird's shadow is only a dark fleck on the ground.
 - **Butterflies** visit the real wildflower patches (`nature.ts` tells `life.ts` where they are). **Fireflies** are points that each blink on their own, along the meadows and the river bank.
 - **On the river:** ducks paddle by the near bank upstream of the library, where the home view sees open water; the fisherman drifts down the far bank for about 80 seconds, turns, rows back up and turns again; at night the boat is tied to a post. He keeps close in to the far bank, so the float and the oars stay clear of the boats' lane. From the home view the ducks and the rowboat are small; they're for when you look closer.
-- **The cat and villagers** keep to their own spots (two benches, the well, a flower patch, a sunny spot in the meadow), away from the robots' paths and doors.
+- **The cat and villagers** keep to their own spots (two benches, the well, a flower patch, a sunny spot in the meadow), away from the robots' paths and doors. The cat has a model for each pose rather than one model bent into all of them: sitting up on the bench with its tail round its paws, walking, lying in the sun like a loaf, and curled up asleep, eyes shut, its tail round to its nose. It hops down from the seat and back up in an arc. The villager who picks flowers stands just outside the patch, not in it.
 - **The windmill** (`world.ts`) stands in a clearing in the tree line on the far bank. The trees that stood there are still made, into a builder that's thrown away, so they use up the same random numbers and no other tree moves.
 - **One wind** (`breeze` in `life-rules.ts`): 1 on a fair day, so the trees sway as before, up to 1.7 in a storm. The trees, the flags (`flag.ts`), the chimney smoke and the windmill's sails all follow it. The flags' wave adds up its phase over time, so a change in the wind never makes it jump.
 - **Hearth fires** (`hearthFires`): lit at dusk and in winter (half of them in autumn), so chimneys puff more often and the smoke lasts longer. A winter evening has about three times the smoke of a summer day.
