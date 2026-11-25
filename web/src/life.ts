@@ -333,8 +333,31 @@ const BENCH_ANGLE = (-22 * Math.PI) / 180;
 const BENCH = new THREE.Vector3(Math.cos(BENCH_ANGLE) * 9.2, 0, Math.sin(BENCH_ANGLE) * 9.2);
 const BENCH_ROT = Math.atan2(-BENCH.x, -BENCH.z);
 const SEAT = BENCH.clone().add(new THREE.Vector3(0.42, 0, 0.04).applyAxisAngle(new THREE.Vector3(0, 1, 0), BENCH_ROT)).setY(0.5);
-const SEAT_FLOOR = BENCH.clone().add(new THREE.Vector3(0.42, 0, 0.62).applyAxisAngle(new THREE.Vector3(0, 1, 0), BENCH_ROT));
+/** A spot near the bench, given across it (x, to its right) and out in front (z). */
+const byBench = (x: number, z: number) => BENCH.clone().add(new THREE.Vector3(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), BENCH_ROT));
 const SUNNY = new THREE.Vector3(11.4, 0, -6.6);
+/**
+ * Its way from the bench to the sunny spot: down in front of the seat, round the bench's end,
+ * through the gap between the two flower beds behind it, then out across the grass. (Straight
+ * there, it walked under the seat and through a bed.)
+ */
+const CAT_ROUTE = [byBench(0.42, 0.62), byBench(1.05, 0.45), byBench(1.0, -0.6), byBench(0.55, -1.6), byBench(0.3, -3.0), SUNNY];
+const ROUTE_LENGTH = CAT_ROUTE.slice(1).reduce((sum, p, i) => sum + p.distanceTo(CAT_ROUTE[i]!), 0);
+
+/** The point `d` along the cat's route (clamped to its ends). */
+function alongRoute(d: number, out: THREE.Vector3): THREE.Vector3 {
+  let left = Math.min(Math.max(d, 0), ROUTE_LENGTH);
+  for (let i = 1; i < CAT_ROUTE.length; i++) {
+    const a = CAT_ROUTE[i - 1]!;
+    const b = CAT_ROUTE[i]!;
+    const len = a.distanceTo(b);
+    if (left <= len || i === CAT_ROUTE.length - 1) return out.lerpVectors(a, b, Math.min(1, left / len));
+    left -= len;
+  }
+  return out.copy(SUNNY);
+}
+const aheadV = new THREE.Vector3();
+const behindV = new THREE.Vector3();
 
 type CatPose = "sit" | "walk" | "loaf" | "sleep";
 
@@ -353,7 +376,10 @@ function catHead(asleep = false): THREE.Group {
     h.add(new THREE.ConeGeometry(0.036, 0.078, 3), FUR, { at: [s * 0.052, 0.076, -0.008], rot: [0, Math.PI, s * 0.32] });
     h.add(new THREE.ConeGeometry(0.02, 0.05, 3), PINK, { at: [s * 0.05, 0.07, 0.004], rot: [0, Math.PI, s * 0.32] });
     if (asleep) h.box([0.026, 0.005, 0.01], 0x2a2620, { at: [s * 0.036, 0.008, 0.083], rot: [0, 0, s * -0.25] });
-    else h.box([0.022, 0.026, 0.01], 0x2a2620, { at: [s * 0.036, 0.012, 0.083] });
+    else {
+      h.add(new THREE.SphereGeometry(0.014, 6, 4), 0xd8b04a, { at: [s * 0.036, 0.012, 0.08], scale: [1.15, 0.85, 0.5] });
+      h.box([0.005, 0.019, 0.006], 0x1f1b17, { at: [s * 0.036, 0.012, 0.0855] });
+    }
   }
   return h.build("cat-head");
 }
@@ -477,16 +503,18 @@ class Cat {
       pose = "walk";
       const out = k < SIT + WALK;
       const f = out ? (k - SIT) / WALK : (k - SIT - WALK - LOAF) / WALK;
-      const from = out ? SEAT_FLOOR : SUNNY;
-      const to = out ? SUNNY : SEAT_FLOOR;
-      at.lerpVectors(from, to, f);
+      // Along the route, out or back; it faces a little way ahead, so it turns smoothly.
+      const d = (out ? f : 1 - f) * ROUTE_LENGTH;
+      const step = out ? 1 : -1;
+      alongRoute(d, at);
+      alongRoute(d + step * 0.3, aheadV).sub(alongRoute(d - step * 0.1, behindV));
       // Jump down from the seat at the start, up onto it at the end, in an arc.
       const hop = out ? 1 - smooth(0, 0.1, f) : smooth(0.9, 1, f);
       if (hop > 0) {
         at.lerp(SEAT, hop);
         at.y += Math.sin(Math.PI * hop) * 0.18;
       }
-      facing = Math.atan2(to.x - from.x, to.z - from.z);
+      facing = Math.atan2(aheadV.x, aheadV.z);
     } else {
       pose = "loaf";
       at.copy(SUNNY);
