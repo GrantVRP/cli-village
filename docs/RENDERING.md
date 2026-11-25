@@ -205,7 +205,7 @@ Your pushes leave on a little two-masted cargo ship: a schooner, built from prim
 - **Sails:** cloth that bulges with the wind and flaps a little when slack. They cast shadows on the deck and the water but take none: thin curved cloth lit from both sides striped itself with its own shadow.
 - **Still mode** and a page that catches up go straight to where the story ends: moored, sails slack.
 
-Cost, measured on this PC at the dusk the app opens with: about 16 more draw calls and 3,400 more triangles; the frame time difference was inside the noise on High (about 3.9 to 4.0 ms either way), on Low and in winter.
+Cost, measured on this PC at the dusk the app opens with: about 16 more draw calls and 3,400 more triangles. The frame time difference was smaller than the difference between two runs of the same build: on High the old build measured about 3.7 and 4.6 ms a frame in its two runs and the new one about 4.0 in both, and Low and winter were the same story. (On a 60 fps screen a frame can take up to 16.7 ms.)
 
 ## Finish (`passes.ts`, FinishPass)
 
