@@ -455,7 +455,8 @@ function catLoaf(): THREE.Group {
   const b = new ModelBuilder();
   b.add(new THREE.SphereGeometry(0.13, 9, 6), FUR, { at: [0, 0.094, -0.02], scale: [0.95, 0.72, 1.5], jitter: 0.03 });
   b.add(new THREE.SphereGeometry(0.07, 7, 5), WHITE, { at: [0, 0.08, 0.13], scale: [1, 0.85, 0.8] });
-  for (const s of [-1, 1]) b.add(new THREE.SphereGeometry(0.028, 6, 4), WHITE, { at: [s * 0.042, 0.018, 0.2], scale: [1, 0.6, 1.3] });
+  // Its front paws tucked under its chest, their backs in its fur.
+  for (const s of [-1, 1]) b.add(new THREE.SphereGeometry(0.028, 6, 4), WHITE, { at: [s * 0.045, 0.024, 0.165], scale: [1, 0.75, 1.9] });
   curledTail(b, 0.0, -0.02, 0.15, -1.75, 0.9, 0.024);
   return b.build("cat-loaf");
 }
