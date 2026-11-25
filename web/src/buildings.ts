@@ -204,7 +204,8 @@ function cottage(b: ModelBuilder, s: CottageSpec): CottageInfo {
     b.pop();
   }
 
-  // Windows: front (both floors), plus one on each side upstairs.
+  // Windows: front and back (both floors), and one on each floor of each side, so no wall is
+  // left blank whichever way it's seen from.
   const n = Math.max(2, Math.round(w / 1.45));
   const clear = s.clearCenter ?? 0.95;
   for (let i = 0; i < n; i++) {
@@ -220,10 +221,20 @@ function cottage(b: ModelBuilder, s: CottageSpec): CottageInfo {
       b.pop();
     }
   }
+  for (let i = 0; i < n; i++) {
+    const x = -w / 2 + ((i + 0.5) * w) / n;
+    for (const y of [BASE + h * 0.56, upperY + h2 * 0.52]) {
+      b.push([x, y, -front], Math.PI);
+      windowOn(b, s.shutter);
+      b.pop();
+    }
+  }
   for (const side of [-1, 1]) {
-    b.push([side * (w / 2), upperY + h2 * 0.52, 0], (side * Math.PI) / 2);
-    windowOn(b, s.shutter);
-    b.pop();
+    for (const y of [BASE + h * 0.56, upperY + h2 * 0.52]) {
+      b.push([side * (w / 2), y, 0], (side * Math.PI) / 2);
+      windowOn(b, s.shutter);
+      b.pop();
+    }
   }
 
   // Chimney on the back slope.
@@ -305,15 +316,15 @@ function lab(): BuildingModel {
   const b = new ModelBuilder();
   const info = cottage(b, { w: 4.4, d: 3.6, h: 1.45, wall: P.warmGrey, shutter: P.purple, rng });
   const group = b.build("lab");
-  // Flasks on the steps, with glowing liquid.
+  // Flasks at the ends of the top and bottom steps (wholly on them), with glowing liquid.
   const glassMat = new THREE.MeshStandardMaterial({ color: 0xdff4f2, transparent: true, opacity: 0.35, roughness: 0.1, flatShading: true });
   const spots: THREE.Vector3[] = [];
   const liquids: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[] = [];
   const flasks: [number, number, number, number][] = [
-    [-0.55, 0.45, info.front + 0.2, 0x7cf06a],
-    [0.55, 0.45, info.front + 0.22, 0x6fe3ff],
-    [-0.62, 0.3, info.front + 0.5, 0xd46bf0],
-    [0.68, 0.15, info.front + 0.78, 0xf2e16b],
+    [-0.42, 0.45, info.front + 0.29, 0x7cf06a],
+    [0.42, 0.45, info.front + 0.29, 0x6fe3ff],
+    [-0.57, 0.15, info.front + 0.79, 0xd46bf0],
+    [0.57, 0.15, info.front + 0.79, 0xf2e16b],
   ];
   for (const [x, y, z, color] of flasks) {
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), glassMat);

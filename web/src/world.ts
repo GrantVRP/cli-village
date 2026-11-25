@@ -90,12 +90,24 @@ function groundMesh(geo: THREE.BufferGeometry, name: string, random = rng): THRE
   const pos = geo.getAttribute("position");
   const colors = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
+  const avgY = (from: number, n: number) => {
+    let sum = 0;
+    for (let k = 0; k < n; k++) sum += pos.getY(from + k);
+    return sum / n;
+  };
   for (let i = 0; i < pos.count; i += 3) {
-    const y = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
-    if (y < -0.6) c.set(0x6f6a55);
-    else if (y < -0.12) c.set(P.sand);
-    else c.set(random() < 0.5 ? P.grass : P.grass2);
-    c.offsetHSL(0, 0, (random() - 0.5) * 0.05);
+    // Each triangle draws its random numbers as it always has (so nothing seeded after the
+    // ground moves)...
+    const y = avgY(i, 3);
+    const firstGreen = y >= -0.12 ? random() < 0.5 : (i / 3) % 2 === 0;
+    const shade = (random() - 0.5) * 0.05;
+    // ...but what it's made of goes by its whole square (both of its triangles), so the sandy
+    // banks have straight edges rather than a saw-tooth of sand into the grass.
+    const square = avgY(i - (i % 6), 6);
+    if (square < -0.7) c.set(0x6f6a55);
+    else if (square < -0.06) c.set(P.sand);
+    else c.set(firstGreen ? P.grass : P.grass2);
+    c.offsetHSL(0, 0, shade);
     for (let k = 0; k < 3; k++) colors.set([c.r, c.g, c.b], (i + k) * 3);
   }
   geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -404,8 +416,12 @@ export function barrel(b: ModelBuilder, x: number, z: number, y = 0): void {
 }
 
 function well(b: ModelBuilder, x: number, z: number): void {
-  b.add(new THREE.CylinderGeometry(0.95, 1.0, 0.8, 12), P.stone, { at: [x, 0.4, z], jitter: 0.08 });
-  b.add(new THREE.CylinderGeometry(0.72, 0.72, 0.05, 12), 0x3c5a6a, { at: [x, 0.72, z] });
+  // A ring of stone (the inside wall turned inward, so it shows), capped with coping stones,
+  // and dark water down inside.
+  b.add(new THREE.CylinderGeometry(0.95, 1.0, 0.8, 14, 1, true), P.stone, { at: [x, 0.4, z], jitter: 0.08 });
+  b.add(new THREE.CylinderGeometry(0.7, 0.7, 0.8, 14, 1, true).scale(-1, 1, 1), P.stoneDark, { at: [x, 0.4, z], jitter: 0.06 });
+  b.add(new THREE.TorusGeometry(0.83, 0.15, 4, 14).rotateX(Math.PI / 2), P.stone, { at: [x, 0.8, z], scale: [1, 0.55, 1], jitter: 0.1 });
+  b.add(new THREE.CircleGeometry(0.7, 14).rotateX(-Math.PI / 2), 0x29404c, { at: [x, 0.42, z], jitter: 0.02 });
   for (const dx of [-0.85, 0.85]) b.box([0.12, 1.9, 0.12], P.wood, { at: [x + dx, 1.3, z] });
   b.add(new THREE.ConeGeometry(1.35, 0.7, 4), P.roof2, { at: [x, 2.55, z], rot: [0, Math.PI / 4, 0], scale: [1, 1, 0.7] });
   b.box([1.8, 0.07, 0.07], P.wood, { at: [x, 1.95, z] });
