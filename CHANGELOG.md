@@ -4,6 +4,7 @@ What changed in CLI Village, newest first. Each step was built and merged as its
 
 ## Unreleased
 
+- **Step 28:** the cargo ship ([docs/RENDERING.md](docs/RENDERING.md#the-harbor-ship-shipts-harborts)): the harbor's boat is now a two-masted cargo ship in GitHub's colours (only the colours). On a push your crates hop aboard one by one, it sails away down the river with its sails full, then comes back, turns round and moors again. The old boat sailed back through the dock and floated above the water; the ship stays in the river and clear of the dock all the way. The views now say ship instead of boat ('Last ship').
 - **Step 27:** village life ([docs/RENDERING.md](docs/RENDERING.md#village-life-lifets-reactionsts)):
   - robots react: a wave for a job done, a cheer for a fix or a push (the robots resting at home join in, one after another), a slump while their task has failed; robots resting at home chat in pairs;
   - birds circling over the rooftops (until nearly dark), butterflies on the wildflowers on spring and summer days, fireflies on warm evenings (now one kind: the old green ones that blinked all together are gone);

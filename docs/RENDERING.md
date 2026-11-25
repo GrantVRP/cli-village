@@ -193,6 +193,20 @@ Things that aren't about the work, so the village feels lived in. Who is out whe
 
 Everything is seeded, so it looks the same every time, and everything follows still mode: one fixed pose, no smoke. Birds (a body and two wings), butterflies (two wings) and fireflies are instanced, so a few draws cover the whole flock whatever its size; Low draws 6 birds, 6 butterflies and 24 fireflies, Medium 9, 10 and 40, High 12, 14 and 64. The villagers, the cat, the ducks and the rowboat are small models of a few parts each: with their shadows they add about 80 draw calls. Measured on this PC with the cap off, at the dusk the app opens with, switching them off and on in the same run: on High the difference was inside the noise (3.7 to 3.8 ms a frame either way); on Low it was about 0.25 ms (1.55 against 1.3).
 
+## The harbor ship (`ship.ts`, `harbor.ts`)
+
+Your pushes leave on a little two-masted cargo ship: a schooner, built from primitives like everything else. Its hull is lofted from eight stations, painted dark above a teal stripe and red-brown below the waterline, and it floats at the river's level. It has two masts with gaff sails and a jib, a deckhouse with portholes and a lantern on the mainmast that light up at night (the same lamps as the cottages), and a rudder on its transom. Its flags carry GitHub's colours, and only the colours: a charcoal flag on the mainmast and a white pennant on the fore, no mark.
+
+- **Moored stern-to the dock,** between two of its posts, facing downstream, with two stern lines that sag a little and follow the ship as it rocks. The cart stops on the dock right behind it.
+- **Loading:** on a push the crates hop off the cart over the stern onto the open after deck, one by one, the top one first, and fill the far spots first so none hops over another. Each crate gets across early and drops onto its spot from above, so it clears the stern rail; they all stay under the main boom.
+- **Sailing:** it casts off, its sails fill and its booms swing out, and it runs away east with the wind and the current, gathering speed, with a soft wake spreading from its bow. Out of sight the crates are delivered.
+- **Coming back:** it sails up the river, slows down, turns round clear of the dock and both banks, and backs onto its berth. Sweeping its outline through the whole trip keeps it at least 0.14 from the dock and 1.05 from the banks.
+- **The wind:** its flags stream with the village's wind (east, like the town hall's), whichever way the ship points.
+- **Sails:** cloth that bulges with the wind and flaps a little when slack. They cast shadows on the deck and the water but take none: thin curved cloth lit from both sides striped itself with its own shadow.
+- **Still mode** and a page that catches up go straight to where the story ends: moored, sails slack.
+
+Cost, measured on this PC at the dusk the app opens with: about 16 more draw calls and 3,400 more triangles; the frame time difference was inside the noise on High (about 3.9 to 4.0 ms either way), on Low and in winter.
+
 ## Finish (`passes.ts`, FinishPass)
 
 This pass runs after tone mapping:
