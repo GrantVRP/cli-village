@@ -7,11 +7,11 @@
 export const EVENT_VERSION = 1;
 
 /** Places in the village. Each building stands for a kind of task. */
-export const BUILDINGS = ["townhall", "vault", "library", "workshop", "lab", "harbor", "home"] as const;
+export const BUILDINGS = ["townhall", "vault", "library", "workshop", "lab", "harbor", "home", "launchtower", "archive", "postoffice", "watchtower"] as const;
 export type Building = (typeof BUILDINGS)[number];
 
 /** Kinds of work an agent can start. */
-export const TASK_KINDS = ["coordinate", "secrets", "research", "code", "test", "git", "scan"] as const;
+export const TASK_KINDS = ["coordinate", "secrets", "research", "code", "test", "git", "scan", "deploy", "data", "review", "monitor"] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
 
 /** Where each kind of work happens. */
@@ -23,6 +23,10 @@ export const KIND_TO_BUILDING: Record<TaskKind, Building> = {
   test: "lab",
   git: "harbor",
   scan: "harbor", // the secret-scan checkpoint gate before the dock
+  deploy: "launchtower",
+  data: "archive",
+  review: "postoffice",
+  monitor: "watchtower",
 };
 
 export const BUILDING_NAMES: Record<Building, string> = {
@@ -33,6 +37,10 @@ export const BUILDING_NAMES: Record<Building, string> = {
   lab: "LAB",
   harbor: "GITHUB HARBOR",
   home: "HOME",
+  launchtower: "LAUNCH TOWER",
+  archive: "ARCHIVE WELL",
+  postoffice: "POST OFFICE",
+  watchtower: "WATCHTOWER",
 };
 
 /** Plain-English meaning of each building, for the ? help overlay and the 3D village. */
@@ -44,6 +52,10 @@ export const BUILDING_HELP: Record<Building, string> = {
   townhall: "The coordinator that hands out tasks.",
   home: "Where idle robots rest.",
   harbor: "Commits become crates. A gate scans them for leaked secrets, then the ship carries them to GitHub.",
+  launchtower: "Deploys and releases. Its beacon lights up when one ships.",
+  archive: "Databases and data: migrations, backups and queries.",
+  postoffice: "Reviews: pull-request reviews, comments and messages.",
+  watchtower: "Logs, alerts and monitoring. Its lantern flashes on warnings.",
 };
 
 export const EVENT_TYPES = ["start", "move", "progress", "done", "fail", "commit", "push"] as const;

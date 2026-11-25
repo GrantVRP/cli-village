@@ -1,5 +1,5 @@
 // The ground and everything that doesn't move much: plaza, rails, paths,
-// river, trees and props (barrels, flowers, benches, lamps, notice board, well),
+// river, trees and props (barrels, flowers, benches, lamps),
 // and the nature details in nature.ts.
 
 import * as THREE from "three";
@@ -8,7 +8,7 @@ import { glowMaterials } from "./buildings.js";
 import { wavingFlag, type Flag } from "./flag.js";
 import { addNature, type KeepOut } from "./nature.js";
 import { addBed, type FlowerBed, type FlowerKind } from "./flora.js";
-import { distanceToPaths, HARBOR, PLAZA_R, CURB_R, pathAngles, RIVER_HALF, RIVER_Z, roomFromProps, SPOTS, TRACK_R } from "./layout.js";
+import { distanceToPaths, HARBOR, isLater, PLAZA_R, CURB_R, pathAngles, RIVER_HALF, RIVER_Z, roomFromProps, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, ModelBuilder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
 import type { Lighting } from "./render/timeline.js";
@@ -223,7 +223,12 @@ function ringTrack(b: ModelBuilder): void {
 
 /** Dirt paths (with inlaid rails) from the plaza to each building. */
 function paths(b: ModelBuilder): void {
+  // The later buildings' paths take their stones and colours from random numbers of their own,
+  // so the first seven's, and everything made after them, stay as they were.
+  const later = makeRandom(71);
   for (const id of BUILDINGS) {
+    const stones = isLater(id) ? later : rng;
+    b.useRandom(isLater(id) ? later : undefined);
     const s = SPOTS[id];
     const from = s.edge.clone();
     const to = s.door.clone().add(s.door.clone().sub(s.edge).normalize().multiplyScalar(id === "harbor" ? 0.4 : 1.1));
@@ -235,12 +240,13 @@ function paths(b: ModelBuilder): void {
     b.box([1.8, 0.05, len], P.dirt, { at: [0, 0.035, 0], jitter: 0.06 });
     for (let z = -len / 2; z < len / 2; z += 0.7) {
       for (const side of [-1, 1]) {
-        if (rng() < 0.6) b.box([0.22 + rng() * 0.2, 0.06, 0.2 + rng() * 0.2], pick([P.stone, 0xb59b72], rng), { at: [side * (0.95 + rng() * 0.12), 0.04, z] });
+        if (stones() < 0.6) b.box([0.22 + stones() * 0.2, 0.06, 0.2 + stones() * 0.2], pick([P.stone, 0xb59b72], stones), { at: [side * (0.95 + stones() * 0.12), 0.04, z] });
       }
     }
     b.pop();
     railSegment(b, from, to, false);
   }
+  b.useRandom();
   // The harbor's branch line for the commit cart.
   const route = HARBOR.cartRoute;
   for (let i = 0; i < route.length - 1; i++) railSegment(b, route[i]!, route[i + 1]!, true);
@@ -342,6 +348,23 @@ const AROUND_TREES: readonly [number, number, number][] = [
   [24, 4, 1.1], [-16, 18.5, 0.9], [16.5, 19, 1.0], [7.5, -18.5, 1.0],
 ];
 
+/**
+ * Where the lamps round the plaza stand (degrees round it, at 9.0 from the middle), each beside a
+ * path. Three of them stepped aside for the later buildings' paths (they were at -119, -72 and
+ * -168). The pools of light on the ground under them use the same list.
+ */
+const LAMP_ANGLES = [-131, -77, 29, 111, -158] as const;
+
+/**
+ * Trees that stepped aside for a later building (by their place in AROUND_TREES), and where they
+ * stand now. The scenery seeded round them still keeps clear of where they first stood.
+ */
+const MOVED_TREES: ReadonlyMap<number, readonly [number, number]> = new Map([
+  [13, [4.4, -19.5]], // for the Launch tower
+]);
+/** Where a tree round the village stands now. */
+const treeAt = (i: number): readonly [number, number] => MOVED_TREES.get(i) ?? [AROUND_TREES[i]![0], AROUND_TREES[i]![1]];
+
 function trees(b: ModelBuilder): void {
   // The tree line beyond the river. It goes on past the sides (out into the fog), with
   // its own random numbers there, so the trees by the village don't depend on how far it goes.
@@ -355,7 +378,7 @@ function trees(b: ModelBuilder): void {
     }
   }
   // A few around the village, plus one orange autumn tree.
-  for (const [x, z, s] of AROUND_TREES) tree(b, x, z, s, pick(P.leaf, rng));
+  AROUND_TREES.forEach(([, , s], i) => tree(b, ...treeAt(i), s, pick(P.leaf, rng)));
   // Off to the side of the Library, so it doesn't hide the dome.
   tree(b, -24, -12.5, 1.55, P.autumn);
   // Bushes.
@@ -482,11 +505,13 @@ function flowers(b: ModelBuilder, x: number, z: number, count = 9, planted = tru
 
 /**
  * Up to eight beds round the plaza, in the gaps between the paths: one in each gap, then more in
- * the roomiest gaps, spread evenly. No bed goes where a prop stands (the well, the notice board).
+ * the roomiest gaps, spread evenly. No bed goes where a prop stands. They're laid out round the
+ * first seven buildings' paths and props (the well and the notice board as they stood), so they
+ * stay where they were; then a bed too near a later building's path steps aside from it.
  */
 function bedAngles(): number[] {
   const R = 10.9;
-  const paths = pathAngles();
+  const paths = pathAngles(true);
   // (Two paths that leave side by side, like the harbor's walk and its rails, leave no room.)
   const gaps = paths
     .map((a, i) => {
@@ -495,20 +520,30 @@ function bedAngles(): number[] {
     })
     .filter((g) => g.width > 0.35);
   const at = (g: { from: number; width: number }, n: number) => Array.from({ length: n }, (_, j) => g.from + (g.width * (j + 1)) / (n + 1));
-  const clearOfProps = (a: number) => roomFromProps(Math.cos(a) * R, Math.sin(a) * R) > 1.15;
+  const clearOfProps = (a: number) => roomFromProps(Math.cos(a) * R, Math.sin(a) * R, true) > 1.15;
   const open = gaps.map((g) => ({ ...g, n: 1 }));
   const placed = () => open.flatMap((g) => at(g, g.n)).filter(clearOfProps);
   for (let tries = 0; placed().length < 8 && tries < 24; tries++) {
     const roomiest = open.reduce((w, g) => (g.width / (g.n + 1) > w.width / (w.n + 1) ? g : w));
     roomiest.n++;
   }
-  return placed().slice(0, 8);
+  const later = pathAngles().filter((a) => !paths.includes(a));
+  const ASIDE = (14 * Math.PI) / 180;
+  return placed()
+    .slice(0, 8)
+    .map((a) => {
+      for (const p of later) {
+        const d = Math.atan2(Math.sin(a - p), Math.cos(a - p));
+        if (Math.abs(d) < ASIDE) a = p + Math.sign(d) * ASIDE;
+      }
+      return a;
+    });
 }
 
 function props(b: ModelBuilder): void {
   const angles = (deg: number) => (deg * Math.PI) / 180;
   const ringPoint = (deg: number, r: number): [number, number] => [Math.cos(angles(deg)) * r, Math.sin(angles(deg)) * r];
-  for (const deg of [-119, -72, 29, 111, -168]) {
+  for (const deg of LAMP_ANGLES) {
     const [x, z] = ringPoint(deg, 9.0);
     lampPost(b, x, z);
   }
@@ -516,8 +551,12 @@ function props(b: ModelBuilder): void {
     const [x, z] = ringPoint(deg, 9.2);
     bench(b, x, z, Math.atan2(-x, -z));
   }
-  well(b, 0, 10.6);
-  noticeBoard(b, 3.2, -9.6, Math.atan2(-3.2, 9.6));
+  // The plaza's well is the Archive well now, and its notice board went to the Post office.
+  // Both are still made, into a builder that's thrown away, so they use up the same random
+  // numbers and everything after them stays put.
+  const gone = new ModelBuilder();
+  well(gone, 0, 10.6);
+  noticeBoard(gone, 3.2, -9.6, Math.atan2(-3.2, 9.6));
   // Barrels by the workshop and the harbor.
   barrel(b, -13.4, 13.6);
   barrel(b, -12.7, 14.3);
@@ -563,7 +602,8 @@ export function createWorld(): World {
   group.add(mill.moving);
   // Grass, wildflowers, boulders, reeds and garden fences (nature.ts), clear of the trees.
   const trunks: KeepOut[] = [...AROUND_TREES.map(([x, z, s]): KeepOut => [x, z, 0.9 * s]), [-24, -12.5, 1.4]];
-  const nature = addNature(b, foliage, trunks);
+  const moved = [...MOVED_TREES].map(([i, [x, z]]): KeepOut => [x, z, 0.9 * AROUND_TREES[i]![2]]);
+  const nature = addNature(b, foliage, trunks, moved);
   group.add(nature.small, nature.dense);
   group.add(b.build("world-static"));
   swayShadows(group, foliage);
@@ -576,7 +616,7 @@ export function createWorld(): World {
 
   // A pool of warm light on the ground under each lamp: added on top of what's there,
   // brightest under the lamp and fading out smoothly, stronger as it gets dark.
-  for (const deg of [-119, -72, 29, 111, -168]) {
+  for (const deg of LAMP_ANGLES) {
     const a = (deg * Math.PI) / 180;
     const pool = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6).rotateX(-Math.PI / 2), lightPool);
     pool.position.set(Math.cos(a) * 9.0 + 0.42, 0.1, Math.sin(a) * 9.0);

@@ -32,6 +32,23 @@ const COMMANDS: readonly (readonly [RegExp, string])[] = [
   [/^git\s+clone\b/, "Downloads a copy of a project from GitHub."],
   [/^gh\s+pr\s+create\b/, "Opens a pull request: asks to add your branch's changes to main."],
   [/^gh\s+pr\s+merge\b/, "Adds a pull request's changes to main."],
+  [/^gh\s+pr\s+review\b/, "Reviews a pull request: approves it, or asks for changes."],
+  [/^gh\s+pr\s+(view|diff|checkout|checks)\b/, "Opens a pull request to read its changes before it's added."],
+  [/^gh\s+release\s+create\b/, "Publishes a release on GitHub: a named version people can download."],
+  [
+    /^(npx\s+)?(vercel|netlify)\b.*\bdeploy\b|^(npx\s+)?vercel\s+--prod\b|^(fly|flyctl)\s+deploy\b|^railway\s+up\b|^kubectl\s+(apply|rollout)\b|^helm\s+(upgrade|install)\b|^(npm|pnpm|yarn|bun)\s+run\s+deploy\b/,
+    "Sends a new version of your app out to the servers people use.",
+  ],
+  [
+    /^(npx\s+)?prisma\s+(migrate|db\s+push)\b|^(npx\s+)?drizzle-kit\s+(migrate|push)\b|^(npx\s+)?(knex|sequelize)\b.*\bmigrat|^(bin\/)?rails\s+db:migrate\b|^alembic\s+upgrade\b|^python3?\s+manage\.py\s+migrate\b/,
+    "Changes the database's layout (a migration) to match the code.",
+  ],
+  [/^(pg_dump|mysqldump|mongodump)\b/, "Makes a backup copy of the database."],
+  [/^(psql|mysql|sqlite3|mongosh|redis-cli)\b/, "Opens the database, to look at or change the data in it."],
+  [
+    /^(kubectl|docker)\s+logs\b|^(fly|flyctl|heroku|vercel)\s+logs\b|^tail\s+-[fF]\b|^journalctl\b/,
+    "Shows the newest lines of a log: the app's diary of what it did.",
+  ],
   [
     /^(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|^(npx\s+)?(vitest|jest|mocha)\b|^node\s+--test\b|^(python3?\s+-m\s+)?pytest\b|^(cargo|go)\s+test\b/,
     "Runs the tests: small programs that check your code still works.",
@@ -51,6 +68,10 @@ const KINDS: Record<TaskKind, string> = {
   test: "Tests are small programs that check your code still works.",
   git: "git keeps snapshots of your work, and GitHub keeps a copy online.",
   scan: "Checks that no password or key slipped in before your work is shared.",
+  deploy: "Deploying puts a new version of your app where people can use it.",
+  data: "Working with the database, where your app keeps its data.",
+  review: "Reading changes and saying what to fix before they're added.",
+  monitor: "Watching logs and alerts, to spot trouble before people notice.",
 };
 
 /** What usually helps when this kind of work runs into a problem. */
@@ -62,6 +83,10 @@ const PROBLEMS: Record<TaskKind, string> = {
   test: "A test found a problem. Fix the code, then run the tests again.",
   git: "git couldn't finish. Usually it's a login, or changes that clash.",
   scan: "Move that secret into Infisical, then save a new snapshot.",
+  deploy: "The deploy didn't finish. Check its log, fix the cause, then retry.",
+  data: "The database step failed. Read the message before running it again.",
+  review: "The review asked for changes. Make them, then ask for another look.",
+  monitor: "Something needs a look. The message says what the alert is about.",
 };
 
 /** What a real command does, in plain English, or undefined if we don't know it. */

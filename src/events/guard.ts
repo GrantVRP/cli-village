@@ -10,7 +10,25 @@ const MIN_SECRET_LENGTH = 4;
 // that, so cleaning twice doesn't swallow the text after it.)
 const VALUE = String.raw`("[^"]*"|'[^']*'|\[hidden\]|\S+)`;
 const ASSIGNMENT = new RegExp(String.raw`\b([A-Z][A-Z0-9_]{2,})=${VALUE}`, "g");
-const NAMED_SECRET = new RegExp(String.raw`\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)(\s*[:=]\s*)${VALUE}`, "gi");
+const NAMED_SECRET = new RegExp(String.raw`\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|(?:access|auth|refresh)[_-]?token|private[_-]?key|client[_-]?secret)(\s*[:=]\s*)${VALUE}`, "gi");
+// The same as a command-line flag with a space before its value, like `--password hunter2` or
+// `--token abc` (deploy and database tools take these). The value is whatever follows, unless
+// it's the next flag. (`--password-stdin` and the like are other flags, so they don't count.)
+const SECRET_FLAG = new RegExp(
+  String.raw`(--?(?:password|passwd|pass|token|api[_-]?key|access[_-]?key|(?:access|auth|refresh)[_-]?token|private[_-]?key|secret[_-]?key|client[_-]?secret))(\s+)("[^"]*"|'[^']*'|\[hidden\]|[^\s-]\S*)`,
+  "gi",
+);
+// Short flags that mean "password" only for some tools, so only after their names (and only up
+// to the end of that command): `mysql -phunter2` (MySQL and MariaDB take it joined on, and
+// `-p name` is a database name, hidden too to be safe), `redis-cli -a hunter2`, and
+// `docker login -p hunter2` (also `-phunter2` and `-p=hunter2`). Case matters: `mysql -P 3306`
+// is the port.
+const FLAG_VALUE = String.raw`("[^"]*"|'[^']*'|\[hidden\]|[^\s-]\S*)`;
+const TOOL_SECRET_FLAGS: readonly RegExp[] = [
+  new RegExp(String.raw`(\b(?:mysql|mysqldump|mysqladmin|mysqlimport|mysqlshow|mysqlcheck|mysqlpump|mariadb|mariadb-dump|mariadb-admin)\b[^;&|\n]*?\s-p)(\s*)${FLAG_VALUE}`, "g"),
+  new RegExp(String.raw`(\bredis-cli\b[^;&|\n]*?\s-a)(\s+)${FLAG_VALUE}`, "g"),
+  new RegExp(String.raw`(\b(?:docker|podman|nerdctl|buildah|skopeo)\s+login\b[^;&|\n]*?\s-p)(\s*=?)${FLAG_VALUE}`, "g"),
+];
 // Terminal codes (colors, "clear screen", window titles), then any other control characters.
 const ANSI_CODES = /\u001B(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001B]*(?:\u0007|\u001B\\)?|[@-Z\\-_])/g;
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
@@ -64,6 +82,8 @@ export class SecretGuard {
     out = maskTokens(out);
     out = out.replace(ASSIGNMENT, `$1=${HIDDEN}`);
     out = out.replace(NAMED_SECRET, `$1$2${HIDDEN}`);
+    out = out.replace(SECRET_FLAG, `$1$2${HIDDEN}`);
+    for (const flag of TOOL_SECRET_FLAGS) out = out.replace(flag, `$1$2${HIDDEN}`);
     return out.replace(/\s+/g, " ").trim();
   }
 }

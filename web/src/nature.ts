@@ -14,7 +14,7 @@
 import * as THREE from "three";
 import { BUILDINGS } from "../../src/events/types.js";
 import { addFlower, type FlowerKind, pickFlower } from "./flora.js";
-import { HARBOR, PROP_SPOTS, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
+import { FORMER_PROPS, HARBOR, isLater, PROP_SPOTS, RIVER_HALF, RIVER_Z, SPOTS, TRACK_R } from "./layout.js";
 import { makeRandom, materials, type ModelBuilder, ModelBuilder as Builder, pick } from "./lowpoly.js";
 import { P } from "./palette.js";
 
@@ -48,7 +48,8 @@ const MOSS = [0x5f7d3a, 0x6b8a40, 0x58743a] as const;
 const FENCE = [P.woodLight, 0x8a7458, 0x76603f] as const;
 
 /** Props and spots that aren't buildings or paths (layout.ts). */
-const PROPS: readonly KeepOut[] = PROP_SPOTS;
+/** The props as the village was first laid out (with the well and the notice board where they stood). */
+const PROPS: readonly KeepOut[] = [...PROP_SPOTS, ...FORMER_PROPS];
 
 function distanceToSegment(x: number, z: number, a: THREE.Vector3, b: THREE.Vector3): number {
   const dx = b.x - a.x;
@@ -110,27 +111,54 @@ class Blades {
  * without shadows. `dense` is extra grass that fills out the meadows, for the graphics settings
  * that can afford it (it has its own random numbers, so the rest is the same with or without
  * it). `trees` are the trees around the village, so nothing grows through a trunk.
+ *
+ * Everything here was laid out round the first seven buildings, where the trees first stood (see
+ * LATER_BUILDINGS). The later buildings, their paths and the trees that stepped aside for them
+ * (`moved`) only take room away: what would grow there is still worked out, with the same random
+ * numbers, and then thrown away, so everything else stays where it was.
  */
-export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: readonly KeepOut[]): { small: THREE.Group; dense: THREE.Group; flowers: [number, number][] } {
+export function addNature(
+  big: ModelBuilder,
+  foliage: THREE.Material,
+  trees: readonly KeepOut[],
+  moved: readonly KeepOut[] = [],
+): { small: THREE.Group; dense: THREE.Group; flowers: [number, number][] } {
   const rng = makeRandom(91);
   const small = new Builder();
   // The wildflowers have their own random numbers (how detailed they are shifts nothing else).
   const wild = makeRandom(4242);
   const keepOut = [...PROPS, ...trees];
-  const lines: [THREE.Vector3, THREE.Vector3][] = BUILDINGS.map((id) => [SPOTS[id].edge, SPOTS[id].door]);
+  const first = BUILDINGS.filter((id) => !isLater(id));
+  const later = BUILDINGS.filter(isLater);
+  const lines: [THREE.Vector3, THREE.Vector3][] = first.map((id) => [SPOTS[id].edge, SPOTS[id].door]);
   const route = HARBOR.cartRoute;
   for (let i = 0; i < route.length - 1; i++) lines.push([route[i]!, route[i + 1]!]);
+  const laterLines: [THREE.Vector3, THREE.Vector3][] = later.map((id) => [SPOTS[id].edge, SPOTS[id].door]);
+
+  /** Is this spot clear of the later buildings, their paths and the moved trees? */
+  const clearOfLater = (x: number, z: number, room = 0): boolean => {
+    for (const id of later) {
+      const s = SPOTS[id];
+      if (Math.hypot(x - s.pos.x, z - s.pos.z) < s.radius + 0.6 + room) return false;
+    }
+    for (const [a, b] of laterLines) if (distanceToSegment(x, z, a, b) < 1.35 + room) return false;
+    for (const [kx, kz, kr] of moved) if (Math.hypot(x - kx, z - kz) < kr + room) return false;
+    return true;
+  };
+  // What would have grown where a later building now stands goes in here, and is never shown.
+  const thrownBig = new Builder();
+  const thrownSmall = new Builder();
 
   /** Is this spot clear of everything, with this much room to spare? */
-  const clear = (x: number, z: number, room: number, keepTrees = false): boolean => {
+  const clear = (x: number, z: number, room: number, keepTrees = false, former = true): boolean => {
     if (Math.hypot(x, z) < TRACK_R + 1.1 + room) return false;
     if (Math.abs(z - RIVER_Z) < RIVER_HALF + 1.5 + room) return false;
-    for (const id of BUILDINGS) {
+    for (const id of first) {
       const s = SPOTS[id];
       if (Math.hypot(x - s.pos.x, z - s.pos.z) < s.radius + 0.6 + room) return false;
     }
     for (const [a, b] of lines) if (distanceToSegment(x, z, a, b) < 1.35 + room) return false;
-    for (const [kx, kz, kr] of keepTrees ? keepOut : PROPS) if (Math.hypot(x - kx, z - kz) < kr + room) return false;
+    for (const [kx, kz, kr] of keepTrees ? keepOut : former ? PROPS : PROP_SPOTS) if (Math.hypot(x - kx, z - kz) < kr + room) return false;
     return true;
   };
   /** Somewhere in the land around the village, on either side of the river. */
@@ -143,8 +171,10 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
 
   // Grass tufts: three to five blades leaning out from the middle.
   const grass = new Blades();
+  const thrownGrass = new Blades();
   const color = new THREE.Color();
-  const tuft = (x: number, z: number, size = 1, into = grass, r = rng) => {
+  const tuft = (x: number, z: number, size = 1, to = grass, r = rng) => {
+    const into = clearOfLater(x, z) ? to : thrownGrass;
     const y = groundAt(x, z) - 0.03;
     const blades = 3 + Math.floor(r() * 3);
     const tall = (0.34 + r() * 0.26) * size;
@@ -187,7 +217,7 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
       }
     }
   }
-  for (const id of BUILDINGS) {
+  for (const id of first) {
     if (id === "harbor") continue;
     const sp = SPOTS[id];
     for (let k = 0; k < 34; k++) {
@@ -205,7 +235,8 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     const [x, z] = somewhere();
     if (!clear(x, z, 0.4, true)) continue;
     placed++;
-    flowers.push([x, z]);
+    const shown = clearOfLater(x, z, 0.4);
+    if (shown) flowers.push([x, z]);
     pick(MEADOW_FLOWERS, rng);
     const count = 4 + Math.floor(rng() * 5);
     const y = groundAt(x, z);
@@ -222,7 +253,7 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
       if (rng() >= 0.85) pick(MEADOW_FLOWERS, rng);
       for (let j = 0; j < 60; j++) rng();
       const odd = wild() < 0.15 ? pickFlower(wild, WILD_KINDS) : { ...patch, color: pickFlower(wild, [patch.kind]).color };
-      addFlower(big, fx, y, fz, { ...odd, rng: wild, size: 0.75 + wild() * 0.2, detail: "low" });
+      addFlower(shown ? big : thrownBig, fx, y, fz, { ...odd, rng: wild, size: 0.75 + wild() * 0.2, detail: "low" });
     }
   }
 
@@ -231,6 +262,9 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     const [x, z] = somewhere();
     if (!clear(x, z, 1.2, true)) continue;
     placed++;
+    const shown = clearOfLater(x, z, 1.2);
+    const stones = shown ? big : thrownBig;
+    const pebbles = shown ? small : thrownSmall;
     const y = groundAt(x, z);
     const rocks = 1 + Math.floor(rng() * 3);
     for (let k = 0; k < rocks; k++) {
@@ -238,9 +272,9 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
       const rx = x + (k === 0 ? 0 : (rng() - 0.5) * 1.8);
       const rz = z + (k === 0 ? 0 : (rng() - 0.5) * 1.4);
       const squash = 0.55 + rng() * 0.2;
-      big.add(new THREE.IcosahedronGeometry(r, 0), pick(ROCKS, rng), { at: [rx, y + r * squash * 0.55, rz], rot: [0, rng() * 3, 0], scale: [1, squash, 0.85 + rng() * 0.2], jitter: 0.08, rng });
+      stones.add(new THREE.IcosahedronGeometry(r, 0), pick(ROCKS, rng), { at: [rx, y + r * squash * 0.55, rz], rot: [0, rng() * 3, 0], scale: [1, squash, 0.85 + rng() * 0.2], jitter: 0.08, rng });
       // Moss on top, on the bigger ones.
-      if (r > 0.5) big.add(new THREE.IcosahedronGeometry(r * 0.78, 0), pick(MOSS, rng), { at: [rx, y + r * squash * 1.32, rz], rot: [0, rng() * 3, 0], scale: [1, 0.3, 0.85], jitter: 0.08, rng });
+      if (r > 0.5) stones.add(new THREE.IcosahedronGeometry(r * 0.78, 0), pick(MOSS, rng), { at: [rx, y + r * squash * 1.32, rz], rot: [0, rng() * 3, 0], scale: [1, 0.3, 0.85], jitter: 0.08, rng });
       // Grass grows up round its foot.
       for (let t = 0; t < 4; t++) {
         const a = rng() * Math.PI * 2;
@@ -250,7 +284,7 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     for (let k = 0; k < 5 + rng() * 4; k++) {
       const a = rng() * Math.PI * 2;
       const d = 0.9 + rng() * 1.0;
-      small.add(new THREE.IcosahedronGeometry(0.05 + rng() * 0.09, 0), pick(ROCKS, rng), { at: [x + Math.cos(a) * d, y + 0.02, z + Math.sin(a) * d], scale: [1, 0.6, 1], material: smallMaterial, rng });
+      pebbles.add(new THREE.IcosahedronGeometry(0.05 + rng() * 0.09, 0), pick(ROCKS, rng), { at: [x + Math.cos(a) * d, y + 0.02, z + Math.sin(a) * d], scale: [1, 0.6, 1], material: smallMaterial, rng });
     }
   }
 
@@ -329,6 +363,42 @@ export function addNature(big: ModelBuilder, foliage: THREE.Material, trees: rea
     const [x, z] = where();
     if (more() > lush(x, z) * 0.8 || !clear(x, z, 0)) continue;
     tuft(x, z, 0.7 + more() * 0.4, dense, more);
+  }
+
+  // The later buildings: grass along their paths and round their feet, from random numbers of
+  // their own (so nothing above moves).
+  const edging = makeRandom(93);
+  for (const [a, b] of laterLines) {
+    const length = a.distanceTo(b);
+    const dir = b.clone().sub(a).normalize();
+    const out = new THREE.Vector3(dir.z, 0, -dir.x);
+    for (let t = 0; t < length; t += 0.45 + edging() * 0.6) {
+      for (const sideOf of [-1, 1]) {
+        if (edging() < 0.35) continue;
+        const p = a.clone().addScaledVector(dir, t).addScaledVector(out, sideOf * (1.45 + edging() * 0.35));
+        if (clear(p.x, p.z, 0)) tuft(p.x, p.z, 0.8 + edging() * 0.3, grass, edging);
+      }
+    }
+  }
+  // Grass where the plaza's well and notice board stood, as thick as round about.
+  for (const [fx, fz, fr] of FORMER_PROPS) {
+    for (let k = 0; k < 70; k++) {
+      const a = edging() * Math.PI * 2;
+      const d = Math.sqrt(edging()) * (fr + 0.5);
+      const x = fx + Math.cos(a) * d;
+      const z = fz + Math.sin(a) * d;
+      if (clear(x, z, 0, false, false)) tuft(x, z, 0.75 + edging() * 0.4, k % 5 < 2 ? grass : dense, edging);
+    }
+  }
+  for (const id of later) {
+    const sp = SPOTS[id];
+    for (let k = 0; k < 30; k++) {
+      const a = edging() * Math.PI * 2;
+      const d = sp.radius + 0.65 + edging() * 0.5;
+      const x = sp.pos.x + Math.cos(a) * d;
+      const z = sp.pos.z + Math.sin(a) * d;
+      if (clear(x, z, -0.05)) tuft(x, z, 0.75 + edging() * 0.35, grass, edging);
+    }
   }
 
   const smallGroup = small.build("nature-small");

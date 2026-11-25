@@ -78,11 +78,49 @@ describe("privacy guard", () => {
     }
   });
 
+  it("hides secret flags and logins in deploy and database commands", () => {
+    const guard = new SecretGuard();
+    for (const [text, expected] of [
+      ["vercel deploy --prod --token abc123", "vercel deploy --prod --token [hidden]"],
+      ["mysql --user root --password hunter2 app", "mysql --user root --password [hidden] app"],
+      ["flyctl deploy --access-token fo1_xyz", "flyctl deploy --access-token [hidden]"],
+      ["psql postgresql://admin:hunter2@db.example.com/app", "psql postgresql://[hidden]@db.example.com/app"],
+      ["DATABASE_URL=postgres://u:p@h/db npx prisma migrate deploy", "DATABASE_URL=[hidden] npx prisma migrate deploy"],
+      ["curl -d access_token=abc123 https://api.example.com", "curl -d access_token=[hidden] https://api.example.com"],
+      ['heroku run --api-key "my key" -a app', "heroku run --api-key [hidden] -a app"],
+      ["mysql -uroot -phunter2 app", "mysql -uroot -p[hidden] app"],
+      ["mysqldump -u root -p hunter2 > backup.sql", "mysqldump -u root -p [hidden] > backup.sql"],
+      ["redis-cli -a hunter2 ping", "redis-cli -a [hidden] ping"],
+      ["redis-cli --pass hunter2 ping", "redis-cli --pass [hidden] ping"],
+      ["docker login -u me -p hunter2 ghcr.io", "docker login -u me -p [hidden] ghcr.io"],
+      ["docker login -u me -phunter2 ghcr.io", "docker login -u me -p[hidden] ghcr.io"],
+      ["podman login -u me -p=hunter2 quay.io", "podman login -u me -p=[hidden] quay.io"],
+      ["mysql -p=hunter2 app", "mysql -p[hidden] app"],
+      ["PGPASSWORD=hunter2 psql -h db app", "PGPASSWORD=[hidden] psql -h db app"],
+    ]) {
+      assert.equal(guard.clean(text), expected, text);
+      assert.equal(guard.clean(guard.clean(text)), expected, `${text} (twice)`);
+    }
+    // Other flags, and a secret flag with no value, stay as they are.
+    for (const text of [
+      "docker login --password-stdin",
+      "kubectl logs --tail 50 api",
+      "deploy --token --prod",
+      "gh secret set --env prod API_KEY",
+      "mysql -u root -p",
+      "mysql -h db -P 3306 -p -u root app",
+      "heroku logs -a my-app",
+      "npm run build -- -p 3000",
+    ]) {
+      assert.equal(guard.clean(text), text);
+    }
+  });
+
   it("gives the same result when cleaning text that's already clean", () => {
     // A small seeded fuzz: bits of secrets, words and punctuation thrown together.
     let seed = 42;
     const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
-    const bits = ["password", ":", "=", '"', "'", " ", "Bearer ", "token ", "Authorization: ", "API_KEY", "https://", "u:p@", "@", "/", "-", "_", "abc123", "9f8e7d6c5b4a3928", "[hidden]", "v2.0.1", "sk_live_", "xyz", ",", "{", "}"];
+    const bits = ["password", ":", "=", '"', "'", " ", "Bearer ", "token ", "--token ", "--password ", "Authorization: ", "API_KEY", "https://", "u:p@", "@", "/", "-", "_", "abc123", "9f8e7d6c5b4a3928", "[hidden]", "v2.0.1", "sk_live_", "xyz", ",", "{", "}"];
     const guard = new SecretGuard();
     for (let i = 0; i < 3000; i++) {
       let text = "";

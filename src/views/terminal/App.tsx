@@ -35,6 +35,8 @@ export interface AppProps {
   size?: { columns: number; rows: number };
   /** What to suggest before anything has happened (live mode). */
   waiting?: WaitingHint;
+  /** Start with the ? help open, for tests. */
+  help?: boolean;
   /** Start looking at one building (as if you'd pressed Tab), for tests. */
   focus?: Building;
 }
@@ -46,7 +48,7 @@ const keyMessageRows = (compact: boolean) => (compact ? 2 : 6);
 /** The stacked log always keeps this many lines, even with lots of robots. */
 const MIN_LOG_LINES = 3;
 
-const HELP_ORDER: Building[] = ["vault", "library", "workshop", "lab", "townhall", "home", "harbor"];
+const HELP_ORDER: Building[] = ["vault", "library", "workshop", "lab", "postoffice", "archive", "launchtower", "watchtower", "townhall", "home", "harbor"];
 
 /** Tab and Shift+Tab: the next (or previous) building to look at. */
 function nextBuilding(current: Building | null, by: 1 | -1): Building {
@@ -492,7 +494,7 @@ function KeyHints({
   );
 }
 
-export function App({ store, mode, url, onStop, compact = false, size, waiting, focus: initialFocus }: AppProps) {
+export function App({ store, mode, url, onStop, compact = false, size, waiting, help: initialHelp = false, focus: initialFocus }: AppProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const windowSize = useWindowSize();
   const columns = size?.columns ?? (windowSize.columns || 80);
@@ -502,7 +504,7 @@ export function App({ store, mode, url, onStop, compact = false, size, waiting, 
   // Keep the latest exit function without restarting timers on every redraw.
   const exitRef = useRef(exit);
   exitRef.current = exit;
-  const [help, setHelp] = useState(false);
+  const [help, setHelp] = useState(initialHelp);
   const [details, setDetails] = useState(false);
   const [stopping, setStopping] = useState(false);
   /** The building you're looking at up close (Tab), or null for everything. */

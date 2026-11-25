@@ -94,8 +94,32 @@ function normalDay(round: number): DemoStep[] {
   at(900, { type: "progress", agent: "Pip", task: task("research"), percent: 50, message: "Reading 3 sources" });
   at(1000, { type: "progress", agent: "Rivet", task: task("code"), percent: 70, message: "Writing a test for retries" });
   at(1200, { type: "done", agent: "Pip", task: task("research"), message: "Saved 3 notes for Rivet", count: 3 });
-  walk(300, "Pip", "home");
+  // Bolt changes the database to match: a migration, at the Archive well.
+  walk(300, "Bolt", "archive");
+  walk(300, "Pip", "postoffice");
   at(1000, { type: "done", agent: "Rivet", task: task("code"), message: "Changed 2 files", count: 2 });
+  at(600, {
+    type: "start",
+    agent: "Bolt",
+    task: task("migrate"),
+    kind: "data",
+    title: "Adding a table for payment retries",
+    command: "npx prisma migrate deploy",
+  });
+  // Pip reads Rivet's change at the Post office before it's added.
+  at(600, {
+    type: "start",
+    agent: "Pip",
+    task: task("review"),
+    kind: "review",
+    title: "Reviewing Rivet's retry loop",
+    command: "gh pr diff 42",
+  });
+  at(1200, { type: "progress", agent: "Bolt", task: task("migrate"), percent: 50, message: "Running 1 migration" });
+  at(1200, { type: "progress", agent: "Pip", task: task("review"), percent: 60, message: "2 small comments for Rivet" });
+  at(1200, { type: "done", agent: "Bolt", task: task("migrate"), message: "Database updated: 1 migration", count: 1 });
+  at(1000, { type: "done", agent: "Pip", task: task("review"), message: "Approved, with 2 small comments", count: 2 });
+  walk(300, "Pip", "home");
 
   // Tests: one fails, Rivet fixes it, then everything passes.
   walk(400, "Sprocket", "lab");
@@ -155,9 +179,44 @@ function normalDay(round: number): DemoStep[] {
   at(1500, { type: "push", agent: "Rivet", remote: "origin", branch: "main", commits: 1 });
   at(300, { type: "done", agent: "Rivet", task: task("push"), message: "Your work is safe on GitHub", count: 1 });
 
+  // Ship it: Sprocket deploys the new version from the Launch tower, and Pip keeps watch from
+  // the Watchtower. A warning comes in; Pip looks again and it has passed.
+  walk(800, "Sprocket", "launchtower");
+  walk(300, "Pip", "watchtower");
+  at(1400, {
+    type: "start",
+    agent: "Sprocket",
+    task: task("deploy"),
+    kind: "deploy",
+    title: "Deploying version 1.4",
+    command: "npm run deploy",
+  });
+  at(900, {
+    type: "start",
+    agent: "Pip",
+    task: task("watch"),
+    kind: "monitor",
+    title: "Watching the logs after the deploy",
+    command: "fly logs",
+  });
+  at(1500, { type: "progress", agent: "Sprocket", task: task("deploy"), percent: 70, message: "Starting the new version" });
+  at(1500, { type: "done", agent: "Sprocket", task: task("deploy"), message: "Version 1.4 is live" });
+  at(1500, { type: "fail", agent: "Pip", task: task("watch"), message: "Warning: replies from /checkout are slow (2.1 s)" });
+  at(1500, {
+    type: "start",
+    agent: "Pip",
+    task: task("rewatch"),
+    kind: "monitor",
+    title: "Checking /checkout again",
+    command: "fly logs",
+  });
+  at(2000, { type: "done", agent: "Pip", task: task("rewatch"), message: "Replies are fast again (0.3 s)" });
+
   // Home time.
   walk(1500, "Rivet", "home");
   walk(300, "Bolt", "home");
+  walk(300, "Sprocket", "home");
+  walk(300, "Pip", "home");
   walk(300, "Mayor", "home");
   pause(3000); // a quiet moment before the next round
   return steps;
