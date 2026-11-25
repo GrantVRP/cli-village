@@ -85,6 +85,10 @@ The scan's `command` says what it checks. `infisical scan git-changes …` check
 | `scan` | GITHUB HARBOR (the gate) | Secret scans before sharing |
 | `secrets` | VAULT | Working with secrets (names only) |
 | `coordinate` | TOWN HALL | Planning and handing out work |
+| `review` | POST OFFICE | Pull-request reviews, comments and messages |
+| `data` | ARCHIVE WELL | Databases: migrations, backups and queries |
+| `deploy` | LAUNCH TOWER | Deploys and releases |
+| `monitor` | WATCHTOWER | Logs, alerts and monitoring |
 
 ### Research sources (the LIBRARY)
 

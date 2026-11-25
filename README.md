@@ -244,7 +244,7 @@ $ cli-village commit -m "Add payments"
 
 `cli-village open` (or `open --demo`) starts a small web server on your own computer and opens the village in your browser. Your terminal shows the address. It looks like `http://127.0.0.1:53021/?token=…`, and only works on this computer.
 
-- Each robot is an agent. When it starts a task it walks to that kind of building: secrets → VAULT, research → LIBRARY, code → WORKSHOP, tests → LAB, planning → TOWN HALL, commits and pushes → GITHUB HARBOR. Idle robots rest at HOME.
+- Each robot is an agent. When it starts a task it walks to that kind of building: secrets → VAULT, research → LIBRARY, code → WORKSHOP, tests → LAB, reviews → POST OFFICE, databases → ARCHIVE WELL, deploys → LAUNCH TOWER, logs and alerts → WATCHTOWER, planning → TOWN HALL, commits and pushes → GITHUB HARBOR. Idle robots rest at HOME.
 - Robots react: a wave when they finish a job, a cheer when they fix a problem or push (the robots resting at home join in), a slump while their task has failed. Robots resting at home chat in pairs.
 - Busy buildings send up cyan rings. Problems glow red and get a ✖ on their label.
 - The glass column in the plaza shows the village's health: green → yellow → orange → red.
@@ -360,6 +360,8 @@ The tests use a pretend Infisical (`test/fixtures/fake-infisical.cjs`), so you d
 - [x] 25. Nature details: grass, wildflowers, mossy boulders, reeds and garden fences
 - [x] 26. Weather and seasons: rain when work has problems, drifting clouds, and the season from the calendar
 - [x] 27. Village life: robots that react, birds, butterflies, fireflies, ducks, a cat, villagers, a fisherman, a windmill, flags in the wind and more smoke
+- [x] 28. A two-masted cargo ship and a dock crane at the harbor
+- [x] 29. Four new buildings: a Post office for reviews, an Archive well for databases, a Launch tower for deploys and a Watchtower for logs and alerts
 
 ## License
 
