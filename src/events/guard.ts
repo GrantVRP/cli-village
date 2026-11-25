@@ -18,17 +18,18 @@ const SECRET_FLAG = new RegExp(
   String.raw`(--?(?:password|passwd|pass|token|api[_-]?key|access[_-]?key|(?:access|auth|refresh)[_-]?token|private[_-]?key|secret[_-]?key|client[_-]?secret))(\s+)("[^"]*"|'[^']*'|\[hidden\]|[^\s-]\S*)`,
   "gi",
 );
-// Terminal codes (colors, "clear screen", window titles), then any other control characters.
 // Short flags that mean "password" only for some tools, so only after their names (and only up
 // to the end of that command): `mysql -phunter2` (MySQL and MariaDB take it joined on, and
 // `-p name` is a database name, hidden too to be safe), `redis-cli -a hunter2`, and
-// `docker login -p hunter2`. Case matters: `mysql -P 3306` is the port.
+// `docker login -p hunter2` (also `-phunter2` and `-p=hunter2`). Case matters: `mysql -P 3306`
+// is the port.
 const FLAG_VALUE = String.raw`("[^"]*"|'[^']*'|\[hidden\]|[^\s-]\S*)`;
 const TOOL_SECRET_FLAGS: readonly RegExp[] = [
   new RegExp(String.raw`(\b(?:mysql|mysqldump|mysqladmin|mysqlimport|mysqlshow|mysqlcheck|mysqlpump|mariadb|mariadb-dump|mariadb-admin)\b[^;&|\n]*?\s-p)(\s*)${FLAG_VALUE}`, "g"),
   new RegExp(String.raw`(\bredis-cli\b[^;&|\n]*?\s-a)(\s+)${FLAG_VALUE}`, "g"),
-  new RegExp(String.raw`(\b(?:docker|podman|nerdctl|buildah|skopeo)\s+login\b[^;&|\n]*?\s-p)(\s+)${FLAG_VALUE}`, "g"),
+  new RegExp(String.raw`(\b(?:docker|podman|nerdctl|buildah|skopeo)\s+login\b[^;&|\n]*?\s-p)(\s*=?)${FLAG_VALUE}`, "g"),
 ];
+// Terminal codes (colors, "clear screen", window titles), then any other control characters.
 const ANSI_CODES = /\u001B(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001B]*(?:\u0007|\u001B\\)?|[@-Z\\-_])/g;
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
 

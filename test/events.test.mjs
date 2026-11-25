@@ -93,6 +93,9 @@ describe("privacy guard", () => {
       ["redis-cli -a hunter2 ping", "redis-cli -a [hidden] ping"],
       ["redis-cli --pass hunter2 ping", "redis-cli --pass [hidden] ping"],
       ["docker login -u me -p hunter2 ghcr.io", "docker login -u me -p [hidden] ghcr.io"],
+      ["docker login -u me -phunter2 ghcr.io", "docker login -u me -p[hidden] ghcr.io"],
+      ["podman login -u me -p=hunter2 quay.io", "podman login -u me -p=[hidden] quay.io"],
+      ["mysql -p=hunter2 app", "mysql -p[hidden] app"],
       ["PGPASSWORD=hunter2 psql -h db app", "PGPASSWORD=[hidden] psql -h db app"],
     ]) {
       assert.equal(guard.clean(text), expected, text);
