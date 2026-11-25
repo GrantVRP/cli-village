@@ -43,7 +43,7 @@ export const BUILDING_HELP: Record<Building, string> = {
   lab: "Running your tests.",
   townhall: "The coordinator that hands out tasks.",
   home: "Where idle robots rest.",
-  harbor: "Commits become crates. A gate scans them for leaked secrets, then the boat ships them to GitHub.",
+  harbor: "Commits become crates. A gate scans them for leaked secrets, then the ship carries them to GitHub.",
 };
 
 export const EVENT_TYPES = ["start", "move", "progress", "done", "fail", "commit", "push"] as const;
@@ -120,7 +120,7 @@ export interface CommitEvent extends EventMeta {
   files?: number;
 }
 
-/** Commits were sent to GitHub (the boat sails). */
+/** Commits were sent to GitHub (the ship sails). */
 export interface PushEvent extends EventMeta {
   type: "push";
   remote?: string;

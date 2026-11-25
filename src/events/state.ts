@@ -96,7 +96,7 @@ export interface Crate {
   recheck?: true;
 }
 
-/** The last time the boat sailed. */
+/** The last time the ship sailed. */
 export interface LastPush {
   remote: string;
   branch: string;
@@ -448,7 +448,7 @@ export function reduce(state: VillageState, event: VillageEvent): VillageState {
       next.stats = { ...state.stats, pushes: state.stats.pushes + 1 };
       next.headline = {
         title: `Sent to GitHub: ${what} to ${target}`,
-        subtitle: `${event.agent}'s boat sails from the GITHUB HARBOR`,
+        subtitle: `${event.agent}'s ship sails from the GITHUB HARBOR`,
         command: `git push ${event.remote ?? "origin"} ${event.branch ?? "main"}`,
         explain: explainCommand("git push"),
         level: "active",
@@ -542,7 +542,7 @@ function packCommit(crates: Crate[], crate: Crate, amend: boolean): Crate[] {
 }
 
 /**
- * The boat sails with every saved crate on the way (your unsaved changes stay behind).
+ * The ship sails with every saved crate on the way (your unsaved changes stay behind).
  * `flagged`: one of them was stopped at the gate, and went anyway.
  */
 function shipCrates(crates: Crate[]): { crates: Crate[]; count: number; flagged: boolean } {
@@ -585,12 +585,12 @@ export function harborLoad(state: Pick<VillageState, "crates" | "tasks">): Harbo
 
 export interface HarborSummary {
   level: HeadlineLevel;
-  /** What the icon stands for: a scan, a stop, crates waiting, or the boat that sailed. */
+  /** What the icon stands for: a scan, a stop, crates waiting, or the ship that sailed. */
   icon: "scan" | "stop" | "crate" | "boat";
   text: string;
 }
 
-/** One line about the harbor for every view: what's at the gate, what's waiting, or the last boat. */
+/** One line about the harbor for every view: what's at the gate, what's waiting, or the last ship. */
 export function describeHarbor(state: VillageState): HarborSummary | null {
   const load = harborLoad(state);
   const crates = (n: number) => `${n} crate${n === 1 ? "" : "s"}`;
@@ -605,7 +605,7 @@ export function describeHarbor(state: VillageState): HarborSummary | null {
   const last = state.lastPush;
   if (last) {
     const what = last.commits ? `${last.commits} commit${last.commits === 1 ? "" : "s"}` : "the branch";
-    return { level: "calm", icon: "boat", text: `Last boat${last.demo ? " (demo)" : ""}: ${what} to ${last.remote}/${last.branch}` };
+    return { level: "calm", icon: "boat", text: `Last ship${last.demo ? " (demo)" : ""}: ${what} to ${last.remote}/${last.branch}` };
   }
   return null;
 }
