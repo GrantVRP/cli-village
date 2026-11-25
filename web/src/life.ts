@@ -271,19 +271,23 @@ class Fireflies {
 // --- Ducks: a pair and three ducklings paddling along the near bank -----------------------
 
 /**
- * The ducks' loop: an ellipse by the near bank, upstream of the library (open water the home
- * view sees, with no trees or buildings in front), clear of the dock and of the boat's lane.
- * They paddle round it at an even speed, a set distance apart. (Going round a thin ellipse at an
- * even angle, they all but stopped at its ends and swam into each other there.)
+ * The ducks' loop by the near bank, upstream of the library (open water the home view sees, with
+ * no trees or buildings in front), clear of the dock and of the boat's lane: two straight runs
+ * `a` from its middle to its ends, joined by half circles `b` across, so they turn gently. They
+ * paddle round it at an even speed, a set distance apart. (Going round a thin ellipse at an even
+ * angle, they all but stopped at its sharp ends and swam into each other there.)
  */
 const DUCK_LOOP = { x: -23, z: RIVER_Z + 1.8, a: 4.5, b: 0.7, period: 70 };
-/** How far apart along the loop the ducks swim, for each step of their `lag`. */
-const DUCK_SPACING = 0.85;
+/** How far apart along the loop the ducks swim, for each step of their `lag` (a duck is 0.8 long). */
+const DUCK_SPACING = 1.0;
 
-const LOOP_POINTS = Array.from({ length: 121 }, (_, i) => {
-  const w = (i / 120) * Math.PI * 2;
-  return new THREE.Vector3(DUCK_LOOP.x + Math.cos(w) * DUCK_LOOP.a, 0, DUCK_LOOP.z + Math.sin(w) * DUCK_LOOP.b);
-});
+const LOOP_POINTS = [-1, 1].flatMap((end) =>
+  Array.from({ length: 25 }, (_, i) => {
+    const w = (end > 0 ? -Math.PI / 2 : Math.PI / 2) + (i / 24) * Math.PI;
+    return new THREE.Vector3(DUCK_LOOP.x + end * (DUCK_LOOP.a - DUCK_LOOP.b) + Math.cos(w) * DUCK_LOOP.b, 0, DUCK_LOOP.z + Math.sin(w) * DUCK_LOOP.b);
+  }),
+);
+LOOP_POINTS.push(LOOP_POINTS[0]!.clone());
 const LOOP_LENGTH = LOOP_POINTS.slice(1).reduce((sum, p, i) => sum + p.distanceTo(LOOP_POINTS[i]!), 0);
 
 /** The point `d` along the ducks' loop, going round and round. */
@@ -320,6 +324,8 @@ function duck(kind: DuckKind): THREE.Group {
 
 const duckAhead = new THREE.Vector3();
 const duckBehind = new THREE.Vector3();
+const duckSide = new THREE.Vector3();
+const duckWay = new THREE.Vector3();
 
 class Ducks {
   readonly group = new THREE.Group();
@@ -353,11 +359,13 @@ class Ducks {
     });
   }
 
-  /** Where a duck is, `d` along the loop; `side` lets it drift a little across now and then. */
+  /** Where a duck is, `d` along the loop; `side` lets it drift a little to one side now and then. */
   private at(d: number, side: number, out: THREE.Vector3): THREE.Vector3 {
     alongLoop(d, out);
-    out.z += side * Math.sin((d / LOOP_LENGTH) * Math.PI * 2 + 1.1) * 0.6;
-    return out;
+    if (side === 0) return out;
+    alongLoop(d + 0.05, duckSide).sub(alongLoop(d - 0.05, duckWay)).normalize();
+    const drift = side * Math.sin((d / LOOP_LENGTH) * Math.PI * 2 + 1.1) * 0.6;
+    return out.set(out.x - duckSide.z * drift, out.y, out.z + duckSide.x * drift);
   }
 }
 
