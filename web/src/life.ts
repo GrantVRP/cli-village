@@ -338,44 +338,120 @@ const SUNNY = new THREE.Vector3(11.4, 0, -6.6);
 
 type CatPose = "sit" | "walk" | "loaf" | "sleep";
 
+const FUR = 0xc98a4b;
+const FUR_DARK = 0xb3743c;
+const WHITE = 0xefe6d6;
+const PINK = 0xd99a94;
+
+/** The head, centred on its origin, looking along +z; asleep, its eyes are shut (thin slits). */
+function catHead(asleep = false): THREE.Group {
+  const h = new ModelBuilder();
+  h.add(new THREE.SphereGeometry(0.085, 8, 6), FUR, { scale: [1.12, 0.95, 1], jitter: 0.03 });
+  h.add(new THREE.SphereGeometry(0.045, 6, 4), WHITE, { at: [0, -0.032, 0.058], scale: [1.3, 0.75, 0.85] });
+  h.box([0.02, 0.013, 0.012], PINK, { at: [0, -0.012, 0.09] });
+  for (const s of [-1, 1]) {
+    h.add(new THREE.ConeGeometry(0.036, 0.078, 3), FUR, { at: [s * 0.052, 0.076, -0.008], rot: [0, Math.PI, s * 0.32] });
+    h.add(new THREE.ConeGeometry(0.02, 0.05, 3), PINK, { at: [s * 0.05, 0.07, 0.004], rot: [0, Math.PI, s * 0.32] });
+    if (asleep) h.box([0.026, 0.005, 0.01], 0x2a2620, { at: [s * 0.036, 0.008, 0.083], rot: [0, 0, s * -0.25] });
+    else h.box([0.022, 0.026, 0.01], 0x2a2620, { at: [s * 0.036, 0.012, 0.083] });
+  }
+  return h.build("cat-head");
+}
+
+/** A tail lying along an arc round (cx, cz) at height y, from angle a0 to a1, thinning to a white tip. */
+function curledTail(b: ModelBuilder, cx: number, cz: number, radius: number, a0: number, a1: number, y: number, r0 = 0.024): void {
+  const n = 7;
+  for (let i = 0; i < n; i++) {
+    const t0 = a0 + ((a1 - a0) * i) / n;
+    const t1 = a0 + ((a1 - a0) * (i + 1)) / n;
+    const p0 = new THREE.Vector3(cx + Math.cos(t0) * radius, y, cz + Math.sin(t0) * radius);
+    const p1 = new THREE.Vector3(cx + Math.cos(t1) * radius, y, cz + Math.sin(t1) * radius);
+    const len = p0.distanceTo(p1);
+    const r = r0 * (1 - (i / n) * 0.45);
+    const g = new THREE.CylinderGeometry(r * 0.9, r, len * 1.15, 5).rotateX(Math.PI / 2).lookAt(p1.clone().sub(p0));
+    g.translate((p0.x + p1.x) / 2, y, (p0.z + p1.z) / 2);
+    b.add(g, i === n - 1 ? WHITE : i % 2 === 0 ? FUR : FUR_DARK, { jitter: 0.02 });
+  }
+}
+
+/** Sitting up on its haunches, front paws together, tail round its feet. Origin on the seat. */
+function catSitting(): THREE.Group {
+  const b = new ModelBuilder();
+  b.add(new THREE.SphereGeometry(0.12, 9, 6), FUR, { at: [0, 0.098, -0.04], scale: [1, 0.85, 1], jitter: 0.03 });
+  b.add(new THREE.SphereGeometry(0.09, 8, 6), FUR, { at: [0, 0.22, 0.025], rot: [-0.2, 0, 0], scale: [0.86, 1.45, 0.95], jitter: 0.03 });
+  b.add(new THREE.SphereGeometry(0.058, 8, 6), WHITE, { at: [0, 0.2, 0.08], scale: [0.95, 1.5, 0.6], jitter: 0.015 });
+  for (const s of [-1, 1]) {
+    b.add(new THREE.CylinderGeometry(0.02, 0.027, 0.2, 7), FUR, { at: [s * 0.043, 0.1, 0.085], jitter: 0.02 });
+    b.add(new THREE.SphereGeometry(0.03, 7, 4), WHITE, { at: [s * 0.043, 0.012, 0.102], scale: [1, 0.55, 1.3], jitter: 0.015 });
+    b.add(new THREE.SphereGeometry(0.035, 6, 4), FUR, { at: [s * 0.088, 0.016, 0.045], scale: [0.85, 0.5, 1.6] });
+  }
+  curledTail(b, 0, -0.03, 0.135, -1.1, 1.45, 0.024);
+  return b.build("cat-sitting");
+}
+
+/** Lying in the sun like a loaf: legs tucked under, tail along its side. Origin on the ground. */
+function catLoaf(): THREE.Group {
+  const b = new ModelBuilder();
+  b.add(new THREE.SphereGeometry(0.13, 9, 6), FUR, { at: [0, 0.094, -0.02], scale: [0.95, 0.72, 1.5], jitter: 0.03 });
+  b.add(new THREE.SphereGeometry(0.07, 7, 5), WHITE, { at: [0, 0.08, 0.13], scale: [1, 0.85, 0.8] });
+  for (const s of [-1, 1]) b.add(new THREE.SphereGeometry(0.028, 6, 4), WHITE, { at: [s * 0.042, 0.018, 0.2], scale: [1, 0.6, 1.3] });
+  curledTail(b, 0.0, -0.02, 0.15, -1.75, 0.9, 0.024);
+  return b.build("cat-loaf");
+}
+
+/** Curled up asleep: a ring of cat, nose to tail. Origin on the seat. */
+function catAsleep(): THREE.Group {
+  const b = new ModelBuilder();
+  // One round, low body, with the haunch a rounder bump at the back of the curl.
+  b.add(new THREE.SphereGeometry(0.13, 10, 7), FUR, { at: [0, 0.075, -0.01], scale: [1, 0.6, 0.82], jitter: 0.025 });
+  b.add(new THREE.SphereGeometry(0.085, 8, 6), FUR, { at: [-0.065, 0.085, -0.03], scale: [1, 0.85, 1], jitter: 0.025 });
+  b.add(new THREE.SphereGeometry(0.05, 7, 5), FUR_DARK, { at: [-0.03, 0.13, -0.035], scale: [1.6, 0.5, 1.1], jitter: 0.02 });
+  // The tail, from the haunch round the front, its white tip by the nose.
+  curledTail(b, 0, -0.01, 0.14, Math.PI + 0.4, 1.5, 0.024, 0.023);
+  return b.build("cat-asleep");
+}
+
 class Cat {
   readonly group = new THREE.Group();
-  private readonly body = new THREE.Group();
-  private readonly tail = new THREE.Group();
-  private readonly legs: THREE.Object3D[] = [];
-  private readonly head: THREE.Object3D;
+  private readonly sitting = catSitting();
+  private readonly loaf = catLoaf();
+  private readonly asleep = catAsleep();
+  private readonly walking = new THREE.Group();
+  private readonly head = catHead();
+  private readonly sleepyHead = catHead(true);
+  private readonly walkTail = new THREE.Group();
+  private readonly legs: THREE.Group[] = [];
   /** Where it is in its day: seconds since it last sat down on the bench. */
   private clock = -1;
 
   constructor() {
-    const fur = 0xc98a4b;
+    // Walking: a long body on four legs, tail up.
     const b = new ModelBuilder();
-    b.add(new THREE.SphereGeometry(0.15, 7, 5), fur, { at: [0, 0.2, 0], scale: [0.9, 0.85, 1.5], jitter: 0.02 });
-    b.add(new THREE.SphereGeometry(0.09, 6, 4), 0xefe6d6, { at: [0, 0.2, 0.16], scale: [0.9, 1, 0.7] });
-    this.body.add(b.build("cat-body"));
-    const h = new ModelBuilder();
-    h.add(new THREE.SphereGeometry(0.1, 7, 5), fur, { scale: [1.1, 0.95, 1] });
-    h.add(new THREE.SphereGeometry(0.05, 5, 4), 0xefe6d6, { at: [0, -0.035, 0.07], scale: [1.1, 0.7, 0.8] });
-    for (const s of [-1, 1]) h.add(new THREE.ConeGeometry(0.04, 0.08, 4), fur, { at: [s * 0.055, 0.09, -0.01], rot: [0, 0, s * -0.25] });
-    for (const s of [-1, 1]) h.box([0.02, 0.02, 0.01], 0x2a2620, { at: [s * 0.04, 0.015, 0.095] });
-    this.head = h.build("cat-head");
-    this.head.position.set(0, 0.34, 0.22);
-    this.body.add(this.head);
-    const tb = new ModelBuilder();
-    tb.add(new THREE.CylinderGeometry(0.022, 0.03, 0.34, 5), fur, { at: [0, 0.17, 0] });
-    tb.add(new THREE.SphereGeometry(0.025, 4, 3), 0xefe6d6, { at: [0, 0.34, 0] });
-    this.tail.add(tb.build("cat-tail"));
-    this.tail.position.set(0, 0.2, -0.2);
-    this.body.add(this.tail);
-    for (const [x, z] of [[-0.06, 0.12], [0.06, 0.12], [-0.06, -0.12], [0.06, -0.12]] as const) {
+    b.add(new THREE.SphereGeometry(0.11, 9, 6), FUR, { at: [0, 0.2, -0.01], scale: [0.85, 0.8, 1.7], jitter: 0.03 });
+    b.add(new THREE.SphereGeometry(0.058, 6, 4), WHITE, { at: [0, 0.175, 0.13], scale: [0.85, 1, 0.75] });
+    this.walking.add(b.build("cat-walking"));
+    for (const [x, z] of [[-0.05, 0.12], [0.05, 0.12], [-0.055, -0.12], [0.055, -0.12]] as const) {
       const lb = new ModelBuilder();
-      lb.add(new THREE.CylinderGeometry(0.025, 0.025, 0.14, 4), fur, { at: [0, -0.07, 0] });
-      const leg = lb.build("cat-leg");
-      leg.position.set(x, 0.14, z);
+      lb.add(new THREE.CylinderGeometry(0.024, 0.019, 0.18, 5), FUR, { at: [0, -0.09, 0] });
+      lb.add(new THREE.SphereGeometry(0.026, 6, 4), WHITE, { at: [0, -0.178, 0.012], scale: [1, 0.55, 1.3] });
+      const leg = new THREE.Group();
+      leg.add(lb.build("cat-leg"));
+      leg.position.set(x, 0.19, z);
       this.legs.push(leg);
-      this.body.add(leg);
+      this.walking.add(leg);
     }
-    this.group.add(this.body);
+    const tb = new ModelBuilder();
+    tb.add(new THREE.CylinderGeometry(0.019, 0.025, 0.26, 5), FUR, { at: [0, 0.13, 0] });
+    tb.add(new THREE.CylinderGeometry(0.016, 0.019, 0.1, 5), FUR_DARK, { at: [0, 0.29, 0.03], rot: [0.5, 0, 0] });
+    tb.add(new THREE.SphereGeometry(0.017, 5, 4), WHITE, { at: [0, 0.335, 0.055] });
+    this.walkTail.add(tb.build("cat-tail"));
+    this.walkTail.position.set(0, 0.22, -0.18);
+    this.walking.add(this.walkTail);
+    // The sleeping head rests at the front of the curl, chin on the seat, nose to its tail.
+    this.sleepyHead.position.set(0.075, 0.088, 0.075);
+    this.sleepyHead.rotation.set(0.35, Math.atan2(-0.6, 0.8), 0.45, "YXZ");
+    this.asleep.add(this.sleepyHead);
+    this.group.add(this.sitting, this.loaf, this.asleep, this.walking, this.head);
   }
 
   update(dt: number, t: number, c: LifeConditions): void {
@@ -393,48 +469,58 @@ class Cat {
     let pose: CatPose;
     const at = tmpV;
     let facing: number;
-    if (k < SIT) {
+    if (k < SIT || k >= SIT + WALK + LOAF + WALK) {
       pose = awake ? "sit" : "sleep";
       at.copy(SEAT);
       facing = BENCH_ROT;
-    } else if (k < SIT + WALK + LOAF + WALK) {
+    } else if (k < SIT + WALK || k >= SIT + WALK + LOAF) {
+      pose = "walk";
       const out = k < SIT + WALK;
-      const back = k >= SIT + WALK + LOAF;
-      if (out || back) {
-        pose = "walk";
-        const f = out ? (k - SIT) / WALK : (k - SIT - WALK - LOAF) / WALK;
-        const from = out ? SEAT_FLOOR : SUNNY;
-        const to = out ? SUNNY : SEAT_FLOOR;
-        at.lerpVectors(from, to, f);
-        // Hop down from the seat at the start, up onto it at the end.
-        const hop = out ? 1 - smooth(0, 0.1, f) : smooth(0.9, 1, f);
-        if (hop > 0) at.lerp(SEAT, hop);
-        facing = Math.atan2(to.x - from.x, to.z - from.z);
-      } else {
-        pose = "loaf";
-        at.copy(SUNNY);
-        facing = 2.4;
+      const f = out ? (k - SIT) / WALK : (k - SIT - WALK - LOAF) / WALK;
+      const from = out ? SEAT_FLOOR : SUNNY;
+      const to = out ? SUNNY : SEAT_FLOOR;
+      at.lerpVectors(from, to, f);
+      // Jump down from the seat at the start, up onto it at the end, in an arc.
+      const hop = out ? 1 - smooth(0, 0.1, f) : smooth(0.9, 1, f);
+      if (hop > 0) {
+        at.lerp(SEAT, hop);
+        at.y += Math.sin(Math.PI * hop) * 0.18;
       }
+      facing = Math.atan2(to.x - from.x, to.z - from.z);
     } else {
-      pose = "sit";
-      at.copy(SEAT);
-      facing = BENCH_ROT;
+      pose = "loaf";
+      at.copy(SUNNY);
+      facing = 2.4;
     }
     this.group.position.copy(at);
     this.group.rotation.y = facing;
-    // Poses: sitting up, walking, loafing (legs tucked), asleep (curled, head down).
-    const walk = pose === "walk";
-    const low = pose === "loaf" || pose === "sleep";
-    this.body.rotation.x = pose === "sit" ? -0.55 : 0;
-    this.body.position.y = pose === "sit" ? 0.06 : low ? -0.12 : 0;
-    this.legs.forEach((leg, i) => {
-      leg.visible = !low;
-      leg.rotation.x = walk ? Math.sin(t * 10 + (i % 2 === 0 ? 0 : Math.PI) + (i >= 2 ? Math.PI : 0)) * 0.6 : pose === "sit" ? (i < 2 ? 0.55 : 1.4) : 0;
-    });
-    this.head.rotation.set(pose === "sleep" ? 0.7 : pose === "sit" ? 0.5 + Math.sin(t * 0.3) * 0.1 : 0, Math.sin(t * 0.23) * (pose === "sleep" ? 0 : 0.5), 0);
-    this.head.position.y = pose === "sleep" ? 0.24 : 0.34;
-    // The tail: up when walking, curled round when lying, a slow swish when sitting.
-    this.tail.rotation.set(walk ? -0.4 : low ? -1.45 : -1.1, pose === "sleep" ? 1.2 : 0, Math.sin(t * (pose === "sit" ? 1.3 : 2.2)) * (pose === "sleep" ? 0.05 : 0.35));
+    this.sitting.visible = pose === "sit";
+    this.loaf.visible = pose === "loaf";
+    this.asleep.visible = pose === "sleep";
+    this.walking.visible = pose === "walk";
+    this.head.visible = pose !== "sleep";
+    // The head: on top when sitting, low at the front when loafing or walking; it looks about.
+    const look = Math.sin(t * 0.23) * 0.5 + Math.sin(t * 0.07) * 0.25;
+    if (pose === "sit") {
+      this.head.position.set(0, 0.385, 0.06);
+      this.head.rotation.set(0.12 + Math.sin(t * 0.3) * 0.08, look, 0, "YXZ");
+      // Breathing.
+      this.sitting.scale.set(1, 1 + Math.sin(t * 1.6) * 0.012, 1);
+    } else if (pose === "loaf") {
+      this.head.position.set(0, 0.2, 0.16);
+      this.head.rotation.set(0.05, look * 0.7, 0, "YXZ");
+    } else if (pose === "walk") {
+      this.head.position.set(0, 0.29, 0.21 + Math.sin(t * 10) * 0.004);
+      this.head.rotation.set(0.1, look * 0.3, 0, "YXZ");
+      this.legs.forEach((leg, i) => {
+        // Diagonal pairs move together (a walk).
+        const phase = i === 0 || i === 3 ? 0 : Math.PI;
+        leg.rotation.x = Math.sin(t * 9 + phase) * 0.5;
+      });
+      this.walkTail.rotation.set(-0.35 + Math.sin(t * 2.1) * 0.08, 0, Math.sin(t * 1.7) * 0.25);
+    } else {
+      this.asleep.scale.set(1, 1 + Math.sin(t * 1.1) * 0.03, 1);
+    }
   }
 }
 
